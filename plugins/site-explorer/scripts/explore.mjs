@@ -106,4 +106,5 @@ if (fs.existsSync(dash)) {
   }
 }
 if (fs.existsSync(path.join(siteDir, 'report.md')) && fs.readFileSync(path.join(siteDir, 'report.md'), 'utf8').includes('被擋住')) console.log('\n⚠️ 部分頁面被擋住，結果可能不完整（見儀表板或 report.md）。');
+try { const sj = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')); if (sj.thinPages?.length) console.log(`\n⚠️ ${sj.thinPages.length} 頁幾乎沒有抓到文字內容（HTTP 正常，但可能是 JS 延後載入、同意牆或防機器人頁）。見 report.md 開頭說明。`); } catch {}
 process.exit(crawlOk || motionOk ? 0 : 1);
