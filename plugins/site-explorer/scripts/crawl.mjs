@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Crawl a site with a real browser and capture design, content, layout and editing signals.
 import { launchBrowser } from './launch.mjs';
-import { findUrl, intOpt, sameSite, loadRobots, CRAWLER_UA_TOKEN } from './args.mjs';
+import { findUrl, findUrls, intOpt, sameSite, loadRobots, CRAWLER_UA_TOKEN } from './args.mjs';
 import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
 import { BANNER, sanitizeDoc } from './untrusted.mjs';
 import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch } from './util.mjs';
+import { parseSitemap } from './health-check.mjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -288,10 +289,36 @@ async function fetchRaw(u) {
 }
 const pickHeaders = (h = {}) => Object.fromEntries(['content-type', 'x-robots-tag', 'cache-control', 'content-encoding', 'strict-transport-security', 'content-security-policy', 'x-content-type-options', 'x-frame-options', 'referrer-policy', 'permissions-policy', 'server', 'x-powered-by', 'link', 'last-modified', 'etag', 'vary', 'age', 'cf-cache-status', 'x-cache'].filter((k) => h[k] !== undefined).map((k) => [k, k === 'content-security-policy' ? String(h[k]).slice(0, 200) : h[k]]));
 
+// Pages a script-built or 3D site hides from the live DOM: ask the places crawlers ask (raw HTML links, sitemap.xml, the home page).
+async function discoverMore(fromUrl) {
+  const found = new Map(); const add = (href, why) => { try { const u = new URL(href, fromUrl); if (!/^https?:$/.test(u.protocol) || !sameSite(u.href, origin)) return; u.hash = ''; if (!found.has(norm(u.href))) found.set(norm(u.href), { url: u.href, why }); } catch {} };
+  const text = async (u, max = 2_000_000) => { try { if (!mayFetch(u, fromUrl)) return ''; const r = await gfetch(u, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(12000) }); return r.ok ? await readCapped(r, max) : ''; } catch { return ''; } };
+  const html = await text(fromUrl, 3_000_000); let n = 0;
+  for (const m of html.matchAll(/<a\s[^>]*?href=["']([^"'#][^"']*)["']/gi)) { if (++n > 400) break; add(m[1], 'HTML 連結'); }
+  const sitemapUrls = new Set([...(robotsInfo.parsed?.sitemaps || []), origin + '/sitemap.xml', origin + '/sitemap_index.xml']);
+  let children = 0;
+  for (const sm of [...sitemapUrls].slice(0, 6)) {
+    const xml = await text(sm, 5_000_000); if (!/<(?:[\w-]+:)?(urlset|sitemapindex)/i.test(xml)) continue;
+    const parsed = parseSitemap(xml); for (const u of parsed.urls.slice(0, 500)) add(u.loc, 'sitemap');
+    for (const c of parsed.sitemaps.slice(0, 3)) { if (children++ >= 4) break; const cx = await text(c.loc, 5_000_000); for (const u of parseSitemap(cx).urls.slice(0, 500)) add(u.loc, 'sitemap'); }
+  }
+  add(origin + '/', '首頁');
+  const startPath = new URL(fromUrl).pathname.replace(/\/[^/]*$/, '/'); // same section as the page you gave first, then the rest
+  const skip = (u) => /(wp-admin|wp-login|\/admin|\/login|\/ghost\/|\/administrator|logout|signin|sign-in)/i.test(new URL(u).pathname) || /\.(pdf|zip|jpe?g|png|gif|svg|webp|mp4|css|js|xml|json|txt)(\?|$)/i.test(u);
+  const list = [...found.values()].filter((f) => !skip(f.url) && !seen.has(norm(f.url))).sort((a, b) => (new URL(b.url).pathname.startsWith(startPath) ? 1 : 0) - (new URL(a.url).pathname.startsWith(startPath) ? 1 : 0));
+  let added = 0; const bySource = {};
+  for (const f of list) { if (added >= maxPages * 3) break; try { if (!allowed(f.url)) continue; } catch { continue; } seen.add(norm(f.url)); queue.push([stripHash(f.url), 1]); added++; bySource[f.why] = (bySource[f.why] || 0) + 1; }
+  console.log(added ? `   在頁面上找不到可點的連結，改從 ${Object.entries(bySource).map(([k, v]) => `${k} ${v} 個`).join('、')} 找到 ${added} 個候選頁面` : '   找不到其他頁面（沒有 HTML 連結、sitemap，也沒有可用的首頁）');
+  return added;
+}
+
 // ---- main ----
 let robotsInfo = await loadRobots(origin);
 const robotsList = () => (groupFor(robotsInfo.parsed || { groups: [] }, CRAWLER_UA_TOKEN)?.rules || []).filter((r) => r.type === 'disallow' && r.path).map((r) => r.path);
-const allowed = (u) => { const x = new URL(u); return isAllowed(robotsInfo.parsed, CRAWLER_UA_TOKEN, x.pathname + x.search).allowed; };
+// robots.txt is per ORIGIN: an extra URL queued for old.example must be judged by old.example's rules even after the first page redirected to new.example
+const robotsByOrigin = new Map([[origin, robotsInfo]]);
+const ensureRobots = async (u) => { const o = new URL(u).origin; if (!robotsByOrigin.has(o)) robotsByOrigin.set(o, await loadRobots(o)); };
+const allowed = (u) => { const x = new URL(u); const ri = robotsByOrigin.get(x.origin) || robotsInfo; if (ri.serverError) return false; return isAllowed(ri.parsed, CRAWLER_UA_TOKEN, x.pathname + x.search).allowed; };
 if (robotsInfo.serverError) {
   console.error(`\n沒有爬取任何頁面。\n原因：robots.txt 回應 HTTP ${robotsInfo.status}（伺服器錯誤）。依慣例無法確認是否允許，視為禁止抓取。請稍後再試，或確認網站 robots.txt 是否正常。`);
   process.exit(3);
@@ -307,13 +334,17 @@ const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, u
 await guardInternal(ctx, startUrl); // a public site (or a redirect from it) cannot make the browser read localhost / the LAN
 const stripHash = (u) => { const x = new URL(u); x.hash = ''; return x.href; };
 const queue = [[stripHash(startUrl), 0]], seen = new Set([norm(startUrl)]), pages = [], headers = {};
+for (const extra of findUrls(args).slice(1)) { try { if (!sameSite(extra, origin) || seen.has(norm(extra))) continue; seen.add(norm(extra)); queue.push([stripHash(extra), 0]); } catch {} } // extra URLs given on the command line are crawled too (script-built sites hide them from each other)
 let consentAction = null;
 const crawledFinal = new Set(), redirectLog = []; // dedupe by FINAL url: /old and /new that land on the same page are one page
 const skippedByRobots = [], nonHtmlLog = [];
 const t0 = Date.now();
 
-while (queue.length && pages.length < maxPages) {
+let discovered = false;
+while (pages.length < maxPages) {
+  if (!queue.length) { if (discovered || !pages.length) break; discovered = true; if (!(await discoverMore(pages[0].url || startUrl))) break; }
   const [url, depth] = queue.shift();
+  await ensureRobots(url).catch(() => {});
   if (!allowed(url)) { console.log('skip (robots):', url); skippedByRobots.push(url); continue; }
   const page = await ctx.newPage();
   const watchdog = setTimeout(() => { console.log('timeout (120s), giving up on:', url); page.close().catch(() => {}); }, 120000);
@@ -326,9 +357,10 @@ while (queue.length && pages.length < maxPages) {
       clearTimeout(watchdog); await page.close().catch(() => {}); continue;
     }
     if (pages.length === 0 && new URL(page.url()).origin !== origin) {
-      origin = new URL(page.url()).origin; robotsInfo = await loadRobots(origin);
+      origin = new URL(page.url()).origin; robotsInfo = await loadRobots(origin); robotsByOrigin.set(origin, robotsInfo);
       console.log('redirected to', origin);
     }
+    await ensureRobots(page.url()).catch(() => {});
     if (!allowed(page.url())) { // a redirect can lead somewhere robots.txt forbids
       skippedByRobots.push(page.url()); console.log('skip (robots, after redirect):', page.url());
       clearTimeout(watchdog); await page.close().catch(() => {}); continue;

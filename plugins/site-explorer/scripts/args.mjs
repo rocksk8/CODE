@@ -22,7 +22,17 @@ export function normalizeUrl(input) {
 
 /** First CLI argument that looks like a URL (with or without scheme). */
 // options that take a value (so the value is never mistaken for a URL); boolean flags such as --open must not swallow the URL after them
-const VALUE_FLAGS = new Set(['--max-pages', '--depth', '--out', '--wait', '--frames', '--interval', '--max-targets', '--max-links', '--site', '--motion', '--embed-mb', '--a', '--b', '--lib', '--platform', '--font', '--color', '--health-below']);
+const VALUE_FLAGS = new Set(['--max-pages', '--depth', '--out', '--wait', '--motion-pages', '--frames', '--interval', '--max-targets', '--max-links', '--site', '--motion', '--embed-mb', '--a', '--b', '--lib', '--platform', '--font', '--color', '--health-below']);
+/** Every URL among the arguments, in order (the first one is where the crawl starts; the others are extra pages to include). */
+export function findUrls(args) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a.startsWith('--')) { if (VALUE_FLAGS.has(a) && args[i + 1] !== undefined) i++; continue; }
+    const u = normalizeUrl(a); if (u && !out.includes(u)) out.push(u);
+  }
+  return out;
+}
 export function findUrl(args) {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];

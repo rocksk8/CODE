@@ -163,3 +163,76 @@ test('explore captures 3D/motion for several pages (--motion-pages) and the hand
     const dash = fs.readFileSync(path.join(out, 'dashboard.html'), 'utf8'); assert.match(dash, /motionPages/); assert.match(dash, /動態與 3D 規格/, 'standalone dashboard carries each page\'s motion text inline');
   } finally { srv.close(); }
 });
+
+test('a deep link whose page shows no links still crawls the rest of the site (sitemap + home page)', async (t) => {
+  if (skip(t)) return;
+  let port = 0;
+  const srv = http.createServer((q, r) => {
+    const page = (title, body = '') => { r.setHeader('content-type', 'text/html'); r.end(`<!doctype html><title>${title}</title><body style="font:16px system-ui"><h1>${title}</h1><p>${'Words words words. '.repeat(15)}</p>${body}</body>`); };
+    if (q.url === '/sitemap.xml') { r.setHeader('content-type', 'application/xml'); return r.end(`<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>http://127.0.0.1:${port}/other/z</loc></url><url><loc>http://127.0.0.1:${port}/deep/a</loc></url><url><loc>http://127.0.0.1:${port}/deep/b</loc></url></urlset>`); }
+    if (q.url === '/deep/start') return page('Deep start', '<canvas width=300 height=200></canvas>'); // no links at all
+    if (q.url === '/') return page('Home');
+    if (q.url.startsWith('/deep/') || q.url.startsWith('/other/')) return page('Page ' + q.url);
+    r.statusCode = 404; r.end('nope');
+  }).listen(0); await new Promise((res) => srv.once('listening', res)); port = srv.address().port;
+  try {
+    const out = path.join(tmp, 'deep'); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/deep/start`, '--max-pages', '4', '--wait', '1000', '--no-screenshots', '--out', out]);
+    assert.equal(r.status, 0, r.out); assert.match(r.out, /找到 \d+ 個候選頁面/);
+    const site = JSON.parse(fs.readFileSync(path.join(out, `127.0.0.1_${port}`, 'site.json'), 'utf8')); const urls = site.pages.map((p) => new URL(p.url).pathname);
+    assert.equal(urls[0], '/deep/start'); assert.ok(site.pages.length >= 4, urls.join(','));
+    assert.ok(urls.indexOf('/deep/a') > 0 && urls.indexOf('/deep/b') > 0, 'pages from the same section come first: ' + urls.join(','));
+  } finally { srv.close(); }
+});
+
+test('several URLs on the command line are all crawled, even when no page links to the others', async (t) => {
+  if (skip(t)) return;
+  const { findUrls } = await import('../scripts/args.mjs');
+  assert.deepEqual(findUrls(['--out', './o', 'example.com/a', '--wait', '5', 'https://example.com/b', 'example.com/a']), ['https://example.com/a', 'https://example.com/b']);
+  const srv = http.createServer((q, r) => { r.setHeader('content-type', 'text/html'); r.end(`<!doctype html><title>T ${q.url}</title><body><h1>Page ${q.url}</h1><p>${'Some words here. '.repeat(15)}</p><canvas></canvas></body>`); }).listen(0);
+  await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  try {
+    const out = path.join(tmp, 'multi'); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/start`, `http://127.0.0.1:${port}/hidden-1`, `http://127.0.0.1:${port}/hidden-2`, '--max-pages', '3', '--wait', '1000', '--no-screenshots', '--out', out]);
+    assert.equal(r.status, 0, r.out); const site = JSON.parse(fs.readFileSync(path.join(out, `127.0.0.1_${port}`, 'site.json'), 'utf8'));
+    assert.deepEqual(site.pages.map((p) => new URL(p.url).pathname).sort(), ['/hidden-1', '/hidden-2', '/start']);
+  } finally { srv.close(); }
+});
+
+test('diagnose tells "blocked by user agent" from "page really is empty"', async (t) => {
+  if (skip(t)) return;
+  const { probe, verdict } = await import('../scripts/diagnose.mjs');
+  const srv = http.createServer((q, r) => {
+    r.setHeader('content-type', 'text/html');
+    if (q.url === '/ua-block') return r.end(/site-explorer/.test(q.headers['user-agent'] || '') ? '<!doctype html><title>Access denied</title><body><div></div>' : `<!doctype html><title>Real</title><body><h1>Hello</h1><p>${'Real content. '.repeat(20)}</p>`);
+    r.end('<!doctype html><title>Shell</title><body><div id="root"></div><script>/* app never boots */</script>');
+  }).listen(0); await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  const browser = await launchBrowser();
+  try {
+    const dir = path.join(tmp, 'diag'); const UAC = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
+    const a1 = await probe(browser, `http://127.0.0.1:${port}/ua-block`, { label: 'a', userAgent: UAC, outDir: dir, waitMs: 1500 });
+    const b1 = await probe(browser, `http://127.0.0.1:${port}/ua-block`, { label: 'b', userAgent: null, outDir: dir, waitMs: 1500 });
+    assert.equal(a1.contentAppeared, false); assert.equal(b1.contentAppeared, true); assert.match(verdict(a1, b1), /識別字串/); assert.ok(fs.existsSync(a1.screenshot));
+    const a2 = await probe(browser, `http://127.0.0.1:${port}/shell`, { label: 'c', userAgent: UAC, outDir: dir, waitMs: 1000 });
+    const b2 = await probe(browser, `http://127.0.0.1:${port}/shell`, { label: 'd', userAgent: null, outDir: dir, waitMs: 1000 });
+    assert.equal(a2.contentAppeared, false); assert.equal(b2.contentAppeared, false); assert.doesNotMatch(verdict(a2, b2), /識別字串/);
+  } finally { await browser.close(); srv.close(); }
+});
+
+test('robots.txt is judged per origin: an extra URL on the origin that redirected away keeps that origin\'s rules', async (t) => {
+  if (skip(t)) return;
+  const page = (r, title) => { r.setHeader('content-type', 'text/html'); r.end(`<!doctype html><title>${title}</title><body><h1>${title}</h1><p>${'Some words here. '.repeat(15)}</p></body>`); };
+  const B = http.createServer((q, r) => (q.url === '/robots.txt' ? (r.statusCode = 404, r.end('')) : page(r, 'B ' + q.url))).listen(0); await new Promise((res) => B.once('listening', res));
+  const A = http.createServer((q, r) => {
+    if (q.url === '/robots.txt') { r.setHeader('content-type', 'text/plain'); return r.end('User-agent: *\nDisallow: /private\n'); }
+    if (q.url === '/') { r.statusCode = 302; r.setHeader('location', `http://127.0.0.1:${B.address().port}/`); return r.end(); }
+    page(r, 'A ' + q.url);
+  }).listen(0); await new Promise((res) => A.once('listening', res));
+  try {
+    const out = path.join(tmp, 'robots-origin'); const a = A.address().port;
+    const r = await run('crawl.mjs', [`http://127.0.0.1:${a}/`, `http://127.0.0.1:${a}/private`, `http://127.0.0.1:${a}/public`, '--max-pages', '4', '--wait', '1000', '--no-screenshots', '--out', out]);
+    assert.equal(r.status, 0, r.out);
+    const dir = fs.readdirSync(out).find((d) => d.startsWith('127.0.0.1')); const site = JSON.parse(fs.readFileSync(path.join(out, dir, 'site.json'), 'utf8'));
+    const paths = site.pages.map((p) => new URL(p.url).port + new URL(p.url).pathname);
+    assert.ok(!paths.some((p) => p === a + '/private'), '/private is disallowed by the ORIGINAL origin\'s robots.txt: ' + paths.join(','));
+    assert.ok(paths.some((p) => p === a + '/public'), '/public (allowed) is still crawled: ' + paths.join(','));
+  } finally { A.close(); B.close(); }
+});

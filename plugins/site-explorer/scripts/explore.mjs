@@ -8,14 +8,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runChecks, printChecks } from './doctor.mjs';
 import { openDb, ingest, DB_PATH } from './db.mjs';
-import { findUrl, intOpt } from './args.mjs';
+import { findUrl, findUrls, intOpt, sameSite } from './args.mjs';
 import { isInside, checkExploreOut, UnsafeOutputError } from './safe-out.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const url = findUrl(args);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
-const USAGE = `用法：site-explorer explore <網址> [選項]    （網址可省略 https://）
+const USAGE = `用法：site-explorer explore <網址> [更多網址…] [選項]    （網址可省略 https://；可一次給多個頁面，第一個是起點）
   --max-pages 6        最多爬幾頁
   --out ./explore-out  輸出資料夾（預設：目前資料夾下的 explore-out；也可設環境變數 SITE_EXPLORER_OUT 一次指定）
   --no-motion          不擷取 3D／動畫          --no-health   不做 SEO／索引健檢
@@ -26,7 +26,8 @@ const USAGE = `用法：site-explorer explore <網址> [選項]    （網址可�
   --open | --no-open   完成後是否自動開啟儀表板  --no-standalone  儀表板不內嵌圖片`;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 if (!url) { console.error(USAGE); process.exit(1); }
-const maxPages = intOpt(args, 'max-pages', 6, { min: 1, max: 500 }), waitMs = intOpt(args, 'wait', 4000, { min: 0, max: 60000 });
+const urlsGiven = findUrls(args).filter((u) => { try { return sameSite(u, url); } catch { return false; } }).length; // only URLs the crawler will accept (same site as the first) raise the limits
+const maxPages = Math.max(intOpt(args, 'max-pages', 6, { min: 1, max: 500 }), urlsGiven), waitMs = intOpt(args, 'wait', 4000, { min: 0, max: 60000 });
 
 const out = path.resolve(opt('out', process.env.SITE_EXPLORER_OUT || './explore-out'));
 if (isInside(out, path.resolve(here, '..'))) { console.error(`輸出資料夾不能放在外掛目錄內（${out}）：外掛更新或重新安裝時會被清掉。請改用你專案裡的資料夾，例如 --out ./explore-out`); process.exit(1); }
@@ -56,7 +57,7 @@ const checks = await runChecks(url);
 printChecks(checks);
 if (checks.some((c) => c.level === 'fail')) { console.error('\n環境檢查未通過，請先依上方建議處理。'); process.exit(1); }
 
-const crawlOk = await run('爬取頁面、設計、內容、排版', 'crawl.mjs', [url, '--max-pages', String(maxPages), '--out', siteRoot, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
+const crawlOk = await run('爬取頁面、設計、內容、排版', 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
 if (crawlOk) await run('整理設計包（tokens、Tailwind、W3C）', 'export-design.mjs', [siteDir]);
 let healthOk = false;
 if (crawlOk && !args.includes('--no-health')) healthOk = await run('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）', 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
@@ -65,7 +66,7 @@ if (!args.includes('--no-motion')) motionOk = await run('擷取 3D／動畫畫�
 
 // 3D／motion is per page: also capture the other crawled pages (--motion-pages N, default 5 pages in total; 1 = only the start page)
 if (!args.includes('--no-motion') && crawlOk) {
-  const nPages = intOpt(args, 'motion-pages', 5, { min: 1, max: 30 });
+  const nPages = Math.max(intOpt(args, 'motion-pages', 5, { min: 1, max: 30 }), urlsGiven);
   const entries = [];
   const addEntry = (pageUrl, slug, title, dir) => {
     try {
@@ -75,7 +76,7 @@ if (!args.includes('--no-motion') && crawlOk) {
   };
   if (motionOk) addEntry(url, '(start)', '', motionDir);
   let pg = []; try { pg = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []; } catch {}
-  const extra = pg.filter((p, i) => i > 0 && p.status === 200 && !p.emptyPage).slice(0, nPages - 1); // pages[0] is the start page after redirects (naked host -> www)
+  const extra = pg.filter((p, i) => i > 0 && p.status === 200).slice(0, nPages - 1); // pages[0] is the start page after redirects (naked host -> www)
   if (pg[0] && entries[0]) entries[0].url = pg[0].url;
   for (const p of extra) {
     const dest = path.join(motionRoot, '_pages', p.slug), t0 = Date.now();
