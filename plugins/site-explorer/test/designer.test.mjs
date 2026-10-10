@@ -96,6 +96,15 @@ test('dashboard: inspector, slices, skeleton, side-by-side, designer cards', asy
   await p.click('#tabs button[data-k=design]');
   const txt = await p.locator('#s-design').innerText();
   for (const needle of ['Google Fonts', '自架字型檔', '版面網格', '動態節奏', '真實背景上的對比檢查', '行內圖示', 'palette.svg']) assert.ok(txt.includes(needle), needle);
+  await p.click('#tabs button[data-k=overview]');
+  assert.match(await p.locator('#s-overview').innerText(), /版面組成/);
+  assert.ok(await p.locator('.war .tile').count() === 4 && await p.locator('.war .dot').count() === 1, 'status board rendered');
+  await p.click('#tabs button[data-k=rules]'); assert.match(await p.locator('#s-rules').innerText(), /健檢以外的評比/);
+  await p.click('#tabs button[data-k=export]'); assert.match(await p.locator('#x-pre').innerText(), /## 色彩/);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#x-dl')]);
+  assert.equal(dl.suggestedFilename(), 'design-reference.md');
+  const md = fs.readFileSync(await dl.path(), 'utf8');
+  assert.match(md, /## 色彩/); assert.match(md, /## 版面/); assert.match(md, /頁首.*主視覺 Hero/s);
   assert.deepEqual(errs, []);
   await b.close();
 });
@@ -133,7 +142,8 @@ test('standalone dashboard is one self-contained file (images and downloads inli
   const b = await launchBrowser(), p = await b.newPage({ viewport: { width: 1280, height: 900 } }), errs = [], missing = [];
   p.on('pageerror', (e) => errs.push(e.message)); p.on('requestfailed', (q) => missing.push(q.url().slice(0, 80)));
   await p.goto('file://' + lone);
-  const ov = await p.locator('#s-overview').innerText();
+  await p.click('#tabs button[data-k=about]');
+  const ov = await p.locator('#s-about').innerText();
   assert.match(ov, /探索紀錄（可稽核）/); assert.match(ov, /site-explorer-claude-plugin/); assert.match(ov, /未登入、未送出表單、未繞過驗證/);
   await p.click('#tabs button[data-k=layout]'); await p.waitForTimeout(400);
   assert.ok(await p.evaluate(() => { const i = document.getElementById('shotimg'); return i.complete && i.naturalWidth === 1440 && i.src.startsWith('data:image/png'); }), 'screenshot is inlined and renders');
