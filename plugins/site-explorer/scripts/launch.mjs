@@ -13,6 +13,7 @@ const pluginRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const HOME_DIR = process.env.SITE_EXPLORER_HOME || path.join(os.homedir(), '.site-explorer');
 export const DEPS_DIR = path.join(HOME_DIR, 'deps');
 const depsEntry = () => path.join(DEPS_DIR, 'node_modules', 'playwright-core', 'index.mjs');
+const LOCK_DIR = path.join(DEPS_DIR, '.lock'); // present while an install is running: files may exist but be incomplete
 const isWin = process.platform === 'win32';
 
 /** The exact playwright-core version this release was tested with (pinned in package.json). */
@@ -20,7 +21,7 @@ export const pinnedPlaywright = () => { try { return JSON.parse(fs.readFileSync(
 
 async function importPlaywright() {
   try { return await import('playwright-core'); } catch (e) { if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e; }
-  if (fs.existsSync(depsEntry())) return await import(pathToFileURL(depsEntry()).href);
+  if (fs.existsSync(depsEntry()) && !fs.existsSync(LOCK_DIR)) return await import(pathToFileURL(depsEntry()).href); // never import a half-extracted package
   return null;
 }
 export const depsInstalled = async () => !!(await importPlaywright().catch(() => null));
@@ -30,19 +31,19 @@ function sleepSync(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 
 /** Install playwright-core into ~/.site-explorer/deps (once). Safe against two processes starting at the same time. */
 export function installDeps({ quiet = false } = {}) {
   fs.mkdirSync(DEPS_DIR, { recursive: true });
-  const lock = path.join(DEPS_DIR, '.lock');
+  const lock = LOCK_DIR;
   for (let i = 0; ; i++) { // another process is installing: wait for it instead of racing it
     try { fs.mkdirSync(lock); break; }
     catch (e) {
       if (e.code !== 'EEXIST') throw e;
-      if (fs.existsSync(depsEntry())) return;
       let stale = false; try { stale = Date.now() - fs.statSync(lock).mtimeMs > 5 * 60 * 1000; } catch {}
       if (stale || i > 240) { fs.rmSync(lock, { recursive: true, force: true }); continue; }
       sleepSync(500);
     }
   }
   try {
-    if (fs.existsSync(depsEntry())) return;
+    const installedOk = () => { try { return JSON.parse(fs.readFileSync(path.join(DEPS_DIR, 'node_modules', 'playwright-core', 'package.json'), 'utf8')).version === pinnedPlaywright(); } catch { return false; } };
+    if (fs.existsSync(depsEntry()) && installedOk()) return; // complete, right version (a crashed earlier install is redone)
     if (!quiet) console.error(`第一次執行：正在安裝相依套件 playwright-core ${pinnedPlaywright()} 到 ${DEPS_DIR}（只需一次，約 14 MB）…`);
     fs.writeFileSync(path.join(DEPS_DIR, 'package.json'), JSON.stringify({ name: 'site-explorer-deps', private: true, dependencies: { 'playwright-core': pinnedPlaywright() } }));
     const r = spawnSync(isWin ? 'npm.cmd' : 'npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: DEPS_DIR, stdio: quiet ? 'ignore' : ['ignore', 'inherit', 'inherit'], shell: isWin });
