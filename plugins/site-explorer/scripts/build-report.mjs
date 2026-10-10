@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { openDb, runsForHost, diffRuns } from './db.mjs';
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
@@ -16,7 +17,7 @@ const rel = (p) => path.relative(outDir, p).split(path.sep).map(encodeURICompone
 const readJSON = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const exists = fs.existsSync;
 
-const data = { generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null };
+const data = { generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, files: [] };
 
 if (siteDir && exists(path.join(siteDir, 'site.json'))) {
   data.site = readJSON(path.join(siteDir, 'site.json'));
@@ -36,6 +37,10 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
       mobileOverflow: full.layout.mobileOverflow,
     });
   }
+  for (const f of ['tokens.css', 'tailwind.config.js', 'tokens.w3c.json', 'tokens.json', 'README.md']) {
+    const fp = path.join(siteDir, 'design-bundle', f);
+    if (exists(fp)) data.files.push({ name: f, href: rel(fp) });
+  }
   if (data.site.assets) data.site.assets = data.site.assets.map((a) => ({ ...a, src: rel(path.join(siteDir, a.file)) }));
 }
 if (motionDir && exists(path.join(motionDir, 'motion.json'))) {
@@ -49,6 +54,20 @@ if (motionDir && exists(path.join(motionDir, 'motion.json'))) {
   if (m.video) m.video = rel(path.join(motionDir, m.video));
   data.motion = m;
 }
+
+// history from the local database (optional)
+try {
+  const host = data.site ? new URL(data.site.startUrl).host : data.motion ? new URL(data.motion.url).host : null;
+  const db = host && (await openDb());
+  if (db) {
+    const runs = runsForHost(db, host);
+    if (runs.length) {
+      data.history = { host, runs: runs.map((r) => ({ id: r.id, date: r.crawled_at, pages: r.pages, brand: r.brand, font: r.heading_font, targets: r.motion_targets })),
+        changes: runs.length > 1 ? diffRuns(db, runs.at(-2).id, runs.at(-1).id) : [] };
+    }
+    db.close();
+  }
+} catch {}
 
 const html = `<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -92,7 +111,7 @@ pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:
 <nav><div class="in" id="tabs"></div></nav>
 <main>
 <section id="s-overview"></section><section id="s-design"></section><section id="s-layout"></section>
-<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section>
+<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-history"></section>
 </main><div class="toast" id="toast"></div>
 <script id="data" type="application/json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>
 <script>
@@ -104,7 +123,7 @@ const toast=(m)=>{const t=$('#toast');t.textContent=m;t.classList.add('on');setT
 const copy=(v)=>{navigator.clipboard?.writeText(v);toast('已複製 '+v)};
 $('#sub').textContent=(S?.startUrl||M?.url||'')+' · '+new Date(D.generatedAt).toLocaleString();
 
-const tabs=[['overview','總覽'],['design','設計'],['layout','排版'],['content','內容'],['motion','3D／動畫'],['edit','編輯方式']].filter(([k])=>k==='overview'||(k==='motion'?M:S));
+const tabs=[['overview','總覽'],['design','設計'],['layout','排版'],['content','內容'],['motion','3D／動畫'],['edit','編輯方式'],['history','歷史']].filter(([k])=>k==='overview'||(k==='motion'?M:k==='history'?(D.history&&D.history.runs.length>0):S));
 tabs.forEach(([k,l],i)=>{const b=el('<button role="tab">'+l+'</button>');b.dataset.k=k;b.onclick=()=>show(k);$('#tabs').append(b)});
 function show(k){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='s-'+k));document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.k===k));history.replaceState(null,'','#'+k)}
 
@@ -124,6 +143,17 @@ function show(k){document.querySelectorAll('section').forEach(s=>s.classList.tog
   '</div><div class="card" style="margin-top:14px"><h3>重點摘要</h3>'+sentences.map(s=>'<p class="say">'+s+'</p>').join('')+'</div>'+
   (T?'<div class="card" style="margin-top:14px"><h3>色彩速覽</h3><div style="display:flex;height:44px;border-radius:8px;overflow:hidden">'+T.palette.slice(0,10).map(p=>'<div title="'+p.hex+'" style="flex:'+Math.max(1,Math.log2(p.uses+1))+';background:'+p.hex+'"></div>').join('')+'</div></div>':'')+
   (S?.assets?.length?'<div class="card" style="margin-top:14px"><h3>品牌素材</h3><div class="imgs">'+S.assets.map(a=>'<div><img src="'+a.src+'" style="object-fit:contain;background:#8884"><div class="hint">'+esc(a.name)+'</div></div>').join('')+'</div></div>':'');
+
+  const blocked=S?.blockedPages||[];
+  if(blocked.length)o.insertAdjacentHTML('afterbegin','<div class="card" style="border-color:var(--warn);margin-bottom:14px"><h3 style="color:var(--warn)">⚠️ 部分頁面被擋住</h3><p>'+blocked.map(b=>esc(b.reason)+'：'+esc(b.url)).join('<br>')+'</p><p class="hint">以下結果可能不完整。可降低頻率、確認你有權存取，或請 Claude 用瀏覽器工具互動補查。</p></div>');
+  const steps=[];
+  if(S)steps.push(['把這個風格變成 Claude Design 的設計系統','在 Claude Code 輸入：<code>/site-explorer:to-design '+esc(S.startUrl)+'</code>']);
+  if(D.files.length)steps.push(['給開發者的檔案',D.files.map(f=>'<a href="'+f.href+'" target="_blank">'+esc(f.name)+'</a>').join('　')]);
+  if(T&&(T.contrastAudit||[]).some(a=>!a.pass))steps.push(['修正對比不足','有 '+T.contrastAudit.filter(a=>!a.pass).length+' 項文字／按鈕對比低於 4.5:1，改版時建議調深前景或底色']);
+  if(M&&M.targets.length)steps.push(['理解動畫','到「3D／動畫」分頁播放畫格；要推算節奏與觸發方式，請 Claude 逐張檢視畫格並對照 motion.json']);
+  if(D.history&&D.history.runs.length>1)steps.push(['追蹤改版','這個網站已有 '+D.history.runs.length+' 次紀錄，見「歷史」分頁']);
+  steps.push(['比較其他網站','終端機：<code>node scripts/db.mjs search --lib three</code>、<code>node scripts/db.mjs list</code>']);
+  o.insertAdjacentHTML('beforeend','<div class="card" style="margin-top:14px"><h3>下一步可以做什麼</h3>'+steps.map(x=>'<p class="say"><b>'+x[0]+'</b><br><span class="hint">'+x[1]+'</span></p>').join('')+'</div>');
 })();
 
 // ---------- design ----------
@@ -208,6 +238,13 @@ function show(k){document.querySelectorAll('section').forEach(s=>s.classList.tog
   if(!S)return;const e=$('#s-edit');const E=S.editing;
   e.innerHTML='<div class="grid g2">'+(E.platforms.length?E.platforms.map(p=>'<div class="card"><h3>偵測到的平台</h3><div class="big" style="font-size:20px">'+esc(p.platform)+'</div><p>'+esc(p.howToEdit)+'</p>'+Object.entries(p.adminProbes).map(([k,v])=>'<span class="chip '+(v===200||v===301||v===302?'ok':'')+'">'+esc(k)+' → '+v+'</span>').join('')+'</div>').join(''):'<div class="card"><h3>平台</h3><p>未偵測到已知建站平台，可能是自訂程式或靜態站。</p></div>')+
    '<div class="card"><h3>伺服器線索</h3><p>Server：'+esc(S.server.server||'?')+'<br>X-Powered-By：'+esc(S.server.poweredBy||'?')+'<br>Generator：'+esc(S.server.generator||'?')+'</p><h3>登入／後台連結</h3>'+(E.loginOrAdminLinks.map(l=>'<div class="hint">'+esc(l.text)+' → '+esc(l.href)+'</div>').join('')||'<span class="hint">無</span>')+'<p class="hint">可直接編輯頁面（contenteditable）：'+E.contenteditablePages.length+'</p></div></div>';
+})();
+
+// ---------- history ----------
+(function(){
+  const H=D.history;if(!H||!H.runs.length)return;const h=$('#s-history');
+  h.innerHTML='<div class="card"><h3>'+esc(H.host)+' 的探索紀錄</h3><table><tr><th>#</th><th>時間</th><th>頁數</th><th>主色</th><th>標題字型</th><th>3D／動畫</th></tr>'+H.runs.slice().reverse().map(r=>'<tr><td>'+r.id+'</td><td>'+esc(new Date(r.date).toLocaleString())+'</td><td>'+(r.pages??'—')+'</td><td>'+(r.brand?'<span class="chip" style="background:'+r.brand+';color:#fff">'+r.brand+'</span>':'—')+'</td><td>'+esc(r.font||'—')+'</td><td>'+r.targets+'</td></tr>').join('')+'</table></div>'+
+  '<div class="card" style="margin-top:14px"><h3>與上一次相比</h3>'+(H.runs.length<2?'<p class="hint">這是第一次紀錄；之後再探索同一個網站，就能看到改版差異。</p>':(H.changes.length?'<table><tr><th>項目</th><th>之前</th><th>現在</th></tr>'+H.changes.map(c=>'<tr><td>'+esc(c.label)+'</td><td>'+esc(c.from)+'</td><td>'+esc(c.to)+'</td></tr>').join('')+'</table>':'<p>沒有明顯變化。</p>'))+'</div>';
 })();
 show(location.hash.slice(1)&&tabs.some(t=>t[0]===location.hash.slice(1))?location.hash.slice(1):'overview');
 </script></body></html>`;

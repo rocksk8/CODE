@@ -1,8 +1,13 @@
 ---
-description: 自動探索網站，取得設計、內容、排版與編輯方式
-argument-hint: <url> [最大頁數，預設 10]
+description: 一鍵探索網站：設計、內容、排版、3D／動畫、編輯方式，並產生圖形化儀表板
+argument-hint: <url> [最大頁數，預設 6]
 ---
 
-使用 `site-explore` skill 探索這個網站：$ARGUMENTS
+使用 `site-explore` skill 探索 $ARGUMENTS：
 
-步驟：先執行爬取腳本取得結構化資料與截圖，再用 Playwright MCP 瀏覽器工具互動式補查（選單、彈窗、登入頁、動態內容），最後輸出整合報告。
+1. 在套件根目錄（`${CLAUDE_PLUGIN_ROOT}`）執行 `npm install --silent`（僅首次），再執行
+   `node scripts/explore.mjs <url> --max-pages <N> --out ./explore-out`
+   （它會先做環境檢查，再依序爬取、整理設計包、擷取 3D、存入資料庫、產生 `dashboard.html`）。
+2. 若環境檢查失敗，照它列出的修復指令處理，必要時改用 Playwright MCP 瀏覽器工具。
+3. 讀 `explore-out/site/<host>/report.md` 與 `explore-out/motion/<host>/motion.json`，必要時逐張檢視截圖與畫格。
+4. 回報：用 5 句內說明最重要的發現，告知 `dashboard.html` 位置，並詢問使用者是否要接著用 `/site-explorer:to-design` 做成 Claude Design 的設計系統。

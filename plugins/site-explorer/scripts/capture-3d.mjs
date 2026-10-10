@@ -75,6 +75,8 @@ const detected = await page.evaluate(() => {
   document.querySelectorAll('svg').forEach((s) => vis(s) && s.querySelector('animate, animateTransform, animateMotion') && add(s, 'svg-smil'));
   for (const el of document.querySelectorAll('body *')) {
     const s = getComputedStyle(el);
+    // skip nested duplicates: a 3D/animated element inside (or wrapping) an existing target is the same scene
+    if (el.parentElement?.closest('[data-s3d-id]') || el.querySelector('[data-s3d-id]')) continue;
     if ((s.transformStyle === 'preserve-3d' || s.perspective !== 'none') && vis(el)) add(el, 'css-3d', { perspective: s.perspective, transformStyle: s.transformStyle, transform: s.transform !== 'none' ? s.transform : undefined });
     else if (s.animationName !== 'none' && vis(el)) add(el, 'css-animation', { animation: `${s.animationName} ${s.animationDuration} ${s.animationTimingFunction} ${s.animationIterationCount}` });
   }
@@ -138,7 +140,7 @@ await ctx.close(); await browser.close();
 let videoFile = null;
 if (video && fs.existsSync(video)) { videoFile = path.join(out, 'recording.webm'); fs.renameSync(video, videoFile); fs.rmSync(path.join(out, 'video'), { recursive: true, force: true }); }
 
-const report = { url, capturedAt: new Date().toISOString(), webglContexts: detected.contexts, libs: detected.libs, raf: detected.rafCount, assets3d: [...assets3d], shaderSamples: detected.shaders.slice(0, 4), cssKeyframes: detected.keyframes, targets, scrollFrames: scrollHashes.length, scrollChangedFrames: new Set(scrollHashes).size, video: videoFile && path.basename(videoFile) };
+const report = { schemaVersion: 2, url, capturedAt: new Date().toISOString(), webglContexts: detected.contexts, libs: detected.libs, raf: detected.rafCount, assets3d: [...assets3d], shaderSamples: detected.shaders.slice(0, 4), cssKeyframes: detected.keyframes, targets, scrollFrames: scrollHashes.length, scrollChangedFrames: new Set(scrollHashes).size, video: videoFile && path.basename(videoFile) };
 fs.writeFileSync(path.join(out, 'motion.json'), JSON.stringify(report, null, 2));
 
 const imgs = (d) => (fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.png')).sort() : []);

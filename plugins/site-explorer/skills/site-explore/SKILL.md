@@ -5,6 +5,14 @@ description: 自動控制瀏覽器探索網站，取得網站設計（色彩/字
 
 # 網站探索流程
 
+## 0. 最快路徑：一個指令
+```bash
+cd "${CLAUDE_PLUGIN_ROOT}" && npm install --silent
+node scripts/explore.mjs <url> --max-pages 6 --out ./explore-out
+```
+會依序：環境檢查 → 爬取 → 設計包 → 3D 擷取 → 存入資料庫 → 儀表板（`explore-out/dashboard.html`）。任一階段失敗不影響其他階段。可加 `--no-motion`、`--no-db`。
+遇到問題先跑 `node scripts/doctor.mjs <url>`。以下是分階段用法。
+
 ## 1. 自動爬取（批次、可重現）
 
 ```bash
@@ -51,3 +59,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/crawl.mjs" <url> --max-pages 10 --out ./site
 
 ## 圖形化儀表板
 完成後建議產生可視化報告：`node scripts/build-report.mjs --site <out>/<host> [--motion <motion-out>/<host>] --out ./dashboard.html`。內含色票、字型實際渲染、按鈕 hover、桌機/平板/手機切換、區塊地圖、標題大綱、3D 畫格播放器與捲動序列。
+
+## 歷史與比較
+每次 `explore.mjs` 會把摘要存進本機資料庫（`~/.site-explorer/explorations.db`，需 Node ≥ 22.13）。用 `node scripts/db.mjs list | search | history <host> | compare <a> <b>` 回頭查「誰用了 three.js」「主色偏橘的網站」「這個網站改版了什麼」。
+
+## 被擋住時
+`site.json` 的 `blockedPages` 與儀表板會標示被擋原因（403、驗證碼、防機器人頁）。不要硬闖或繞過；降低頻率、確認授權，或改用 Playwright MCP 以真實瀏覽器互動。

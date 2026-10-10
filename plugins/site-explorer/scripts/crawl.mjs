@@ -202,26 +202,53 @@ async function detect(pages, headers, fetchStatus) {
   return found;
 }
 
+// ---- friction handling: cookie banners and bot walls ----
+async function dismissConsent(page) {
+  try {
+    return await page.evaluate(() => {
+      const box = [...document.querySelectorAll('[id*=cookie i],[class*=cookie i],[id*=consent i],[class*=consent i],[id*=onetrust i],[role=dialog]')].find((e) => e.getBoundingClientRect().height > 40);
+      if (!box) return null;
+      const btns = [...box.querySelectorAll('button, a[role=button], [role=button]')];
+      const pick = (re) => btns.find((b) => re.test((b.innerText || b.getAttribute('aria-label') || '').trim()));
+      const b = pick(/reject|decline|necessary only|refuse|deny|拒絕|僅必要|只接受必要/i) || pick(/accept|agree|got it|allow|ok\b|同意|接受|我知道/i);
+      if (!b) return null;
+      b.click();
+      return (b.innerText || '').trim().slice(0, 30);
+    });
+  } catch { return null; }
+}
+async function detectBlock(page, status) {
+  const text = await page.evaluate(() => (document.title + ' ' + (document.body?.innerText || '').slice(0, 800)).toLowerCase()).catch(() => '');
+  if (/just a moment|attention required|captcha|verify you are human|are you a robot|access denied|unusual traffic|enable javascript and cookies/.test(text)) return '驗證／防機器人頁面';
+  if ([401, 403, 429].includes(status)) return `HTTP ${status}`;
+  if (status >= 500) return `伺服器錯誤 HTTP ${status}`;
+  return null;
+}
+
 // ---- main ----
 const robots = await loadRobots();
 const allowed = (u) => !robots.some((r) => new URL(u).pathname.startsWith(r));
 const browser = await launchBrowser();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)' });
 const queue = [[norm(startUrl), 0]], seen = new Set([norm(startUrl)]), pages = [], headers = {};
+let consentAction = null;
+const skippedByRobots = [];
 const t0 = Date.now();
 
 while (queue.length && pages.length < maxPages) {
   const [url, depth] = queue.shift();
-  if (!allowed(url)) { console.log('skip (robots):', url); continue; }
+  if (!allowed(url)) { console.log('skip (robots):', url); skippedByRobots.push(url); continue; }
   const page = await ctx.newPage();
   try {
     const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 }).catch(() => page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }));
     if (pages.length === 0 && resp) headers.main = resp.headers();
+    if (pages.length === 0) { consentAction = await dismissConsent(page); if (consentAction) await page.waitForTimeout(600); }
     // trigger lazy content
     await page.evaluate(async () => { for (let y = 0; y < document.body.scrollHeight; y += 600) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 80)); } scrollTo(0, 0); });
     await page.waitForTimeout(400);
     const data = await page.evaluate(extractInPage);
     data.status = resp?.status();
+    data.blocked = await detectBlock(page, data.status);
     if (pages.length === 0) {
       try {
         const sample = () => page.evaluate(() => { const b = getComputedStyle(document.body); return { background: b.backgroundColor, color: b.color }; });
@@ -294,12 +321,13 @@ const merge = (key, n = 10) => {
   return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n).map(([value, count]) => ({ value, count }));
 };
 const site = {
-  startUrl, crawledAt: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), robotsDisallow: robots,
+  schemaVersion: 2,
+  startUrl, crawledAt: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), robotsDisallow: robots, consentAction, blockedPages: pages.filter((p) => p.blocked).map((p) => ({ url: p.url, reason: p.blocked })), skippedByRobots,
   server: { server: headers.main?.server, poweredBy: headers.main?.['x-powered-by'], generator: pages[0]?.meta.generator },
   editing: { platforms, contenteditablePages: pages.filter((p) => p.editing.contenteditable).map((p) => p.url), loginOrAdminLinks: [...new Map(pages.flatMap((p) => p.editing.editLinks).map((l) => [l.href, l])).values()].slice(0, 15) },
   design: { textColors: merge('textColors'), backgrounds: merge('backgrounds'), fontFamilies: merge('fontFamilies', 6), fontSizes: merge('fontSizes'), radii: merge('radii', 6), shadows: merge('shadows', 5), spacing: merge('spacing'), cssVars: pages[0]?.design.cssVars || {}, webFonts: [...new Set(pages.flatMap((p) => p.design.webFonts))], typography: pages[0]?.design.typography, breakpoints: (() => { const m = {}; for (const p of pages) for (const b of p.breakpoints) m[b.px] = (m[b.px] || 0) + b.uses; return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([px, uses]) => ({ px: Number(px), uses })); })(), darkMode: pages[0]?.darkMode, buttonHover: pages[0]?.buttonHover },
   components: pages[0]?.components, assets,
-  pages: pages.map((p) => ({ slug: p.slug, url: p.url, title: p.title, status: p.status, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
+  pages: pages.map((p) => ({ slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
 };
 fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
 
@@ -307,6 +335,8 @@ fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
 const list = (a) => a.map((x) => `\`${x.value}\` (${x.count})`).join(', ') || '—';
 const md = [
   `# 網站探索報告：${startUrl}`, `爬取 ${pages.length} 頁，耗時 ${site.seconds}s，時間 ${site.crawledAt}`, '',
+  ...(site.blockedPages.length ? ['> ⚠️ **部分頁面被擋住**（' + site.blockedPages.map((b) => b.reason).join('、') + '）。結果可能不完整；可降低頻率、改用 Playwright MCP 互動，或確認你有權存取。', ''] : []),
+  ...(site.consentAction ? ['- 已自動處理 Cookie 橫幅：「' + site.consentAction + '」', ''] : []),
   '## 編輯方式',
   platforms.length ? platforms.map((p) => `- **${p.platform}**：${p.howToEdit}${Object.keys(p.adminProbes).length ? `（後台探測：${Object.entries(p.adminProbes).map(([k, v]) => `${k}→${v}`).join(', ')}）` : ''}`).join('\n') : '- 未偵測到已知平台特徵（可能為自訂程式碼或靜態站）',
   `- Server: ${site.server.server || '?'}；X-Powered-By: ${site.server.poweredBy || '?'}；Generator: ${site.server.generator || '?'}`,

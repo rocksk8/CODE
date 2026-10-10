@@ -1,7 +1,17 @@
 {
   "name": "site-explorer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "dependencies": { "playwright-core": "^1.49.0" }
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/e2e.test.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "explore": "node scripts/explore.mjs"
+  }
 }

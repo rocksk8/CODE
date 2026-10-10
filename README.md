@@ -1,40 +1,59 @@
 # site-explorer（Claude Code 套件）
 
-讓 Claude 自動控制瀏覽器探索網站，取得：**網站設計、網頁內容、網站排版、編輯方式**。
+讓 Claude 自動控制瀏覽器探索網站：**設計、內容、排版、3D／動畫、編輯方式**，整理成圖形化儀表板，累積在本機資料庫，並可一鍵串接 Claude Design。
 
-## 安裝
+## 30 秒上手（Mac／Windows／Linux）
 
+需要 Node 18+ 與 Google Chrome（資料庫功能需要 Node 22.13+）。
+
+```bash
+cd plugins/site-explorer && npm install
+node scripts/doctor.mjs https://example.com      # 先檢查環境，每個問題都附修復指令
+node scripts/explore.mjs https://example.com     # 一鍵：爬取→設計包→3D→資料庫→儀表板
+open explore-out/dashboard.html                  # Mac
+```
+
+在 Claude Code 裡安裝：
 ```
 /plugin marketplace add rocksk8/code
 /plugin install site-explorer@rocksk8-code
 ```
 
-## 使用
+## 指令
 
-- `/site-explorer:explore https://example.com 10`：一鍵探索並輸出報告
-- `/site-explorer:to-design https://example.com 改版首頁`：探索後萃取設計 token，建立 **Claude Design** 的 Design System 並產出設計稿
-- `/site-explorer:capture-motion https://example.com`：視覺化擷取 **3D／動畫**（WebGL、three.js、CSS 3D、Lottie、捲動動畫），輸出畫格序列、互動畫格、錄影與技術分析
-- `/site-explorer:report https://example.com`：一次跑完探索＋3D 擷取，產生**圖形化儀表板** `dashboard.html`
-- 或直接說「幫我分析 https://example.com 的設計與版面」，Claude 會自動啟用 `site-explore` skill
+| 指令 | 做什麼 |
+|---|---|
+| `/site-explorer:explore <url>` | 一鍵探索並產生儀表板 |
+| `/site-explorer:to-design <url> [要做的設計]` | 萃取 token → 建立 Claude Design 的 Design System → 產出設計稿 |
+| `/site-explorer:capture-motion <url>` | 只做 3D／動畫視覺擷取 |
+| `/site-explorer:report <url>` | 分階段產生儀表板 |
+| `/site-explorer:history list｜search --lib three｜history <host>｜compare a b` | 查詢、比較以前探索過的網站 |
+| `/site-explorer:doctor [url]` | 環境診斷 |
+
+## 你會得到什麼
+
+- **圖形化儀表板** `dashboard.html`（離線單檔）：色票、字型實際渲染、按鈕 hover、桌機／平板／手機截圖切換、區塊地圖、標題大綱、3D 畫格播放器、編輯方式、歷史比較、「下一步」建議
+- **設計包**：`tokens.css`、`tokens.w3c.json`（W3C Design Tokens）、`tailwind.config.js`、元件樣式、logo／favicon、對比檢查
+- **3D／動畫**：WebGL／CSS 3D／model-viewer／影片的靜置、滑鼠、拖曳、捲動畫格；shader、3D 素材、函式庫
+- **資料庫**（SQLite，`~/.site-explorer/explorations.db`，可用 `SITE_EXPLORER_DB` 改位置）：搜尋「誰用了 three.js」「主色偏橘的網站」，追蹤同一網站的改版
 
 ## 內容
 
 | 元件 | 作用 |
 |---|---|
-| `.mcp.json` | 掛載 Playwright MCP，Claude 可即時操作瀏覽器（點擊、截圖、快照） |
-| `scripts/crawl.mjs` | 批次爬取：設計權杖、內容、排版樹、元件（含 hover）、斷點、深色模式、logo/favicon 素材、三種視窗截圖、CMS/編輯方式偵測 |
-| `scripts/export-design.mjs` | 把爬取結果轉成設計包：色彩角色、型階、間距基準、對比檢查、tokens.css、元件、素材 |
-| `scripts/capture-3d.mjs` | 偵測並逐格擷取 3D／動畫：靜置、滑鼠、捲動畫格、shader、3D 素材、函式庫、錄影、contact sheet |
-| `scripts/build-report.mjs` | 產生離線圖形化儀表板：色票、字型、元件、三種視窗截圖、區塊地圖、3D 畫格播放器 |
-| `skills/capture-motion` | 3D／動畫擷取與判讀流程 |
-| `skills/site-explore` | 探索流程與回報規範 |
-| `skills/site-to-design` | 串接 Claude Design：Design System → Design 稿 |
-| `commands/explore.md`、`commands/to-design.md` | `/site-explorer:explore`、`/site-explorer:to-design` |
-| `agents/site-explorer.md` | 專職分析 subagent |
+| `.mcp.json` | 掛載 Playwright MCP，Claude 可即時操作瀏覽器 |
+| `scripts/explore.mjs` | 單一入口，分階段、有進度，單階段失敗不中斷其他階段 |
+| `scripts/doctor.mjs` | Node／瀏覽器／ffmpeg／資料庫／網路檢查 |
+| `scripts/crawl.mjs` | 爬取；偵測被擋（403／驗證碼）、自動處理 Cookie 橫幅、遵守 robots.txt |
+| `scripts/export-design.mjs` | 設計包 |
+| `scripts/capture-3d.mjs` | 3D／動畫擷取 |
+| `scripts/db.mjs` | 資料庫：ingest／list／search／history／compare／export |
+| `scripts/build-report.mjs` | 儀表板 |
+| `skills/`、`commands/`、`agents/` | `site-explore`、`site-to-design`、`capture-motion` 與對應指令、分析 agent |
+| `test/e2e.test.mjs` | `npm test`：本機夾具網站端到端測試（含 WebGL、CSS 3D、被擋頁面、資料庫歷史） |
 
-單獨執行腳本：`cd plugins/site-explorer && npm install && node scripts/crawl.mjs <url> --max-pages 10 --out ./site-report`
-（需要 Chromium；可用 `CHROMIUM_PATH` 指定）。
+設計取捨與使用者旅途盤點見 [`docs/ux-review.md`](docs/ux-review.md)。
 
-## 注意
+## 邊界
 
-遵守 robots.txt，不登入、不繞過驗證，只探測後台路徑是否存在。僅用於公開或已授權的網站。
+遵守 robots.txt；不登入、不繞過驗證碼或防機器人；後台路徑只探測是否存在。被擋住時會明確標示而不是回報空白結果。3D 模型與網站素材受版權保護，只供參考。僅用於公開或已授權的網站。

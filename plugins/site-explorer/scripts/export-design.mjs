@@ -99,6 +99,33 @@ const tokens = {
 };
 fs.writeFileSync(path.join(out, 'tokens.json'), JSON.stringify(tokens, null, 2));
 
+
+// ---- developer formats: W3C Design Tokens + Tailwind snippet ----
+const w3c = { color: {}, fontFamily: {}, fontSize: {}, spacing: {}, radius: {}, shadow: {} };
+for (const [k, v] of Object.entries(colors)) w3c.color[k] = { $type: 'color', $value: v };
+if (fontStack.heading) w3c.fontFamily.heading = { $type: 'fontFamily', $value: [fontStack.heading] };
+if (fontStack.body) w3c.fontFamily.body = { $type: 'fontFamily', $value: [fontStack.body] };
+for (const [k, v] of Object.entries(typeScale)) w3c.fontSize[k] = { $type: 'dimension', $value: v.size };
+sp.slice(0, 10).forEach((n, i) => { w3c.spacing[i + 1] = { $type: 'dimension', $value: n + 'px' }; });
+radii.slice(0, 5).forEach((r, i) => { w3c.radius[i + 1] = { $type: 'dimension', $value: r }; });
+shadows.slice(0, 4).forEach((x, i) => { w3c.shadow[i + 1] = { $type: 'shadow', $value: x }; });
+fs.writeFileSync(path.join(out, 'tokens.w3c.json'), JSON.stringify(w3c, null, 2));
+const q = (o) => JSON.stringify(o, null, 6).replace(/"([a-zA-Z_][\w]*)":/g, '$1:');
+const tw = `// tailwind.config.js (extracted from ${site.startUrl})
+module.exports = {
+  theme: {
+    extend: {
+      colors: ${q(colors)},
+      fontFamily: ${q({ heading: fontStack.heading ? [fontStack.heading, 'sans-serif'] : undefined, body: fontStack.body ? [fontStack.body, 'sans-serif'] : undefined })},
+      borderRadius: ${q(Object.fromEntries(radii.slice(0, 4).map((r, i) => ['r' + (i + 1), r])))},
+      boxShadow: ${q(Object.fromEntries(shadows.slice(0, 3).map((x, i) => ['s' + (i + 1), x])))},
+      screens: ${q(Object.fromEntries(breakpoints.map((b) => ['bp' + b, b + 'px'])))},
+    },
+  },
+};
+`;
+fs.writeFileSync(path.join(out, 'tailwind.config.js'), tw);
+
 // ---- tokens.css ----
 const css = [':root {',
   ...Object.entries(colors).map(([k, v]) => `  --color-${k}: ${v};`),
@@ -136,8 +163,8 @@ const readme = [
   d.buttonHover ? `- Button hover: ${d.buttonHover.before.backgroundColor} → ${d.buttonHover.after.backgroundColor}` : '', '',
   '## Accessibility', ...audit.map((a) => `- ${a.pass ? '✅' : '⚠️'} ${a.name}: ${a.ratio}:1`), '',
   '## Page structure', ...site.pages.slice(0, 8).map((p) => `- ${p.title || p.url} — ${p.url}`), '',
-  '## Files', '- `tokens.json` / `tokens.css` — machine-readable tokens', '- `components.json` — component styles', '- `assets/` — logo, favicon, og image', '- `reference/` — desktop and mobile screenshots',
+  '## Files', '- `tokens.json` / `tokens.css` / `tokens.w3c.json` / `tailwind.config.js` — machine-readable tokens (CSS, W3C Design Tokens, Tailwind)', '- `components.json` — component styles', '- `assets/` — logo, favicon, og image', '- `reference/` — desktop and mobile screenshots',
 ].filter((l) => l !== undefined && l !== null).join('\n');
 fs.writeFileSync(path.join(out, 'README.md'), readme + '\n');
 console.log('Design bundle written to', out);
-console.log(JSON.stringify({ colors, fonts: fontStack, baseUnit: spacing.baseUnit, breakpoints }, null, 2));
+console.log(`brand ${colors.brand || '?'} · fonts ${fontStack.heading || '?'} / ${fontStack.body || '?'} · base unit ${spacing.baseUnit}px · ${audit.filter((a) => !a.pass).length} contrast issue(s)`);
