@@ -71,7 +71,7 @@ async function fetchSitemapText(url, timeout = 15000) {
 export async function runHealth(siteDir, opts = {}) {
   const site = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8'));
   const injection = []; // site text that looks like instructions aimed at an AI
-  const pages = site.pages.map((p) => { const f = path.join(siteDir, 'pages', p.slug, 'page.json'); if (!fs.existsSync(f)) return null; const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (!j.seo) return null; return { slug: p.slug, url: p.url, status: p.status, blocked: p.blocked, /* perf = numbers + resource URLs; URLs only reach the report via add(), which sanitises */ seo: { ...cleanDeep({ ...j.seo, perf: undefined }, `page[${p.slug}].seo`, injection, { max: 400, quarantine: false }), perf: j.seo?.perf }, links: cleanDeep(j.content?.links || [], `page[${p.slug}].links`, injection, { quarantine: false }), title: clean(j.title) }; }).filter((p) => p && p.seo);
+  const pages = site.pages.map((p) => { const f = path.join(siteDir, 'pages', p.slug, 'page.json'); if (!fs.existsSync(f)) return null; const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (!j.seo) return null; return { slug: p.slug, url: p.url, status: p.status, blocked: p.blocked, /* perf = numbers + resource URLs; URLs only reach the report via add(), which sanitises */ seo: { ...cleanDeep({ ...j.seo, perf: undefined }, `page[${p.slug}].seo`, injection, { max: 400, quarantine: false }), perf: j.seo?.perf }, links: cleanDeep(j.content?.links || [], `page[${p.slug}].links`, injection, { quarantine: false }), title: clean(j.title), pageErrors: cleanDeep(j.pageErrors || [], `page[${p.slug}].errors`, injection, { quarantine: false }) }; }).filter((p) => p && p.seo);
   const origin = new URL(site.finalOrigin || site.startUrl).origin, host = new URL(origin).hostname, https = origin.startsWith('https:');
   const live = pages.filter((p) => !p.status || p.status < 400); // error pages are reported once (status-errors), not scored as content
   const total = live.length || 1;
@@ -188,6 +188,8 @@ export async function runHealth(siteDir, opts = {}) {
   // soft 404 + host/protocol canonicalisation
   const probe = await http(origin + '/__se-404-probe-' + Math.random().toString(36).slice(2, 8), { method: 'GET', redirect: 'follow' });
   facts.soft404 = { status: probe.status };
+  facts.unreachable = robots.status == null && probe.status == null;
+  if (facts.unreachable) add('indexability', 'critical', 'site-unreachable', '健檢時網站完全連不上（robots.txt 與測試網址都沒有回應）', { detail: String(robots.error || probe.error || ''), impact: '沒有回應就無法驗證 robots、sitemap、連結與狀態碼；這次的分數不可信，請不要拿它和上一次比較。', fix: '確認網站是否在線上、網路是否通，之後重新執行。' });
   if (probe.status === 200) add('indexability', 'high', 'soft-404', '不存在的網址回應 200（soft 404）', { examples: [probe.url], impact: '搜尋引擎會把大量無內容頁面當成真實頁面收錄，浪費抓取預算並拉低品質評價。', fix: '不存在的頁面必須回傳 404 或 410 狀態碼（即使畫面顯示「找不到頁面」）。' });
   else if (probe.status === 404 || probe.status === 410) ok('indexability', '不存在的網址正確回應 404／410');
   if (!isLocal(host)) {
@@ -222,6 +224,9 @@ export async function runHealth(siteDir, opts = {}) {
   const heavyImg = perPage((p) => p.seo.images.oversized > 0); if (heavyImg.length) add('performance', 'medium', 'img-oversized', `${heavyImg.length} 個頁面載入遠大於顯示尺寸的圖片`, { affected: heavyImg.length, scope: 'page', examples: heavyImg.flatMap((p) => p.seo.images.sampleOversized), impact: '浪費頻寬，拖慢 LCP，行動網路尤其明顯。', fix: '依顯示尺寸提供 srcset／sizes；使用 WebP／AVIF。' });
   const legacy = live.reduce((n, p) => n + p.seo.images.legacyFormat, 0); if (imgTotal && legacy / imgTotal > 0.6 && imgTotal > 4) add('performance', 'low', 'img-format', `${legacy} / ${imgTotal} 張圖片仍是 JPEG／PNG／GIF`, { fix: '改用 WebP 或 AVIF，通常可省 25–50%。' });
 
+  const brokenImg = perPage((p) => (p.seo.images.broken || 0) > 0); if (brokenImg.length) add('onpage', 'high', 'img-broken', `${brokenImg.length} 個頁面有載入失敗的圖片`, { affected: brokenImg.length, scope: 'page', examples: brokenImg.flatMap((p) => p.seo.images.sampleBroken), impact: '訪客會看到破圖；對檢驗／驗收來說這是明確的瑕疵。', fix: '修正圖片網址或補上遺失的檔案。' });
+  const jsErr = perPage((p) => (p.pageErrors || []).length > 0); if (jsErr.length) add('onpage', 'medium', 'page-errors', `${jsErr.length} 個頁面載入時有 JavaScript／主控台錯誤`, { affected: jsErr.length, scope: 'page', examples: jsErr.map((p) => `${p.url}：${p.pageErrors[0]}`), impact: '腳本錯誤常代表功能壞掉（選單、表單、動畫），也可能讓內容無法顯示。', fix: '開啟瀏覽器開發者工具的 Console 逐一修正；第三方腳本錯誤可評估移除。' });
+
   // ---------------------------------------------------------------- links
   const incoming = new Map(pages.map((p) => [norm(p.url), 0]));
   const allInternal = new Map();
@@ -250,6 +255,9 @@ export async function runHealth(siteDir, opts = {}) {
     linkChecks = { internalChecked: checked.length, externalChecked: extChecked.length, broken: broken.map((b) => ({ url: b.url, status: b.status, from: b.from })), redirects: redirs.length, externalBroken: extBroken.map((b) => ({ url: b.url, status: b.status })), unreachable: unreachable.length };
     if (broken.length) add('links', 'high', 'broken-internal', `${broken.length} 個內部連結壞掉（4xx／5xx）`, { affected: broken.length, examples: broken.map((b) => `${b.status} ${b.url}（來自 ${b.from[0]}）`), impact: '使用者與爬蟲都會碰壁，浪費抓取預算並傳遞負面訊號。', fix: '修正連結目標，或為搬移的頁面設定 301。' });
     else if (checked.length || crawledStatus.size) ok('links', `已檢查 ${checked.length + crawledStatus.size} 個內部連結，沒有壞連結`);
+    const hopChains = []; // the link checker only saw hop 1: follow the rest so a 302 -> 301 -> page chain is reported as a chain
+    for (const r of redirs.slice(0, 20)) { const hops = [{ status: r.status, url: r.url }]; let loc = r.location, last = r.url; for (let n = 0; n < 5 && loc; n++) { let nxt; try { nxt = new URL(loc, last).href; } catch { break; } if (!mayFetch(nxt, origin)) break; const h = await http(nxt); if (h.status >= 300 && h.status < 400 && h.location) { hops.push({ status: h.status, url: nxt }); last = nxt; loc = h.location; } else { last = nxt; loc = null; } } if (hops.length >= 2) hopChains.push(`${hops.map((h) => h.status + ' ' + h.url).join(' → ')} → ${last}`); }
+    if (hopChains.length) { const ex = issues.find((i) => i.id === 'redirect-chain'); if (ex) { ex.examples.push(...hopChains.map((c) => safe(c, 300))); ex.affected += hopChains.length; } else add('indexability', 'medium', 'redirect-chain', `${hopChains.length} 個網址經過 2 次以上重新導向`, { affected: hopChains.length, examples: hopChains, impact: '每多一跳都延遲載入並稀釋權重，爬蟲通常只跟隨約 5 跳。', fix: '讓舊網址一步直接導向最終網址。' }); }
     if (redirs.length) add('links', 'low', 'internal-redirect', `${redirs.length} 個內部連結指向會重新導向的網址`, { affected: redirs.length, examples: redirs.slice(0, 6).map((r) => `${r.status} ${r.url} → ${r.location}`), fix: '把連結改成最終網址，省下一次跳轉。' });
     if (extBroken.length) add('links', 'medium', 'broken-external', `${extBroken.length} 個外部連結失效`, { affected: extBroken.length, examples: extBroken.map((b) => `${b.status} ${b.url}`), fix: '移除或更新失效連結。' });
     if (checked.length >= maxLinks) facts.linkCheckLimited = `僅抽查前 ${maxLinks} 個內部連結（--max-links 可調整）`;
@@ -339,6 +347,10 @@ export async function runHealth(siteDir, opts = {}) {
 
   const pageRows = pages.map((p) => ({ url: p.url, status: p.status, title: p.seo.title, titleLen: textLen(p.seo.title), descLen: textLen(p.seo.description), h1: p.seo.h1Count, words: p.seo.words, rawWords: p.seo.raw?.words ?? null, canonical: p.seo.canonical, indexable: !(/noindex/i.test(p.seo.robotsMeta || '') || /noindex/i.test(p.seo.http?.headers?.['x-robots-tag'] || '')) && (p.status || 200) < 400, ttfbMs: p.seo.http?.ttfbMs ?? null, lcpMs: p.seo.perf?.lcpMs ?? null, cls: p.seo.perf?.cls ?? null, bytes: p.seo.perf?.totalBytes ?? null, inlinks: incoming.get(norm(p.url)) ?? 0 }));
   const health = { schemaVersion: 1, checkedAt: new Date().toISOString(), origin, pagesAnalyzed: pages.length, score: overall, grade, categories: cats, severity: sevCount, issues, passed, facts, links: linkChecks, pages: pageRows, notes: [...(criticals.length ? [`有 ${criticals.length} 個嚴重問題，總分上限為 55，直到修復為止。`] : []), '僅分析本次爬取的頁面（抽樣），不代表全站；請以 Google Search Console 的涵蓋範圍與 Core Web Vitals 真實數據為準。', '效能為實驗室數據（無頭瀏覽器、無節流）。', '檢查只做讀取：未登入、未送出表單；額外請求僅限 robots.txt、sitemap、連結狀態（HEAD）與一次 404 探測，並限制併發。'] };
+  const verdictOf = () => (sevCount.critical ? 'fail' : sevCount.high ? 'conditional' : 'pass');
+  health.verdict = { status: verdictOf(), label: { fail: '❌ 不通過', conditional: '⚠️ 有條件通過', pass: '✅ 通過' }[verdictOf()], rule: '沒有嚴重問題且沒有高風險問題 = 通過；有高風險 = 有條件通過；有嚴重問題 = 不通過', blocking: issues.filter((i) => ['critical', 'high'].includes(i.severity)).map((i) => ({ id: i.id, severity: i.severity, title: i.title })) };
+  const prevFile = path.join(siteDir, 'health.json');
+  try { if (fs.existsSync(prevFile)) { const prev = JSON.parse(fs.readFileSync(prevFile, 'utf8')); fs.writeFileSync(path.join(siteDir, 'health.prev.json'), JSON.stringify(prev)); const was = new Set((prev.issues || []).map((i) => i.id)), now = new Set(issues.map((i) => i.id)); health.changes = { since: prev.checkedAt, prevScore: prev.score, new: [...now].filter((x) => !was.has(x)), fixed: [...was].filter((x) => !now.has(x)), persisting: [...now].filter((x) => was.has(x)), titles: Object.fromEntries([...issues, ...(prev.issues || [])].map((i) => [i.id, i.title])) }; } } catch {}
   fs.writeFileSync(path.join(siteDir, 'health.json'), JSON.stringify(health, null, 2));
   fs.writeFileSync(path.join(siteDir, 'health.md'), sanitizeDoc(renderHealthMd(health)));
   site.health = { score: overall, grade, categories: Object.fromEntries(Object.entries(cats).map(([k, c]) => [k, c.score])), severity: sevCount, checkedAt: health.checkedAt };
@@ -348,7 +360,7 @@ export async function runHealth(siteDir, opts = {}) {
 
 const SEV_LABEL = { critical: '🔴 嚴重', high: '🟠 高', medium: '🟡 中', low: '🔵 低', info: '⚪ 資訊' };
 export function renderHealthMd(h) {
-  const L = [`# 網站健檢報告（SEO／爬蟲索引）`, '', BANNER, '', `網站：${h.origin}　檢查時間：${h.checkedAt}　分析頁數：${h.pagesAnalyzed}`, '', `## 總分：${h.score} / 100（${h.grade}）`, '', '| 面向 | 分數 | 問題數 | 通過項 |', '|---|---|---|---|', ...Object.values(h.categories).map((c) => `| ${c.label} | ${c.score} | ${c.issues} | ${c.passed} |`), '',
+  const L = [`# 網站健檢報告（SEO／爬蟲索引）`, '', BANNER, '', `網站：${h.origin}　檢查時間：${h.checkedAt}　分析頁數：${h.pagesAnalyzed}`, '', `## 驗收結論：${h.verdict ? h.verdict.label : '—'}`, '', ...(h.verdict ? ['> ' + h.verdict.rule, ...(h.verdict.blocking.length ? ['', '擋住驗收的項目：', ...h.verdict.blocking.map((b) => `- ${SEV_LABEL[b.severity]} ${b.title}（\`${b.id}\`）`)] : [])] : []), '', ...(h.changes ? [`### 與上次（${h.changes.since}，${h.changes.prevScore} 分）相比`, `- 新出現 ${h.changes.new.length}：${h.changes.new.map((x) => h.changes.titles[x]).join('；') || '無'}`, `- 已修復 ${h.changes.fixed.length}：${h.changes.fixed.map((x) => h.changes.titles[x]).join('；') || '無'}`, `- 仍存在 ${h.changes.persisting.length}`, ''] : []), `## 總分：${h.score} / 100（${h.grade}）`, '', '| 面向 | 分數 | 問題數 | 通過項 |', '|---|---|---|---|', ...Object.values(h.categories).map((c) => `| ${c.label} | ${c.score} | ${c.issues} | ${c.passed} |`), '',
     `問題分布：${Object.entries(h.severity).filter(([, n]) => n).map(([s, n]) => `${SEV_LABEL[s]} ${n}`).join('　') || '無'}`, '', '> ' + h.notes.join('\n> '), ''];
   const top = h.issues.filter((i) => ['critical', 'high', 'medium'].includes(i.severity)).slice(0, 10);
   if (top.length) { L.push('## 最該先處理的事', ...top.map((i, n) => `${n + 1}. **${i.title}**（${SEV_LABEL[i.severity]}）— ${i.fix}`), ''); }
@@ -368,9 +380,11 @@ export function renderHealthMd(h) {
 
 if (isMain(import.meta.url)) {
   const a = process.argv.slice(2), i = a.indexOf('--site');
-  if (i < 0 || !a[i + 1] || !fs.existsSync(path.join(a[i + 1], 'site.json'))) { console.error('Usage: health-check.mjs --site <crawl dir with site.json> [--no-link-check] [--max-links 120]'); process.exit(1); }
+  if (i < 0 || !a[i + 1] || !fs.existsSync(path.join(a[i + 1], 'site.json'))) { console.error('Usage: health-check.mjs --site <crawl dir with site.json> [--no-link-check] [--max-links 120] [--fail-on critical|high|medium|low]'); process.exit(1); }
   const h = await runHealth(a[i + 1], { noLinkCheck: a.includes('--no-link-check'), maxLinks: intOpt(a, 'max-links', 120, { min: 0, max: 1000 }) });
   console.log(`健檢完成：${h.score}/100（${h.grade}）— ${Object.entries(h.severity).filter(([, n]) => n).map(([s, n]) => `${SEV_LABEL[s]} ${n}`).join('　')}`);
   console.log(Object.values(h.categories).map((c) => `${c.label} ${c.score}`).join('　'));
+  console.log('驗收結論：' + h.verdict.label);
   console.log('報告：' + path.join(a[i + 1], 'health.md'));
+  const fi = a.indexOf('--fail-on'); if (fi >= 0) { const lvl = a[fi + 1]; if (!(lvl in SEV_RANK) || lvl === 'info') { console.error('--fail-on 需要 critical／high／medium／low 其中之一'); process.exit(1); } if (h.issues.some((x) => SEV_RANK[x.severity] <= SEV_RANK[lvl])) { console.error(`有 ${lvl} 以上的問題，依 --fail-on ${lvl} 以非零代碼結束（4）`); process.exit(4); } }
 }

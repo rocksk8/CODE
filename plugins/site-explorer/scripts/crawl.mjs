@@ -414,6 +414,7 @@ while (pages.length < maxPages) {
         try { const a = await probe(browser, page.url(), { label: 'browser-default', userAgent: null, outDir: path.join(outDir, 'pages', slugOf(url), 'alt'), waitMs: 6000 });
           data.emptyDiag.alt = a.error ? { error: a.error } : { status: a.status, contentAppeared: !!a.contentAppeared, textChars: a.deep ? a.deep.textChars : a.dom.textChars, elements: a.dom.elements, canvases: a.dom.canvases, title: a.dom.title, errors: a.consoleErrors.slice(0, 3) };
         } catch (e) { data.emptyDiag.alt = { error: String(e.message).slice(0, 100) }; } }
+      data.pageErrors = pageErrors.slice();
       if (data.emptyDiag) { data.emptyDiag.consoleErrors = pageErrors.slice(); const n = net.summary(page.url()); data.emptyDiag.scripts = n.byType.script || 0; data.emptyDiag.dataRequests = (n.byType.fetch || 0) + (n.byType.xhr || 0); data.emptyDiag.requests = n.total; data.emptyDiag.scriptUrls = n.scriptUrls || []; }
     }
     data.designer = await page.evaluate(extractDesignerInPage).catch((e) => { console.log('   (designer data skipped:', e.message.split('\n')[0] + ')'); return null; });

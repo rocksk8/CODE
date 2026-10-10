@@ -205,6 +205,11 @@ const spec = {
   unknowns: UNK,
 };
 fs.writeFileSync(path.join(out, 'spec.json'), JSON.stringify(spec, null, 2));
+{ // inventory.csv: every page the redesign has to carry over (opens in Excel / Numbers). Cells that start with = + - @ are prefixed so a spreadsheet never runs them as a formula.
+  const cell = (v) => { let t = String(v ?? '').replace(/\s+/g, ' ').trim(); if (/^[=+\-@]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
+  const rows = [['網址', '狀態', '標題', '描述', 'h1', '字數', 'canonical', '用途（猜測）', '改版時請保留／301'], ...pages.map((p) => { const ok = !p.status || p.status < 400; return [p.url, p.status ?? '', p.title, p.seo?.description || '', (p.content?.headings || []).filter((h) => h.level === 1).map((h) => h.text).join(' | '), p.seo?.words ?? '', p.seo?.canonical || '', ok ? pageType(p) : '錯誤頁', ok ? '是：新站要有同一網址，或設定 301 轉到新網址' : '否（原本就壞掉）']; })];
+  fs.writeFileSync(path.join(out, 'inventory.csv'), '\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\n') + '\n');
+}
 
 // ------------------------------------------------------------------ SPEC.md
 const L = [];
@@ -260,7 +265,7 @@ L.push('## 8. 技術與編輯方式', `- 平台：${tech.platforms.map((x) => x.
 if (health) L.push('## 9. 健檢摘要（SEO／爬蟲索引）', `總分 **${health.score}/100（${health.grade}）**：${Object.values(health.categories).map((c) => `${c.label} ${c.score}`).join('　')}`, '', ...(spec.health.topIssues.length ? ['最該先處理：', ...spec.health.topIssues.slice(0, 6).map((i, n) => `${n + 1}. ${i.title} — ${i.fix}`)] : ['沒有高優先問題。']), '', '完整內容見 `health.md`。', '');
 L.push('## 10. 重現建議（實作順序）',
   '1. **Tokens**：把 `tokens/tokens.css` 的 CSS 變數放進全域樣式（或用 `tailwind.config.js`／`tokens.w3c.json`／`tokens.studio.json`）。',
-  `2. **版面骨架**：容器寬 ${(ds.layoutGrid?.containerWidths || [])[0]?.px || '—'}px、${(ds.layoutGrid?.columns || [])[0]?.columns || 12} 欄網格；斷點 ${ds.breakpoints.join('/') || '768/1024'}。`,
+  `2. **版面骨架**：容器寬 ${(ds.layoutGrid?.containerWidths || [])[0]?.px || '—'}px、${(ds.layoutGrid?.columns || [])[0]?.columns || 12} 欄網格；斷點 ${ds.breakpoints.join('/') || '原站 CSS 未偵測到（768／1024 只是常見預設，請自行決定，不是量測值）'}。`,
   '3. **元件**：Button（primary／hover）、Card、Nav、Input —— 依第 4 節數值，狀態（hover／focus／disabled）自行補齊。',
   `4. **區塊**：依第 5 節順序組裝（${sitemap[0]?.sections.map((k) => KIND[k] || k).join(' → ') || '—'}），每個區塊做成可重用元件。`,
   '5. **動態**：依第 6 節與 `motion.md`；先做靜態版，再加動態；尊重 `prefers-reduced-motion`。',

@@ -377,3 +377,9 @@ test('layout is shown for pages that have one: report.md and the dashboard skip 
     } finally { await br.close(); }
   } finally { srv.close(); }
 });
+
+test('explore: a bad URL is named in the error, and a bad --fail-on is rejected before any work starts', async () => {
+  let r = await run('explore.mjs', ['not a url']); assert.equal(r.status, 1); assert.match(r.out, /「not a url」不是有效的網址/);
+  r = await run('explore.mjs', ['https://example.com', '--fail-on', 'bogus']); assert.equal(r.status, 1); assert.match(r.out, /--fail-on 需要/);
+  r = await run('explore.mjs', ['--help']); assert.match(r.out, /--fail-on/); assert.match(r.out, /結束代碼/);
+});

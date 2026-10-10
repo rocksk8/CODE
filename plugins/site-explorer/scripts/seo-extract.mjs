@@ -39,10 +39,11 @@ export async function extractSeoInPage() {
 
   // images
   const imgs = [...document.images];
-  const images = { total: imgs.length, missingAlt: 0, emptyAlt: 0, lazy: 0, oversized: 0, legacyFormat: 0, sampleMissingAlt: [], sampleOversized: [] };
+  const images = { total: imgs.length, missingAlt: 0, emptyAlt: 0, lazy: 0, oversized: 0, legacyFormat: 0, broken: 0, sampleBroken: [], sampleMissingAlt: [], sampleOversized: [] };
   for (const i of imgs) {
     if (!i.hasAttribute('alt')) { images.missingAlt++; if (images.sampleMissingAlt.length < 5) images.sampleMissingAlt.push(i.currentSrc || i.src); } else if (i.alt.trim() === '') images.emptyAlt++;
     if (i.loading === 'lazy') images.lazy++;
+    if (i.complete && i.naturalWidth === 0 && (i.currentSrc || i.src) && !/^data:/.test(i.currentSrc || i.src)) { images.broken++; if (images.sampleBroken.length < 5) images.sampleBroken.push(i.currentSrc || i.src); }
     if (i.clientWidth > 0 && i.naturalWidth > i.clientWidth * 2 && i.naturalWidth > 600) { images.oversized++; if (images.sampleOversized.length < 5) images.sampleOversized.push(`${(i.currentSrc || i.src).split('/').pop().slice(0, 50)} ${i.naturalWidth}px shown at ${i.clientWidth}px`); }
     if (/\.(jpe?g|png|gif|bmp)(\?|$)/i.test(i.currentSrc || i.src)) images.legacyFormat++;
   }
