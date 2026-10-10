@@ -47,3 +47,4 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/crawl.mjs" <url> --max-pages 10 --out ./site
 
 ## 延伸：串接 Claude Design
 探索完若使用者要做設計，改用 `site-to-design` skill：`node scripts/export-design.mjs <out>/<host>` 產生設計包，再建立 Design System artifact。
+若網站有 3D 或動態效果（WebGL、three.js、捲動動畫），改用 `capture-motion` skill 做視覺化擷取。
