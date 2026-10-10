@@ -300,7 +300,8 @@ if (!allowed(startUrl)) {
   console.error('\n沒有成功爬取任何頁面。\n原因：robots.txt 不允許爬取此網站（' + robotsList().join(', ') + '）。已依網站設定停止；若你擁有此網站，請調整 robots.txt，或改用 Playwright MCP 手動瀏覽。');
   process.exit(3);
 }
-const browser = await launchBrowser();
+const headed = args.includes('--headed'); // visible browser window: real GPU, and you can click an "enter" button yourself
+const browser = await launchBrowser({ headless: !headed });
 const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA });
 await guardInternal(ctx, startUrl); // a public site (or a redirect from it) cannot make the browser read localhost / the LAN
@@ -347,9 +348,15 @@ while (queue.length && pages.length < maxPages) {
     await page.evaluate(async () => { const t0 = Date.now(); for (let y = 0, n = 0; y < document.body.scrollHeight && n < 40 && Date.now() - t0 < 4000; y += 600, n++) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 80)); } scrollTo(0, 0); });
     await page.waitForTimeout(400);
     if (!contentReady) contentReady = await waitForContent(page, 0); // content inserted only by the lazy-load scroll counts
-    if (!contentReady) console.log('   ⚠️ 頁面在等待後仍幾乎是空的（可能是 3D／WebGL 體驗頁、要先點「進入」、被擋或載入逾時）：' + url);
+    if (!contentReady) console.log('   ⚠️ 頁面在等待後仍幾乎是空的（見報告中的診斷）（可能是 3D／WebGL 體驗頁、要先點「進入」、被擋或載入逾時）：' + url);
     const data = await page.evaluate(extractInPage);
     data.emptyPage = !contentReady;
+    if (data.emptyPage) { // say WHY, from what the page actually contains
+      data.emptyDiag = await page.evaluate(() => {
+        const all = [...document.querySelectorAll('*')]; const txt = (document.body?.innerText || '').trim();
+        return { elements: all.length, canvases: document.querySelectorAll('canvas').length, iframes: document.querySelectorAll('iframe').length, shadowHosts: all.filter((e) => e.shadowRoot).length, buttons: document.querySelectorAll('button,[role=button],a[href]').length, textChars: txt.length, readyState: document.readyState, title: document.title.slice(0, 80), sample: txt.slice(0, 100), blockPage: /just a moment|access denied|attention required|captcha|verify you are human|are you a robot|unusual traffic|enable javascript/i.test(document.title + ' ' + txt.slice(0, 400)) };
+      }).catch(() => null);
+    }
     data.designer = await page.evaluate(extractDesignerInPage).catch((e) => { console.log('   (designer data skipped:', e.message.split('\n')[0] + ')'); return null; });
     data.status = resp?.status();
     // --- SEO / indexability signals ---
@@ -477,7 +484,7 @@ const site = {
   editing: { platforms, contenteditablePages: pages.filter((p) => p.editing.contenteditable).map((p) => p.url), loginOrAdminLinks: [...new Map(pages.flatMap((p) => p.editing.editLinks).map((l) => [l.href, l])).values()].slice(0, 15) },
   design: { textColors: merge('textColors'), backgrounds: merge('backgrounds'), fontFamilies: merge('fontFamilies', 6), fontSizes: merge('fontSizes'), radii: merge('radii', 6), shadows: merge('shadows', 5), spacing: merge('spacing'), cssVars: pages[0]?.design.cssVars || {}, webFonts: [...new Set(pages.flatMap((p) => p.design.webFonts))], typography: pages[0]?.design.typography, breakpoints: (() => { const m = {}; for (const p of pages) for (const b of p.breakpoints) m[b.px] = (m[b.px] || 0) + b.uses; return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([px, uses]) => ({ px: Number(px), uses })); })(), darkMode: pages[0]?.darkMode, buttonHover: pages[0]?.buttonHover },
   components: pages[0]?.components, assets, designer,
-  pages: pages.map((p) => ({ emptyPage: !!p.emptyPage, slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
+  pages: pages.map((p) => ({ emptyPage: !!p.emptyPage, emptyDiag: p.emptyDiag || null, slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
 };
 fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
 
@@ -485,7 +492,7 @@ fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
 const list = (a) => a.map((x) => `\`${x.value}\` (${x.count})`).join(', ') || '—';
 const md = [
   `# 網站探索報告：${startUrl}`, `爬取 ${pages.length} 頁，耗時 ${site.seconds}s，時間 ${site.crawledAt}`, '',
-  ...(pages.some((p) => p.emptyPage) ? ['> ⚠️ **有頁面在等待後仍幾乎是空的**（' + pages.filter((p) => p.emptyPage).map((p) => p.url).join('、') + '）：設計、文字、版面可能抓不到。可能原因：3D／WebGL 體驗頁、要先點「進入」或同意 Cookie、被網站擋住、載入太慢。請看該頁的 `desktop.png` 截圖確認畫面；可加長等待（`--wait 30000`），或改用 3D／動畫擷取（`site-explorer motion <網址>`）。', ''] : []),
+  ...(pages.some((p) => p.emptyPage) ? ['> ⚠️ **有頁面在等待後仍幾乎是空的**（' + pages.filter((p) => p.emptyPage).map((p) => p.url).join('、') + '）：設計、文字、版面可能抓不到。請看該頁的 `desktop.png` 截圖確認畫面。', ...pages.filter((p) => p.emptyPage && p.emptyDiag).flatMap((p) => { const d = p.emptyDiag; return ['', `診斷（${p.url}）：DOM 元素 ${d.elements}、canvas ${d.canvases}、iframe ${d.iframes}、shadow root ${d.shadowHosts}、可點擊元素 ${d.buttons}、可見文字 ${d.textChars} 字、載入狀態 ${d.readyState}、標題「${d.title}」`, d.blockPage ? '→ **像是防機器人／驗證頁**：網站把自動化瀏覽器擋在外面。可試 `--headed`（顯示瀏覽器視窗）。' : d.canvases > 0 && d.textChars < 40 ? '→ **像是 WebGL／canvas 整頁體驗**：畫面由 3D 繪製，網頁上幾乎沒有文字或版面元素可抽取。請改看 3D 擷取（motion.md、影格）與截圖。' : d.iframes > 0 && d.elements < 40 ? '→ 內容可能在 iframe 裡，目前不會深入 iframe。' : d.buttons > 0 && d.textChars < 40 ? '→ 可能要先點「進入」或同意 Cookie 才會顯示內容。可試 `--headed` 親手點一下。' : '→ 原因不明；可試 `--wait 30000` 或 `--headed`。']; }), ''] : []),
   ...(site.blockedPages.length ? ['> ⚠️ **部分頁面被擋住**（' + site.blockedPages.map((b) => b.reason).join('、') + '）。結果可能不完整；可降低頻率、改用 Playwright MCP 互動，或確認你有權存取。', ''] : []),
   ...(site.consentAction ? ['- 已自動處理 Cookie 橫幅：「' + site.consentAction + '」', ''] : []),
   '## 編輯方式',

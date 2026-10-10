@@ -8,7 +8,7 @@ const toast=(m)=>{const t=$('#toast');t.textContent=m;t.classList.add('on');setT
 const copy=(v)=>{navigator.clipboard?.writeText(v);toast('已複製 '+v)};
 $('#sub').textContent=(S?.startUrl||M?.url||'')+' · '+new Date(D.generatedAt).toLocaleString();
 
-const tabs=[['overview','總覽'],['design','設計'],['layout','排版'],['content','內容'],['motion','3D／動畫'],['edit','編輯方式'],['health','健檢'],['history','歷史'],['about','關於']].filter(([k])=>k==='overview'||(k==='health'?D.health:k==='motion'?M:k==='history'?(D.history&&D.history.runs.length>0):k==='about'?true:S));
+const tabs=[['overview','總覽'],['design','設計'],['layout','排版'],['content','內容'],['motion','3D／動畫'],['edit','編輯方式'],['health','健檢'],['history','歷史'],['about','關於']].filter(([k])=>k==='overview'||(k==='health'?D.health:k==='motion'?(M||D.motionPages):k==='history'?(D.history&&D.history.runs.length>0):k==='about'?true:S));
 tabs.forEach(([k,l],i)=>{const b=el('<button role="tab">'+l+'</button>');b.dataset.k=k;b.onclick=()=>show(k);$('#tabs').append(b)});
 function show(k){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='s-'+k));document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.k===k));history.replaceState(null,'','#'+k)}
 
@@ -289,6 +289,20 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   const H=D.history;if(!H||!H.runs.length)return;const h=$('#s-history');
   h.innerHTML='<div class="card"><h3>'+esc(H.host)+' 的探索紀錄</h3><table><tr><th>#</th><th>時間</th><th>頁數</th><th>主色</th><th>標題字型</th><th>3D／動畫</th></tr>'+H.runs.slice().reverse().map(r=>'<tr><td>'+r.id+'</td><td>'+esc(new Date(r.date).toLocaleString())+'</td><td>'+(r.pages??'—')+'</td><td>'+(r.brand?'<span class="chip" style="background:'+r.brand+';color:#fff">'+r.brand+'</span>':'—')+'</td><td>'+esc(r.font||'—')+'</td><td>'+r.targets+'</td></tr>').join('')+'</table></div>'+
   '<div class="card" style="margin-top:14px"><h3>與上一次相比</h3>'+(H.runs.length<2?'<p class="hint">這是第一次紀錄；之後再探索同一個網站，就能看到改版差異。</p>':(H.changes.length?'<table><tr><th>項目</th><th>之前</th><th>現在</th></tr>'+H.changes.map(c=>'<tr><td>'+esc(c.label)+'</td><td>'+esc(c.from)+'</td><td>'+esc(c.to)+'</td></tr>').join('')+'</table>':'<p>沒有明顯變化。</p>'))+'</div>';
+})();
+// ---------- capture status: say it loudly when a page came out (almost) empty ----------
+(function(){
+  const o=$('#s-overview');if(!o||!S)return;const bad=(S.pages||[]).filter(p=>p.emptyPage);if(!bad.length)return;
+  const why=d=>!d?'原因不明；可試 <code>--wait 30000</code> 或 <code>--headed</code>。':d.blockPage?'<b>像是防機器人／驗證頁</b>：網站把自動化瀏覽器擋在外面。可試 <code>--headed</code>（顯示瀏覽器視窗）。':(d.canvases>0&&d.textChars<40)?'<b>像是 WebGL／canvas 整頁體驗</b>：畫面由 3D 繪製，網頁上幾乎沒有文字或版面元素可抽取。請看「3D／動畫」分頁與截圖。':(d.iframes>0&&d.elements<40)?'內容可能在 iframe 裡，目前不會深入 iframe。':(d.buttons>0&&d.textChars<40)?'可能要先點「進入」或同意 Cookie 才會顯示內容。可試 <code>--headed</code> 親手點一下。':'原因不明；可試 <code>--wait 30000</code> 或 <code>--headed</code>。';
+  const shot=p=>{const pg=(D.pages||[]).find(x=>x.slug===p.slug);const src=pg&&pg.shots&&pg.shots.desktop;return src?'<img src="'+esc(src)+'" style="max-width:260px;border:1px solid var(--line);border-radius:8px;margin-top:8px" alt="擷取當下的畫面">':''};
+  o.insertAdjacentHTML('afterbegin','<div class="card" style="border-color:#dc2626;margin-bottom:14px"><h3 style="color:#dc2626">⚠️ 這次擷取不完整（'+bad.length+' 頁幾乎是空的）</h3>'+bad.map(p=>'<div style="margin:8px 0"><b>'+esc(p.title||p.url)+'</b><br><small>'+esc(p.url)+'</small><br>'+(p.emptyDiag?'<small>DOM 元素 '+p.emptyDiag.elements+'・canvas '+p.emptyDiag.canvases+'・iframe '+p.emptyDiag.iframes+'・可見文字 '+p.emptyDiag.textChars+' 字</small><br>':'')+why(p.emptyDiag)+'<br>'+shot(p)+'</div>').join('')+'</div>');
+})();
+// ---------- 3D / motion on every captured page ----------
+(function(){
+  const P=D.motionPages;if(!P||!P.length)return;const m=$('#s-motion');if(!m)return;
+  const KN={webgl:'WebGL 3D','css-3d':'CSS 3D','model-viewer':'3D 模型',video:'影片',lottie:'Lottie',canvas:'Canvas',svg:'SVG 動畫',animation:'CSS 動畫'};
+  const rows=P.map(p=>'<div class="row"><span><b>'+esc(p.title||p.url)+'</b><br><small>'+esc(p.url)+'</small></span><span>'+(p.targets?p.targets+' 個元素：'+esc((p.kinds||[]).map(k=>KN[k]||k).join('、'))+(p.three?'・three.js':''):'沒有偵測到 3D／動畫')+'<br>'+(p.sheet?'<a href="'+esc(p.sheet)+'" target="_blank">畫格總覽</a> ':'')+(p.md?'<a href="'+esc(p.md)+'" target="_blank">文字規格</a>':'')+'</span></div>'+(p.text?'<details style="margin:4px 0 10px"><summary>展開文字規格</summary><pre style="white-space:pre-wrap;font-size:12px">'+esc(p.text)+'</pre></details>':'')).join('');
+  m.insertAdjacentHTML('afterbegin','<div class="card"><h3>各頁面的 3D／動畫（'+P.length+' 頁）</h3>'+rows+'<p class="hint">以 <code>--motion-pages N</code> 調整擷取頁數。</p></div>');
 })();
 // ---------- about: where is everything, what ran here, how to rerun ----------
 (function(){

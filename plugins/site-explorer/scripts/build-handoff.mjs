@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { cleanDeep, BANNER, sanitizeDoc } from './untrusted.mjs';
+import { cleanDeep, clean, BANNER, sanitizeDoc } from './untrusted.mjs';
 import { claimOutputDir, UnsafeOutputError } from './safe-out.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -134,6 +134,21 @@ if (motion) {
     fs.writeFileSync(path.join(out, 'motion.md'), BANNER + '\n\n' + sanitizeDoc(md)); fs.writeFileSync(path.join(out, 'motion.json'), JSON.stringify(motion, null, 2));
   }
 }
+const motionPages = [];
+if (motionDir && has(path.join(motionDir, 'pages.json'))) { // other pages' 3D/motion, translated the same way
+  try {
+    for (const e of J(path.join(motionDir, 'pages.json')).pages || []) {
+      if (e.slug === '(start)' || !e.md) continue;
+      const dir = path.join(motionDir, e.dir), name = String(e.slug).replace(/[^a-z0-9._-]/gi, '_').slice(0, 60);
+      let md = fs.readFileSync(path.join(dir, 'motion.md'), 'utf8');
+      const mj = has(path.join(dir, 'motion.json')) ? J(path.join(dir, 'motion.json')) : { targets: [] };
+      for (const t of mj.targets || []) { const f = path.join(dir, 'frames', String(t.id), 'filmstrip.png'); if (copy(f, path.join(out, 'media', 'motion-pages', name, `${t.id}-filmstrip.png`))) md = md.replaceAll(`frames/${t.id}/filmstrip.png`, `../media/motion-pages/${name}/${t.id}-filmstrip.png`); }
+      if (copy(path.join(dir, 'frames', 'scroll', 'filmstrip.png'), path.join(out, 'media', 'motion-pages', name, 'scroll-filmstrip.png'))) md = md.replaceAll('frames/scroll/filmstrip.png', `../media/motion-pages/${name}/scroll-filmstrip.png`);
+      fs.mkdirSync(path.join(out, 'motion-pages'), { recursive: true }); fs.writeFileSync(path.join(out, 'motion-pages', `${name}.md`), BANNER + '\n\n' + sanitizeDoc(md));
+      motionPages.push({ url: clean(e.url, 200), file: `motion-pages/${name}.md`, targets: e.targets | 0, kinds: (e.kinds || []).map((k) => clean(k, 30)) });
+    }
+  } catch {}
+}
 if (health) { copy(path.join(siteDir, 'health.md'), path.join(out, 'health.md')); copy(path.join(siteDir, 'health.json'), path.join(out, 'health.json')); }
 
 // ------------------------------------------------------------------ unknowns: be explicit about what this capture cannot tell you
@@ -231,6 +246,7 @@ for (const p of spec.pages) {
   }
 }
 L.push('', '## 6. 動態、3D 與影片', motion ? `詳見 \`motion.md\`（AI 可讀：文字＋數據＋影格序列圖）。共 ${motion.targets.length} 個元素：` : '未擷取（執行時使用了 --no-motion，或網站沒有動態元素）。', ...(motion ? motion.targets.map((t) => `- **${t.ai?.summary || t.selector}** ${t.filmstrip ? '→ `' + t.filmstrip + '`' : ''}`) : []), '');
+if (motionPages.length) L.push('', '**其他頁面的 3D／動畫**（各自一份 AI 可讀文字規格）：', ...motionPages.map((p) => `- ${p.url}：${p.targets} 個元素${p.kinds.length ? '（' + p.kinds.join('、') + '）' : ''} → \`${p.file}\``), '');
 L.push('## 7. 媒體與素材', `- 品牌素材：${media.assets.map((a) => '`' + a + '`').join('、') || '無'}`, `- 行內圖示：${ds.icons} 個（SVG，見儀表板）`, `- 第三方網域：${spec.assets.thirdPartyHosts.join('、') || '無'}`, `- 圖片：各頁圖片清單在 \`spec.json\` → pages[].images（只記錄網址與尺寸，未下載）`, '');
 const tech = spec.technology;
 L.push('## 8. 技術與編輯方式', `- 平台：${tech.platforms.map((x) => x.platform).join('、') || '未偵測到已知平台（可能是自訂程式或靜態站）'}`, ...tech.platforms.map((x) => `  - ${x.platform}：${x.howToEdit}`), `- 渲染方式：${tech.renderMode}`, `- 伺服器：${tech.server?.server || '?'}　X-Powered-By：${tech.server?.poweredBy || '?'}　Generator：${tech.server?.generator || '?'}`, '');

@@ -39,7 +39,8 @@ const initScript = () => {
 };
 
 const browser = await launchBrowser({
-  args: ['--use-angle=swiftshader', '--use-gl=angle', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'],
+  headless: !args.includes('--headed'),
+  args: args.includes('--headed') ? ['--ignore-gpu-blocklist', '--enable-webgl'] : ['--use-angle=swiftshader', '--use-gl=angle', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'], // headed: let Chromium use the real GPU
 });
 let wantVideo = !args.includes('--no-video');
 const newCtx = async (video) => {

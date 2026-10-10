@@ -139,5 +139,27 @@ test('a page that builds its content late is waited for; a page that stays empty
     const md = fs.readFileSync(path.join(out, `127.0.0.1_${port}`, 'report.md'), 'utf8'); assert.equal(/幾乎是空的/.test(md), wantEmpty, p);
     if (p === 'late') assert.deepEqual(site.pages[0].h1, ['Hello late']);
     if (p === 'onscroll') assert.deepEqual(site.pages[0].h1, ['Appears on scroll']);
+    if (wantEmpty) { assert.equal(site.pages[0].emptyDiag.canvases, 1); assert.match(md, /診斷（.*canvas 1/); assert.match(md, /WebGL／canvas 整頁體驗/);
+      const dash = path.join(out, 'dash.html'); const b = await run('build-report.mjs', ['--site', path.join(out, `127.0.0.1_${port}`), '--out', dash]); assert.equal(b.status, 0, b.out);
+      const br = await launchBrowser(); try { const pg = await br.newPage(); const errs = []; pg.on('pageerror', (e) => errs.push(e.message)); await pg.goto('file://' + dash); const txt = await pg.locator('#s-overview').innerText(); assert.match(txt, /這次擷取不完整/); assert.match(txt, /WebGL／canvas/); assert.deepEqual(errs, []); } finally { await br.close(); } }
   } } finally { srv.close(); }
+});
+
+test('explore captures 3D/motion for several pages (--motion-pages) and the handoff carries each one', async (t) => {
+  if (skip(t)) return;
+  const anim = '<style>@keyframes spin{to{transform:rotate(360deg)}}.s{width:80px;height:80px;background:#e33;animation:spin 2s linear infinite}</style>';
+  const srv = http.createServer((q, r) => { r.setHeader('content-type', 'text/html'); const body = (x) => `<!doctype html><title>${x}</title><body style="font:16px system-ui"><nav><a href="/">Home</a> <a href="/a">A</a> <a href="/b">B</a></nav><h1>${x}</h1><p>${'Some real text here. '.repeat(20)}</p>${x === 'Home' ? '' : anim + '<div class="s"></div>'}</body>`;
+    r.end(body(q.url === '/a' ? 'Page A' : q.url === '/b' ? 'Page B' : 'Home')); }).listen(0); await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  try {
+    const out = path.join(tmp, 'mp'); const r = await run('explore.mjs', [`http://127.0.0.1:${port}/`, '--max-pages', '3', '--motion-pages', '3', '--no-db', '--no-open', '--out', out, '--wait', '1000']);
+    assert.equal(r.status, 0, r.out);
+    const host = `127.0.0.1_${port}`; const idx = JSON.parse(fs.readFileSync(path.join(out, 'motion', host, 'pages.json'), 'utf8')).pages;
+    assert.ok(idx.length >= 3, 'index lists the start page and two more: ' + idx.map((p) => p.url).join(','));
+    assert.ok(idx.filter((p) => p.targets > 0).length >= 2, 'the animated pages were captured');
+    const ho = path.join(out, 'handoff'); const files = fs.readdirSync(path.join(ho, 'motion-pages'));
+    assert.ok(files.length >= 2, 'one motion document per extra page: ' + files); assert.match(fs.readFileSync(path.join(ho, 'SPEC.md'), 'utf8'), /其他頁面的 3D／動畫/);
+    for (const f of files) { const md = fs.readFileSync(path.join(ho, 'motion-pages', f), 'utf8'); for (const m of md.matchAll(/\((\.\.\/media\/[^)\s]+\.png)\)|(\.\.\/media\/[^\s`)]+\.png)/g)) assert.ok(fs.existsSync(path.join(ho, 'motion-pages', m[1] || m[2])), 'filmstrip path resolves from the nested document: ' + (m[1] || m[2])); assert.ok(!/(^|[^.\/])media\/motion-pages/.test(md), 'no un-prefixed media paths'); }
+    assert.equal(new Set(idx.map((p) => p.url)).size, idx.length, 'no page is captured twice');
+    const dash = fs.readFileSync(path.join(out, 'dashboard.html'), 'utf8'); assert.match(dash, /motionPages/); assert.match(dash, /動態與 3D 規格/, 'standalone dashboard carries each page\'s motion text inline');
+  } finally { srv.close(); }
 });

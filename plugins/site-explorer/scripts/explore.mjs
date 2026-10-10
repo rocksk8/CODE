@@ -21,6 +21,8 @@ const USAGE = `用法：site-explorer explore <網址> [選項]    （網址可�
   --no-motion          不擷取 3D／動畫          --no-health   不做 SEO／索引健檢
   --no-link-check      健檢時不檢查連結狀態      --no-handoff  不產生交接包
   --no-db              不存入歷史資料庫          --wait 4000   3D 擷取前等待毫秒
+  --motion-pages 5     3D／動畫擷取的頁數上限（含起始頁；1 = 只擷取起始頁）
+  --headed             顯示瀏覽器視窗（可親手點「進入」；對防機器人／整頁 3D 網站較有效）
   --open | --no-open   完成後是否自動開啟儀表板  --no-standalone  儀表板不內嵌圖片`;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 if (!url) { console.error(USAGE); process.exit(1); }
@@ -54,12 +56,36 @@ const checks = await runChecks(url);
 printChecks(checks);
 if (checks.some((c) => c.level === 'fail')) { console.error('\n環境檢查未通過，請先依上方建議處理。'); process.exit(1); }
 
-const crawlOk = await run('爬取頁面、設計、內容、排版', 'crawl.mjs', [url, '--max-pages', String(maxPages), '--out', siteRoot, ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
+const crawlOk = await run('爬取頁面、設計、內容、排版', 'crawl.mjs', [url, '--max-pages', String(maxPages), '--out', siteRoot, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
 if (crawlOk) await run('整理設計包（tokens、Tailwind、W3C）', 'export-design.mjs', [siteDir]);
 let healthOk = false;
 if (crawlOk && !args.includes('--no-health')) healthOk = await run('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）', 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
 let motionOk = false;
-if (!args.includes('--no-motion')) motionOk = await run('擷取 3D／動畫畫格', 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', String(waitMs)]);
+if (!args.includes('--no-motion')) motionOk = await run('擷取 3D／動畫畫格', 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', String(waitMs), ...(args.includes('--headed') ? ['--headed'] : [])]);
+
+// 3D／motion is per page: also capture the other crawled pages (--motion-pages N, default 5 pages in total; 1 = only the start page)
+if (!args.includes('--no-motion') && crawlOk) {
+  const nPages = intOpt(args, 'motion-pages', 5, { min: 1, max: 30 });
+  const entries = [];
+  const addEntry = (pageUrl, slug, title, dir) => {
+    try {
+      const m = JSON.parse(fs.readFileSync(path.join(dir, 'motion.json'), 'utf8')); const t = m.targets || [];
+      entries.push({ url: pageUrl, slug, title: title || '', dir: path.relative(motionDir, dir).split(path.sep).join('/'), targets: t.length, kinds: [...new Set(t.map((x) => x.kind))], three: !!(m.libs && m.libs.three), md: fs.existsSync(path.join(dir, 'motion.md')), sheet: fs.existsSync(path.join(dir, 'contact-sheet.html')) });
+    } catch {}
+  };
+  if (motionOk) addEntry(url, '(start)', '', motionDir);
+  let pg = []; try { pg = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []; } catch {}
+  const extra = pg.filter((p, i) => i > 0 && p.status === 200 && !p.emptyPage).slice(0, nPages - 1); // pages[0] is the start page after redirects (naked host -> www)
+  if (pg[0] && entries[0]) entries[0].url = pg[0].url;
+  for (const p of extra) {
+    const dest = path.join(motionRoot, '_pages', p.slug), t0 = Date.now();
+    console.log(`   3D／動畫：${p.url}`);
+    const ok = await new Promise((resolve) => { const c = spawn(process.execPath, [path.join(here, 'capture-3d.mjs'), p.url, '--out', dest, '--wait', String(waitMs), ...(args.includes('--headed') ? ['--headed'] : [])], { env: process.env, stdio: 'ignore' }); c.on('close', (code) => resolve(code === 0)); });
+    const hostDir = path.join(dest, new URL(p.url).host.replace(/[^a-z0-9.-]/gi, '_'));
+    if (ok) { addEntry(p.url, p.slug, p.title, hostDir); console.log(`     ✔ ${((Date.now() - t0) / 1000).toFixed(1)}s`); } else console.log('     ✖ 略過（失敗或被 robots.txt 擋住）');
+  }
+  if (entries.length) { fs.mkdirSync(motionDir, { recursive: true }); fs.writeFileSync(path.join(motionDir, 'pages.json'), JSON.stringify({ pages: entries }, null, 2)); motionOk = motionOk || fs.existsSync(path.join(motionDir, 'motion.json')); }
+}
 
 if (!args.includes('--no-db')) {
   console.log(`\n[${++n}/${total}] 存入資料庫`);
