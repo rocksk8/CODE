@@ -123,3 +123,21 @@ test('explore --out refuses a non-empty folder it did not create, accepts new/em
   fs.writeFileSync(path.join(d, 'runs.json'), '[]'); assert.doesNotThrow(() => checkExploreOut(d));
   assert.throws(() => checkExploreOut(os.homedir()), UnsafeOutputError); assert.equal(fs.readFileSync(path.join(d, 'thesis.docx'), 'utf8'), 'x');
 });
+
+test('a page that builds its content late is waited for; a page that stays empty is flagged, not silently reported', async (t) => {
+  if (skip(t)) return;
+  const srv = http.createServer((q, r) => {
+    r.setHeader('content-type', 'text/html');
+    if (q.url === '/late') r.end('<!doctype html><title>Late</title><body><script>setTimeout(()=>{document.body.innerHTML="<main><h1>Hello late</h1><p>"+"Real content arrives after a delay. ".repeat(6)+"</p></main>"},2500)</script>');
+    else if (q.url === '/onscroll') r.end('<!doctype html><title>Scroll</title><body style="height:4000px"><script>addEventListener("scroll",()=>{if(!document.querySelector("main"))document.body.insertAdjacentHTML("afterbegin","<main><h1>Appears on scroll</h1><p>"+"Lazy text. ".repeat(30)+"</p></main>")})</script>');
+    else r.end('<!doctype html><title>Empty</title><body><canvas width=400 height=300></canvas>');
+  }).listen(0); await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  try { for (const [p, wantEmpty] of [['late', false], ['onscroll', false], ['empty', true]]) {
+    const out = path.join(tmp, 'late-' + p); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/${p}`, '--max-pages', '1', '--wait', '4000', '--no-screenshots', '--out', out]);
+    assert.equal(r.status, 0, r.out); const site = JSON.parse(fs.readFileSync(path.join(out, `127.0.0.1_${port}`, 'site.json'), 'utf8'));
+    assert.equal(site.pages[0].emptyPage, wantEmpty, p);
+    const md = fs.readFileSync(path.join(out, `127.0.0.1_${port}`, 'report.md'), 'utf8'); assert.equal(/幾乎是空的/.test(md), wantEmpty, p);
+    if (p === 'late') assert.deepEqual(site.pages[0].h1, ['Hello late']);
+    if (p === 'onscroll') assert.deepEqual(site.pages[0].h1, ['Appears on scroll']);
+  } } finally { srv.close(); }
+});

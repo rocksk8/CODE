@@ -54,7 +54,7 @@ const checks = await runChecks(url);
 printChecks(checks);
 if (checks.some((c) => c.level === 'fail')) { console.error('\n環境檢查未通過，請先依上方建議處理。'); process.exit(1); }
 
-const crawlOk = await run('爬取頁面、設計、內容、排版', 'crawl.mjs', [url, '--max-pages', String(maxPages), '--out', siteRoot]);
+const crawlOk = await run('爬取頁面、設計、內容、排版', 'crawl.mjs', [url, '--max-pages', String(maxPages), '--out', siteRoot, ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
 if (crawlOk) await run('整理設計包（tokens、Tailwind、W3C）', 'export-design.mjs', [siteDir]);
 let healthOk = false;
 if (crawlOk && !args.includes('--no-health')) healthOk = await run('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）', 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
