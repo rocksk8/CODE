@@ -178,7 +178,10 @@ export async function runHealth(siteDir, opts = {}) {
   // rendering gap: what a non-JS crawler sees
   const gap = perPage((p) => p.seo.raw && !p.seo.raw.error && p.status === 200 && p.seo.words >= 80 && p.seo.raw.words < p.seo.words * 0.35);
   if (gap.length) add('indexability', gap.length === total ? 'high' : 'medium', 'js-dependent', `${gap.length} 個頁面的主要內容要執行 JavaScript 才看得到`, { affected: gap.length, scope: 'page', examples: gap.map((p) => `${p.url}：原始 HTML ${p.seo.raw.words} 字 vs 渲染後 ${p.seo.words} 字${p.seo.raw.csrShell ? '（空殼 #root／#app）' : ''}`), impact: 'Google 會渲染 JS 但延遲且有預算限制；多數 AI 爬蟲與社群預覽爬蟲完全不執行 JS，只會看到空殼。', fix: '改用伺服器端渲染（SSR）、靜態生成（SSG）或預先渲染；至少讓標題、h1、主要文字、canonical 出現在原始 HTML。' });
-  else if (pages.some((p) => p.seo.raw && !p.seo.raw.error)) ok('indexability', '主要內容在原始 HTML 中即可讀取（不需執行 JavaScript）');
+  // nothing to read EITHER way: not "fine without JavaScript" but "no text for any crawler" (full-page canvas/WebGL, or a script that never rendered)
+  const noText = perPage((p) => p.status === 200 && p.seo.raw && !p.seo.raw.error && p.seo.raw.words < 20 && p.seo.words < 20 && !/(login|signin|cart|checkout|404)/i.test(p.url));
+  if (noText.length) add('indexability', noText.length === total ? 'high' : 'medium', 'no-text-anywhere', `${noText.length} 個頁面在原始 HTML 與渲染後都幾乎沒有文字`, { affected: noText.length, scope: 'page', examples: noText.map((p) => `${p.url}：原始 ${p.seo.raw.words} 字、渲染後 ${p.seo.words} 字`), impact: '搜尋引擎與 AI 爬蟲都讀不到這些頁面的內容，等於沒有可被索引的文字。常見原因：整頁由 WebGL／canvas 繪製，或腳本在爬蟲環境沒有執行成功。', fix: '為每個這類頁面提供可被讀取的文字替代：標題（h1）、簡介段落、影像／3D 的文字說明（alt、aria-label），或伺服器端預先渲染的 HTML。' });
+  else if (pages.some((p) => p.seo.raw && !p.seo.raw.error && p.seo.raw.words >= 20)) ok('indexability', '主要內容在原始 HTML 中即可讀取（不需執行 JavaScript）');
   const rawMissing = perPage((p) => p.seo.raw && !p.seo.raw.error && ((p.seo.title && !p.seo.raw.title) || (p.seo.h1Count && !p.seo.raw.h1Count) || (p.seo.canonical && !p.seo.raw.canonical)));
   if (rawMissing.length && !gap.length) add('indexability', 'medium', 'head-js-only', `${rawMissing.length} 個頁面的 title／h1／canonical 只在 JS 執行後才出現`, { affected: rawMissing.length, scope: 'page', examples: urls(rawMissing), fix: '把這些標籤放進伺服器回傳的 HTML。' });
 

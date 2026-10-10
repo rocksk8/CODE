@@ -310,3 +310,17 @@ test('interaction never reaches robots-disallowed paths (anchors and scripted na
     const site = JSON.parse(fs.readFileSync(path.join(out2, `127.0.0.1_${port}`, 'site.json'), 'utf8')); assert.equal(site.pages[0].emptyPage, true, 'only hidden text: still an empty page'); assert.ok(site.pages[0].deep.textChars < 20, JSON.stringify(site.pages[0].deep));
   } finally { srv.close(); }
 });
+
+test('health: a page with no text in the raw HTML AND after rendering is reported, not passed as "readable without JavaScript"', async (t) => {
+  if (skip(t)) return;
+  const srv = http.createServer((q, r) => { r.setHeader('content-type', 'text/html'); r.end(q.url === '/text' ? `<!doctype html><title>Text page here</title><body><h1>Hello</h1><p>${'Plenty of readable words here. '.repeat(20)}</p></body>` : '<!doctype html><title>Orano</title><body><div id="app"><canvas width=500 height=300></canvas></div></body>'); }).listen(0);
+  await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  try {
+    const out = path.join(tmp, 'notext'); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/exp`, `http://127.0.0.1:${port}/text`, '--max-pages', '2', '--wait', '1000', '--no-screenshots', '--no-interact', '--out', out]); assert.equal(r.status, 0, r.out);
+    const base = path.join(out, `127.0.0.1_${port}`); const h = await run('health-check.mjs', ['--site', base, '--no-link-check']); assert.equal(h.status, 0, h.out);
+    const hj = JSON.parse(fs.readFileSync(path.join(base, 'health.json'), 'utf8')); const all = hj.issues || [];
+    const f = all.find((i) => i.id === 'no-text-anywhere'); assert.ok(f, 'issue present: ' + all.map((i) => i.id).join(','));
+    assert.ok(f.examples.some((e) => /\/exp/.test(e)) && !f.examples.some((e) => /\/text/.test(e)), JSON.stringify(f.examples));
+    assert.ok(!(hj.passed || []).some((p) => /不需執行 JavaScript/.test(p.title)), 'no false "readable without JavaScript" pass when a page has no text');
+  } finally { srv.close(); }
+});
