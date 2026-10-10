@@ -1,0 +1,26 @@
+:root {
+  --color-brand: #5b4bff;
+  --color-background: #ffffff;
+  --color-text: #14141f;
+  --color-text-inverse: #ffffff;
+  --color-surface-dark: #14141f;
+  --font-heading: "Playfair Display", serif;
+  --font-body: "Acme Sans", sans-serif;
+  --text-h1: 64px;
+  --text-h2: 40px;
+  --text-h3: 18.72px;
+  --text-p: 20px;
+  --text-a: 16px;
+  --space-unit: 4px;
+  --space-1: 6px;
+  --space-2: 12px;
+  --space-3: 16px;
+  --space-4: 20px;
+  --space-5: 24px;
+  --space-6: 28px;
+  --space-7: 32px;
+  --space-8: 48px;
+  --radius-1: 16px;
+  --radius-2: 999px;
+  --shadow-1: rgba(20, 20, 31, 0.06) 0px 8px 24px 0px;
+}

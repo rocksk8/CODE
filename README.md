@@ -14,13 +14,13 @@
 需要 Node 18+ 與 Google Chrome（資料庫需要 Node 22.13+）。
 
 ```bash
-cd plugins/site-explorer && npm install
+cd plugins/site-explorer && npm install --omit=dev      # 使用者；要跑測試的貢獻者用 npm install
 node scripts/doctor.mjs https://example.com        # 先檢查環境，每個問題都附修復指令
 node scripts/explore.mjs example.com               # 一鍵：爬取→設計包→健檢→3D→資料庫→儀表板→交接包（可省略 https://）
 open explore-out/dashboard.html                    # Mac；單一檔案，可直接寄送或丟進聊天室
 ```
 
-在 Claude Code 裡安裝：
+在 Claude Code 裡安裝（會在第一次執行時自動安裝相依套件）：
 ```
 /plugin marketplace add rocksk8/code
 /plugin install site-explorer@rocksk8-code
@@ -101,7 +101,7 @@ AI 只能讀文字和圖片。所以：
 | `skills/`、`commands/`、`agents/` | `site-explore`、`site-to-design`、`site-health`、`capture-motion` 與對應指令、分析 agent |
 | `test/` | `npm test`：端到端與回歸測試（含真實 three.js、故意有毛病的網站、對抗性案例） |
 
-設計取捨與審視記錄見 [`docs/ux-review.md`](docs/ux-review.md)。
+設計取捨與審視記錄見 [`docs/ux-review.md`](docs/ux-review.md)、[`docs/stakeholder-review.md`](docs/stakeholder-review.md)（四角度審視與已知缺口）。**不知道輸出長怎樣？** 看 [`docs/demo/`](docs/demo/)（虛構網站的實際輸出）。
 
 ## 邊界
 

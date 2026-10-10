@@ -1,0 +1,10 @@
+:root {
+  --color-background: #ffffff;
+  --color-text: #ffffff;
+  --font-heading: "system-ui", sans-serif;
+  --font-body: "system-ui", sans-serif;
+  --text-h2: 24px;
+  --space-unit: 4px;
+  --space-1: 19.92px;
+  --space-2: 40px;
+}

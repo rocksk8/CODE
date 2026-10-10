@@ -1,0 +1,44 @@
+{
+  "color": {
+    "background": {
+      "$type": "color",
+      "$value": "#ffffff"
+    },
+    "text": {
+      "$type": "color",
+      "$value": "#ffffff"
+    }
+  },
+  "fontFamily": {
+    "heading": {
+      "$type": "fontFamily",
+      "$value": [
+        "system-ui"
+      ]
+    },
+    "body": {
+      "$type": "fontFamily",
+      "$value": [
+        "system-ui"
+      ]
+    }
+  },
+  "fontSize": {
+    "h2": {
+      "$type": "dimension",
+      "$value": "24px"
+    }
+  },
+  "spacing": {
+    "1": {
+      "$type": "dimension",
+      "$value": "19.92px"
+    },
+    "2": {
+      "$type": "dimension",
+      "$value": "40px"
+    }
+  },
+  "radius": {},
+  "shadow": {}
+}

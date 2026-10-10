@@ -1,0 +1,118 @@
+{
+  "color": {
+    "brand": {
+      "$type": "color",
+      "$value": "#5b4bff"
+    },
+    "background": {
+      "$type": "color",
+      "$value": "#ffffff"
+    },
+    "text": {
+      "$type": "color",
+      "$value": "#14141f"
+    },
+    "text-inverse": {
+      "$type": "color",
+      "$value": "#ffffff"
+    },
+    "surface-dark": {
+      "$type": "color",
+      "$value": "#14141f"
+    }
+  },
+  "fontFamily": {
+    "heading": {
+      "$type": "fontFamily",
+      "$value": [
+        "Playfair Display"
+      ]
+    },
+    "body": {
+      "$type": "fontFamily",
+      "$value": [
+        "Acme Sans"
+      ]
+    }
+  },
+  "fontSize": {
+    "h1": {
+      "$type": "dimension",
+      "$value": "64px"
+    },
+    "h2": {
+      "$type": "dimension",
+      "$value": "40px"
+    },
+    "h3": {
+      "$type": "dimension",
+      "$value": "18.72px"
+    },
+    "p": {
+      "$type": "dimension",
+      "$value": "20px"
+    },
+    "a": {
+      "$type": "dimension",
+      "$value": "16px"
+    }
+  },
+  "spacing": {
+    "1": {
+      "$type": "dimension",
+      "$value": "6px"
+    },
+    "2": {
+      "$type": "dimension",
+      "$value": "12px"
+    },
+    "3": {
+      "$type": "dimension",
+      "$value": "16px"
+    },
+    "4": {
+      "$type": "dimension",
+      "$value": "20px"
+    },
+    "5": {
+      "$type": "dimension",
+      "$value": "24px"
+    },
+    "6": {
+      "$type": "dimension",
+      "$value": "28px"
+    },
+    "7": {
+      "$type": "dimension",
+      "$value": "32px"
+    },
+    "8": {
+      "$type": "dimension",
+      "$value": "48px"
+    },
+    "9": {
+      "$type": "dimension",
+      "$value": "96px"
+    },
+    "10": {
+      "$type": "dimension",
+      "$value": "120px"
+    }
+  },
+  "radius": {
+    "1": {
+      "$type": "dimension",
+      "$value": "16px"
+    },
+    "2": {
+      "$type": "dimension",
+      "$value": "999px"
+    }
+  },
+  "shadow": {
+    "1": {
+      "$type": "shadow",
+      "$value": "rgba(20, 20, 31, 0.06) 0px 8px 24px 0px"
+    }
+  }
+}
