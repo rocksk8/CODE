@@ -10,6 +10,7 @@ import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch } from '.
 import { parseSitemap } from './health-check.mjs';
 import { attachNetworkRecorder, deepContent, ariaTree } from './observe.mjs';
 import { exploreStates } from './interact.mjs';
+import { probe } from './diagnose.mjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -26,7 +27,7 @@ if (!startUrl) {
 }
 const maxPages = intOpt(args, 'max-pages', 10, { min: 1, max: 500 });
 const maxDepth = intOpt(args, 'depth', 2, { min: 0, max: 6 });
-const interactMax = args.includes('--no-interact') ? 0 : intOpt(args, 'interact-pages', 3, { min: 0, max: 30 }); let interactedPages = 0; // pages we walk through click/scroll/key states on
+const interactMax = args.includes('--no-interact') ? 0 : intOpt(args, 'interact-pages', 3, { min: 0, max: 30 }); let interactedPages = 0, abProbes = 0; // pages we walk through click/scroll/key states on
 const contentWaitMs = intOpt(args, 'wait', 12000, { min: 0, max: 120000 }); // how long to wait for a script-built page to put something on screen
 const shots = !args.includes('--no-screenshots');
 let origin = new URL(startUrl).origin; // follows the first redirect (example.com -> www.example.com)
@@ -290,6 +291,7 @@ async function fetchRaw(u) {
     const text = body.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<noscript[\s\S]*?<\/noscript>|<!--[\s\S]*?-->/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ');
     const latin = (text.match(/[A-Za-z0-9À-ɏ']+/g) || []).length, cjk = (text.match(/[㐀-鿿぀-ヿ가-힯]/g) || []).length;
     return {
+      htmlTag: ((html.match(/<html[^>]*>/i) || [''])[0]).slice(0, 200), metaCount: (html.match(/<meta\s/gi) || []).length,
       status: r.status, finalUrl: r.url, bytes: html.length, contentType: r.headers.get('content-type') || '',
       title: ((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim(), h1Count: (html.match(/<h1[\s>]/gi) || []).length,
       words: latin + Math.round(cjk / 1.8), links: (html.match(/<a\s[^>]*href=/gi) || []).length, canonical: /<link[^>]+rel=["']?canonical/i.test(html), jsonld: (html.match(/application\/ld\+json/gi) || []).length,
@@ -358,7 +360,7 @@ while (pages.length < maxPages) {
   if (!allowed(url)) { console.log('skip (robots):', url); skippedByRobots.push(url); continue; }
   const page = await ctx.newPage();
   const net = attachNetworkRecorder(page); const pageErrors = [];
-  page.on('pageerror', (e) => { if (pageErrors.length < 6) pageErrors.push('錯誤：' + String(e.message).split('\n')[0].slice(0, 160)); });
+  page.on('pageerror', (e) => { if (pageErrors.length < 6) { const at = String(e.stack || '').split('\n').find((l) => /https?:\/\//.test(l)); pageErrors.push('錯誤：' + String(e.message).split('\n')[0].slice(0, 160) + (at ? '　位置：' + at.replace(/^\s*at\s+/, '').trim().slice(0, 160) : '')); } });
   page.on('console', (m) => { if (m.type() === 'error' && pageErrors.length < 6) pageErrors.push('主控台：' + m.text().split('\n')[0].slice(0, 160)); });
   const watchdog = setTimeout(() => { console.log('timeout (120s), giving up on:', url); page.close().catch(() => {}); }, 120000);
   try {
@@ -407,7 +409,12 @@ while (pages.length < maxPages) {
         let gl = null; try { const c = document.createElement('canvas'); const g = c.getContext('webgl2') || c.getContext('webgl'); if (g) { const e = g.getExtension('WEBGL_debug_renderer_info'); gl = e ? String(g.getParameter(e.UNMASKED_RENDERER_WEBGL)).slice(0, 80) : 'webgl'; } } catch {}
         return { webgl: gl, webdriver: navigator.webdriver === true, elements: all.length, canvases: document.querySelectorAll('canvas').length, iframes: document.querySelectorAll('iframe').length, shadowHosts: all.filter((e) => e.shadowRoot).length, buttons: document.querySelectorAll('button,[role=button],a[href]').length, textChars: txt.length, readyState: document.readyState, title: document.title.slice(0, 80), sample: txt.slice(0, 100), blockPage: /just a moment|access denied|attention required|captcha|verify you are human|are you a robot|unusual traffic|enable javascript/i.test(document.title + ' ' + txt.slice(0, 400)) };
       }).catch(() => null);
-      if (data.emptyDiag) { data.emptyDiag.consoleErrors = pageErrors.slice(); const n = net.summary(page.url()); data.emptyDiag.scripts = n.byType.script || 0; data.emptyDiag.dataRequests = (n.byType.fetch || 0) + (n.byType.xhr || 0); data.emptyDiag.requests = n.total; }
+      if (data.emptyDiag && abProbes < 3) { // same URL again with the browser's own default identity: does the site serve something else to our identity?
+        abProbes++;
+        try { const a = await probe(browser, page.url(), { label: 'browser-default', userAgent: null, outDir: path.join(outDir, 'pages', slugOf(url), 'alt'), waitMs: 6000 });
+          data.emptyDiag.alt = a.error ? { error: a.error } : { status: a.status, contentAppeared: !!a.contentAppeared, textChars: a.deep ? a.deep.textChars : a.dom.textChars, elements: a.dom.elements, canvases: a.dom.canvases, title: a.dom.title, errors: a.consoleErrors.slice(0, 3) };
+        } catch (e) { data.emptyDiag.alt = { error: String(e.message).slice(0, 100) }; } }
+      if (data.emptyDiag) { data.emptyDiag.consoleErrors = pageErrors.slice(); const n = net.summary(page.url()); data.emptyDiag.scripts = n.byType.script || 0; data.emptyDiag.dataRequests = (n.byType.fetch || 0) + (n.byType.xhr || 0); data.emptyDiag.requests = n.total; data.emptyDiag.scriptUrls = n.scriptUrls || []; }
     }
     data.designer = await page.evaluate(extractDesignerInPage).catch((e) => { console.log('   (designer data skipped:', e.message.split('\n')[0] + ')'); return null; });
     data.status = resp?.status();
@@ -559,7 +566,10 @@ fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
 const list = (a) => a.map((x) => `\`${x.value}\` (${x.count})`).join(', ') || '—';
 const md = [
   `# 網站探索報告：${startUrl}`, `爬取 ${pages.length} 頁，耗時 ${site.seconds}s，時間 ${site.crawledAt}`, '',
-  ...(pages.some((p) => p.emptyPage) ? ['> ⚠️ **有頁面在等待後仍幾乎是空的**（' + pages.filter((p) => p.emptyPage).map((p) => p.url).join('、') + '）：設計、文字、版面可能抓不到。請看該頁的 `desktop.png` 截圖確認畫面。', ...pages.filter((p) => p.emptyPage && p.emptyDiag).flatMap((p) => { const d = p.emptyDiag; return ['', `診斷（${p.url}）：DOM 元素 ${d.elements}、canvas ${d.canvases}、iframe ${d.iframes}、shadow root ${d.shadowHosts}、可點擊元素 ${d.buttons}、可見文字 ${d.textChars} 字、載入狀態 ${d.readyState}、標題「${d.title}」`, `- 請求 ${d.requests ?? '?'} 個（腳本 ${d.scripts ?? '?'}、資料請求 fetch／XHR ${d.dataRequests ?? '?'}）；WebGL：${d.webgl || '此瀏覽器環境沒有'}；webdriver 旗標：${d.webdriver ? '有' : '無'}`, ...((d.consoleErrors || []).length ? ['- 頁面錯誤：', ...d.consoleErrors.map((e) => `  - ${e}`)] : ['- 頁面錯誤：沒有（腳本沒有丟出錯誤）']), (d.scripts > 0 && d.dataRequests === 0 && d.canvases === 0 && d.textChars === 0) ? '→ **腳本有載入，卻沒有發出任何資料請求，也沒有建立任何畫面**：程式像是在等某個條件而停住（偵測瀏覽器或 WebGL、使用者互動、特定網址參數），或執行時出錯（見上方「頁面錯誤」）。建議執行 `site-explorer diagnose <網址>`，比較「爬蟲身分」與「瀏覽器預設身分」。' : (p.network && p.network.blockedLike > 0) ? `→ **網站對 ${p.network.blockedLike} 個請求回了 403/429**：像是被防護擋下，可試 \`--headed\`。` : d.blockPage ? '→ **像是防機器人／驗證頁**：網站把自動化瀏覽器擋在外面。可試 `--headed`（顯示瀏覽器視窗）。' : d.canvases > 0 && d.textChars < 40 ? '→ **像是 WebGL／canvas 整頁體驗**：畫面由 3D 繪製，網頁上幾乎沒有文字或版面元素可抽取。請改看 3D 擷取（motion.md、影格）與截圖。' : d.iframes > 0 && d.elements < 40 ? '→ 內容可能在 iframe 裡，目前不會深入 iframe。' : d.buttons > 0 && d.textChars < 40 ? '→ 可能要先點「進入」或同意 Cookie 才會顯示內容。可試 `--headed` 親手點一下。' : '→ 原因不明；可試 `--wait 30000` 或 `--headed`。']; }), ''] : []),
+  ...(pages.some((p) => p.emptyPage) ? ['> ⚠️ **有頁面在等待後仍幾乎是空的**（' + pages.filter((p) => p.emptyPage).map((p) => p.url).join('、') + '）：設計、文字、版面可能抓不到。請看該頁的 `desktop.png` 截圖確認畫面。', ...pages.filter((p) => p.emptyPage && p.emptyDiag).flatMap((p) => { const d = p.emptyDiag; return ['', `診斷（${p.url}）：DOM 元素 ${d.elements}、canvas ${d.canvases}、iframe ${d.iframes}、shadow root ${d.shadowHosts}、可點擊元素 ${d.buttons}、可見文字 ${d.textChars} 字、載入狀態 ${d.readyState}、標題「${d.title}」`, `- 請求 ${d.requests ?? '?'} 個（腳本 ${d.scripts ?? '?'}、資料請求 fetch／XHR ${d.dataRequests ?? '?'}）；WebGL：${d.webgl || '此瀏覽器環境沒有'}；webdriver 旗標：${d.webdriver ? '有' : '無'}`, ...((d.consoleErrors || []).length ? ['- 頁面錯誤：', ...d.consoleErrors.map((e) => `  - ${e}`)] : ['- 頁面錯誤：沒有（腳本沒有丟出錯誤）']),
+      ...((d.scriptUrls || []).length ? [`- 載入的腳本：${d.scriptUrls.join('、')}`] : []),
+      ...(p.seo && p.seo.raw && p.seo.raw.htmlTag !== undefined ? [`- 伺服器給的原始 HTML：\`${p.seo.raw.htmlTag || '（沒有 <html> 標籤）'}\`，meta 標籤 ${p.seo.raw.metaCount} 個`] : []),
+      ...(d.alt ? (d.alt.error ? [`- 用瀏覽器預設身分再開一次：失敗（${d.alt.error}）`] : [`- 用瀏覽器預設身分再開一次：${d.alt.contentAppeared ? '**內容出現了**' : '仍然沒有內容'}（可見文字 ${d.alt.textChars} 字、DOM 元素 ${d.alt.elements}${d.alt.errors && d.alt.errors.length ? '；錯誤：' + d.alt.errors.join(' | ') : ''}）；截圖 pages/${p.slug}/alt/browser-default.png`]) : []), (d.alt && d.alt.contentAppeared) ? `→ **用瀏覽器預設身分就讀得到內容（${d.alt.textChars} 字），用爬蟲身分讀不到**：網站依「識別字串」提供了不同的內容。爬蟲身分是 \`Mozilla/5.0 (compatible; site-explorer-claude-plugin)\`。` : (d.scripts > 0 && d.dataRequests === 0 && d.canvases === 0 && d.textChars === 0) ? '→ **腳本有載入，卻沒有發出任何資料請求，也沒有建立任何畫面**：程式像是在等某個條件而停住（偵測瀏覽器或 WebGL、使用者互動、特定網址參數），或執行時出錯（見上方「頁面錯誤」）。建議執行 `site-explorer diagnose <網址>`，比較「爬蟲身分」與「瀏覽器預設身分」。' : (p.network && p.network.blockedLike > 0) ? `→ **網站對 ${p.network.blockedLike} 個請求回了 403/429**：像是被防護擋下，可試 \`--headed\`。` : d.blockPage ? '→ **像是防機器人／驗證頁**：網站把自動化瀏覽器擋在外面。可試 `--headed`（顯示瀏覽器視窗）。' : d.canvases > 0 && d.textChars < 40 ? '→ **像是 WebGL／canvas 整頁體驗**：畫面由 3D 繪製，網頁上幾乎沒有文字或版面元素可抽取。請改看 3D 擷取（motion.md、影格）與截圖。' : d.iframes > 0 && d.elements < 40 ? '→ 內容可能在 iframe 裡，目前不會深入 iframe。' : d.buttons > 0 && d.textChars < 40 ? '→ 可能要先點「進入」或同意 Cookie 才會顯示內容。可試 `--headed` 親手點一下。' : '→ 原因不明；可試 `--wait 30000` 或 `--headed`。']; }), ''] : []),
   ...(site.blockedPages.length ? ['> ⚠️ **部分頁面被擋住**（' + site.blockedPages.map((b) => b.reason).join('、') + '）。結果可能不完整；可降低頻率、改用 Playwright MCP 互動，或確認你有權存取。', ''] : []),
   ...(site.consentAction ? ['- 已自動處理 Cookie 橫幅：「' + site.consentAction + '」', ''] : []),
   '## 編輯方式',
@@ -573,7 +583,15 @@ const md = [
   '## 頁面', ...site.pages.map((p) => `- [${p.status}] ${p.title || '(無標題)'} — ${p.url}（高 ${p.docHeight}px${p.mobileOverflow ? '，手機版橫向溢出' : ''}；${p.slug}/）`), '',
   '## 網路與內容來源（頁面實際載入了什麼）', ...pages.slice(0, 3).flatMap((p) => { const n = p.network; if (!n) return []; return [`### ${p.url}`, `- 請求 ${n.total} 個（${Object.entries(n.byType).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${v}`).join('、')}）；第三方網域 ${n.thirdParty.length} 個${n.errorCount ? `；**錯誤回應 ${n.errorCount} 個**（403/429 共 ${n.blockedLike} 個）` : ''}${n.failedCount ? `；失敗請求 ${n.failedCount} 個` : ''}`, ...(n.assets3d.length ? [`- 3D 資源：${n.assets3d.map((a) => `${a.url}（${a.status}）`).join('、')}`] : []), ...(n.media.length ? [`- 影音：${n.media.map((a) => a.url).join('、')}`] : []), ...(n.fonts.length ? [`- 字型檔：${n.fonts.slice(0, 6).join('、')}`] : []), ...(n.apis.length ? [`- API／JSON：${n.apis.slice(0, 8).map((a) => `${a.url}（${a.status}）`).join('、')}`] : []), ...(n.errors.length ? [`- 失敗的請求：${n.errors.slice(0, 6).map((e) => `${e.status} ${e.url}`).join('、')}`] : []), ...(n.apiTextSamples.length ? ['- API 回應裡的文字（頁面上看不到時，內容常在這裡）：', ...n.apiTextSamples.slice(0, 12).map((t) => `  - ${t}`)] : []), ...(p.deep ? [`- 含 shadow DOM 與 iframe 的可見文字：${p.deep.textChars} 字（主文件 ${p.deep.mainTextChars} 字；iframe ${p.deep.frameCount} 個、shadow root ${p.deep.shadowHosts} 個）`] : []), ...(p.aria && p.aria.lines > 0 ? [`- 無障礙樹：${p.aria.lines} 行，標題 ${p.aria.headings}、連結 ${p.aria.links}、按鈕 ${p.aria.buttons}、圖片 ${p.aria.images}、地標 ${p.aria.landmarks}（完整內容見 pages/${p.slug}/aria.yml）`, '```yaml', p.aria.head, '```'] : (p.aria ? ['- 無障礙樹：空的（頁面上沒有任何可讀的語意結構）'] : [])), '']; }),
   ...(pages.some((p) => p.states && p.states.length > 1) ? ['## 互動狀態（自動點擊／滾動／按鍵後出現的畫面）', ...pages.filter((p) => p.states && p.states.length > 1).slice(0, 4).flatMap((p) => [`### ${p.url}`, ...p.states.map((s) => `- 狀態 ${s.index}：${s.action}${s.label ? '「' + s.label + '」' : ''}　可見文字 ${s.textChars} 字　截圖 pages/${p.slug}/states/${s.screenshot}${s.text ? '\n  - 文字開頭：' + s.text.slice(0, 160) : ''}`), '']), ] : []),
-  '## 排版', ...pages.slice(0, 3).flatMap((p) => [`### ${p.url}`, `- landmarks: ${JSON.stringify(p.layout.landmarks)}`, ...p.layout.sections.slice(0, 15).map((s) => `- <${s.tag}${s.id ? '#' + s.id : ''}> ${s.height}px ${s.heading ? '— ' + s.heading : ''}`)]),
+  '## 排版', ...(() => {
+    // pick the pages that actually HAVE a layout (the first ones you typed may be empty script-built pages); say so for the empty ones
+    const rich = (p) => (p.layout.sections || []).length + (p.designer?.blocks || []).length;
+    const withLayout = pages.filter((p) => rich(p) > 0).sort((x, y) => rich(y) - rich(x)).slice(0, 4), empty = pages.filter((p) => rich(p) === 0);
+    const KIND = { header: '頁首', hero: 'Hero', features: '功能格', pricing: '價格', testimonial: '見證', faq: 'FAQ', form: '表單', logos: 'Logo 牆', stats: '數據', gallery: '圖庫', cta: 'CTA', footer: '頁尾', content: '內容' };
+    return [...withLayout.flatMap((p) => [`### ${p.url}`, `- landmarks: ${JSON.stringify(p.layout.landmarks)}；頁面高度 ${p.layout.docHeight}px`, ...((p.designer?.blocks || []).length ? [`- 版型流程：${p.designer.blocks.map((bk) => `${KIND[bk.kind] || bk.kind}（${bk.h}px）`).join(' → ')}`] : []), ...p.layout.sections.slice(0, 15).map((sc) => `- <${sc.tag}${sc.id ? '#' + sc.id : ''}> ${sc.height}px ${sc.heading ? '— ' + sc.heading : ''}`), '']),
+      ...(empty.length ? ['### 沒有版面可抽取的頁面', ...empty.map((p) => `- ${p.url}${p.emptyPage ? '（頁面是空的，原因見上方診斷）' : ''}`), ''] : []),
+      ...(!withLayout.length ? ['（沒有任何頁面抽取到版面）'] : [])];
+  })(),
 ].join('\n');
 fs.writeFileSync(path.join(outDir, 'report.md'), BANNER + '\n\n' + sanitizeDoc(md) + '\n');
 console.log(`\nDone. Report: ${path.join(outDir, 'report.md')}`);

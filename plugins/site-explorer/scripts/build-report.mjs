@@ -47,7 +47,7 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
     const full = readJSON(pj);
     const shot = (v) => (exists(path.join(siteDir, 'pages', p.slug, v + '.png')) ? ref(path.join(siteDir, 'pages', p.slug, v + '.png')) : null);
     data.pages.push({
-      slug: p.slug, url: p.url, title: p.title, status: p.status, docHeight: full.layout.docHeight,
+      slug: p.slug, url: p.url, title: p.title, status: p.status, docHeight: full.layout.docHeight, emptyPage: !!full.emptyPage,
       headings: full.content.headings.slice(0, 60), paragraphs: full.content.paragraphs.slice(0, 6),
       images: full.content.images.slice(0, 24), linkCount: full.content.links.length, forms: full.content.forms,
       sections: full.layout.sections, landmarks: full.layout.landmarks, shots: { desktop: shot('desktop'), tablet: shot('tablet'), mobile: shot('mobile') },

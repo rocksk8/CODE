@@ -59,7 +59,9 @@ export async function loadPlaywright({ quiet = false } = {}) {
   let pw = await importPlaywright(); if (pw) return pw;
   if (process.env.SITE_EXPLORER_NO_AUTO_INSTALL) throw new Error('缺少相依套件 playwright-core，且已停用自動安裝。請執行：site-explorer setup');
   installDeps({ quiet });
-  pw = await importPlaywright(); if (!pw) throw new Error('安裝後仍找不到 playwright-core，請執行：site-explorer setup');
+  // another process may hold the lock for a moment just to verify the install: wait for it instead of giving up
+  for (let i = 0; i < 240 && !pw; i++) { pw = await importPlaywright(); if (!pw) await new Promise((r) => setTimeout(r, 250)); }
+  if (!pw) throw new Error('安裝後仍找不到 playwright-core，請執行：site-explorer setup');
   return pw;
 }
 

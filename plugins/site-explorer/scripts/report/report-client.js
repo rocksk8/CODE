@@ -103,13 +103,14 @@ const kchip=(k)=>'<span class="kind" style="background:'+(KCOL[k]||'#94a3b8')+'"
 const lumOf=(h)=>{const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255).map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));return .2126*c[0]+.7152*c[1]+.0722*c[2]};
 const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(Math.min(x,y)+.05))};
 (function(){
-  if(!D.pages.length)return;const l=$('#s-layout');let pi=0,mode='shot',vp='desktop',inspect=true;
+  if(!D.pages.length)return;const l=$('#s-layout');let pi=Math.max(0,D.pages.findIndex(q=>(q.sections&&q.sections.length)||(q.blocks&&q.blocks.length))),mode='shot',vp='desktop',inspect=true;
   const MODES=[['shot','截圖／檢視元素'],['slices','區塊切片'],['skeleton','頁面骨架'],['side','響應式並排']];
   function draw(){
     const p=D.pages[pi];
-    l.innerHTML='<div class="card"><select id="pg">'+D.pages.map((q,i)=>'<option value="'+i+'"'+(i===pi?' selected':'')+'>'+esc(q.title||q.url)+'</option>').join('')+'</select> '+
+    l.innerHTML='<div class="card"><select id="pg">'+D.pages.map((q,i)=>'<option value="'+i+'"'+(i===pi?' selected':'')+'>'+esc(q.title||q.url)+(q.emptyPage?'（空白頁，沒有版面）':'')+'</option>').join('')+'</select> '+
       '<div class="seg" style="margin-left:8px">'+MODES.map(m=>'<button data-mode="'+m[0]+'" aria-pressed="'+(m[0]===mode)+'">'+m[1]+'</button>').join('')+'</div>'+
       (p.mobileOverflow?'<span class="chip warn">手機版橫向溢出</span>':'')+
+      (p.emptyPage?'<div class="hint" style="color:#dc2626;margin:6px 0">這一頁在擷取時幾乎是空的，沒有版面可顯示（原因見「總覽」的紅色警告）。</div>':'')+
       (p.blocks.length?'<div style="margin:4px 0 10px">'+p.blocks.map(b=>kchip(b.kind)).join(' <span class="hint">→</span> ')+'</div>':'')+
       '<div id="lbody"></div></div>';
     $('#pg').onchange=(e)=>{pi=+e.target.value;draw()};
@@ -293,7 +294,7 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
 // ---------- capture status: say it loudly when a page came out (almost) empty ----------
 (function(){
   const o=$('#s-overview');if(!o||!S)return;const bad=(S.pages||[]).filter(p=>p.emptyPage);if(!bad.length)return;
-  const why=d=>!d?'原因不明；可試 <code>--wait 30000</code> 或 <code>--headed</code>。':(d.scripts>0&&d.dataRequests===0&&d.canvases===0&&d.textChars===0)?'<b>腳本有載入，卻沒有發出任何資料請求，也沒有建立任何畫面</b>：程式像是在等某個條件而停住（偵測瀏覽器或 WebGL、使用者互動、特定網址參數），或執行時出錯。請執行 <code>site-explorer diagnose &lt;網址&gt;</code>，比較「爬蟲身分」與「瀏覽器預設身分」。':d.blockPage?'<b>像是防機器人／驗證頁</b>：網站把自動化瀏覽器擋在外面。可試 <code>--headed</code>（顯示瀏覽器視窗）。':(d.canvases>0&&d.textChars<40)?'<b>像是 WebGL／canvas 整頁體驗</b>：畫面由 3D 繪製，網頁上幾乎沒有文字或版面元素可抽取。請看「3D／動畫」分頁與截圖。':(d.iframes>0&&d.elements<40)?'內容可能在 iframe 裡，目前不會深入 iframe。':(d.buttons>0&&d.textChars<40)?'可能要先點「進入」或同意 Cookie 才會顯示內容。可試 <code>--headed</code> 親手點一下。':'原因不明；可試 <code>--wait 30000</code> 或 <code>--headed</code>。';
+  const why=d=>!d?'原因不明；可試 <code>--wait 30000</code> 或 <code>--headed</code>。':(d.alt&&d.alt.contentAppeared)?'<b>用瀏覽器預設身分就讀得到內容（'+d.alt.textChars+' 字），用爬蟲身分讀不到</b>：網站依「識別字串」提供了不同的內容。':(d.scripts>0&&d.dataRequests===0&&d.canvases===0&&d.textChars===0)?'<b>腳本有載入，卻沒有發出任何資料請求，也沒有建立任何畫面</b>：程式像是在等某個條件而停住（偵測瀏覽器或 WebGL、使用者互動、特定網址參數），或執行時出錯。請執行 <code>site-explorer diagnose &lt;網址&gt;</code>，比較「爬蟲身分」與「瀏覽器預設身分」。':d.blockPage?'<b>像是防機器人／驗證頁</b>：網站把自動化瀏覽器擋在外面。可試 <code>--headed</code>（顯示瀏覽器視窗）。':(d.canvases>0&&d.textChars<40)?'<b>像是 WebGL／canvas 整頁體驗</b>：畫面由 3D 繪製，網頁上幾乎沒有文字或版面元素可抽取。請看「3D／動畫」分頁與截圖。':(d.iframes>0&&d.elements<40)?'內容可能在 iframe 裡，目前不會深入 iframe。':(d.buttons>0&&d.textChars<40)?'可能要先點「進入」或同意 Cookie 才會顯示內容。可試 <code>--headed</code> 親手點一下。':'原因不明；可試 <code>--wait 30000</code> 或 <code>--headed</code>。';
   const shot=p=>{const pg=(D.pages||[]).find(x=>x.slug===p.slug);const src=pg&&pg.shots&&pg.shots.desktop;return src?'<img src="'+esc(src)+'" style="max-width:260px;border:1px solid var(--line);border-radius:8px;margin-top:8px" alt="擷取當下的畫面">':''};
   o.insertAdjacentHTML('afterbegin','<div class="card" style="border-color:#dc2626;margin-bottom:14px"><h3 style="color:#dc2626">⚠️ 這次擷取不完整（'+bad.length+' 頁幾乎是空的）</h3>'+bad.map(p=>'<div style="margin:8px 0"><b>'+esc(p.title||p.url)+'</b><br><small>'+esc(p.url)+'</small><br>'+(p.emptyDiag?'<small>DOM 元素 '+p.emptyDiag.elements+'・canvas '+p.emptyDiag.canvases+'・iframe '+p.emptyDiag.iframes+'・可見文字 '+p.emptyDiag.textChars+' 字'+(p.emptyDiag.requests!=null?'・請求 '+p.emptyDiag.requests+'（腳本 '+p.emptyDiag.scripts+'、資料請求 '+p.emptyDiag.dataRequests+'）':'')+'・WebGL：'+esc(p.emptyDiag.webgl||'無')+'</small><br>'+((p.emptyDiag.consoleErrors||[]).length?'<small>頁面錯誤：'+p.emptyDiag.consoleErrors.map(esc).join('；')+'</small><br>':''):'')+why(p.emptyDiag)+'<br>'+shot(p)+'</div>').join('')+'</div>');
 })();
