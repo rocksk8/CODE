@@ -23,6 +23,7 @@ if (!startUrl) {
 }
 const maxPages = intOpt(args, 'max-pages', 10, { min: 1, max: 500 });
 const maxDepth = intOpt(args, 'depth', 2, { min: 0, max: 6 });
+const contentWaitMs = intOpt(args, 'wait', 12000, { min: 0, max: 120000 }); // how long to wait for a script-built page to put something on screen
 const shots = !args.includes('--no-screenshots');
 let origin = new URL(startUrl).origin; // follows the first redirect (example.com -> www.example.com)
 const host = new URL(startUrl).host.replace(/[^a-z0-9.-]/gi, '_');
@@ -259,6 +260,14 @@ async function openPage(page, url) {
   return resp;
 }
 
+// JS-built pages (SPA, WebGL experiences, intro screens) can be empty at "load": wait until real content appears, or give up after maxMs.
+async function waitForContent(page, maxMs) {
+  const t0 = Date.now();
+  const has = () => page.evaluate(() => !!document.body && (document.body.innerText.trim().length > 80 || document.querySelectorAll('h1,h2,h3,p,a[href],button,nav,main,header').length > 6)).catch(() => false);
+  while (Date.now() - t0 < maxMs) { if (await has()) return true; await page.waitForTimeout(500); }
+  return await has();
+}
+
 // What a crawler that does NOT run JavaScript would receive for this URL.
 async function fetchRaw(u) {
   try {
@@ -332,11 +341,14 @@ while (queue.length && pages.length < maxPages) {
     crawledFinal.add(finalKey); crawledFinal.add(norm(url));
     if (pages.length === 0 && resp) headers.main = resp.headers();
     if (pages.length === 0) { consentAction = await dismissConsent(page); if (consentAction) await page.waitForTimeout(600); }
+    const contentReady = await waitForContent(page, contentWaitMs);
+    if (!contentReady) console.log('   ⚠️ 頁面在等待後仍幾乎是空的（可能是 3D／WebGL 體驗頁、要先點「進入」、被擋或載入逾時）：' + url);
     // trigger lazy content
     // bounded: infinite-scroll pages grow forever while you scroll
     await page.evaluate(async () => { const t0 = Date.now(); for (let y = 0, n = 0; y < document.body.scrollHeight && n < 40 && Date.now() - t0 < 4000; y += 600, n++) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 80)); } scrollTo(0, 0); });
     await page.waitForTimeout(400);
     const data = await page.evaluate(extractInPage);
+    data.emptyPage = !contentReady;
     data.designer = await page.evaluate(extractDesignerInPage).catch((e) => { console.log('   (designer data skipped:', e.message.split('\n')[0] + ')'); return null; });
     data.status = resp?.status();
     // --- SEO / indexability signals ---
@@ -464,7 +476,7 @@ const site = {
   editing: { platforms, contenteditablePages: pages.filter((p) => p.editing.contenteditable).map((p) => p.url), loginOrAdminLinks: [...new Map(pages.flatMap((p) => p.editing.editLinks).map((l) => [l.href, l])).values()].slice(0, 15) },
   design: { textColors: merge('textColors'), backgrounds: merge('backgrounds'), fontFamilies: merge('fontFamilies', 6), fontSizes: merge('fontSizes'), radii: merge('radii', 6), shadows: merge('shadows', 5), spacing: merge('spacing'), cssVars: pages[0]?.design.cssVars || {}, webFonts: [...new Set(pages.flatMap((p) => p.design.webFonts))], typography: pages[0]?.design.typography, breakpoints: (() => { const m = {}; for (const p of pages) for (const b of p.breakpoints) m[b.px] = (m[b.px] || 0) + b.uses; return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([px, uses]) => ({ px: Number(px), uses })); })(), darkMode: pages[0]?.darkMode, buttonHover: pages[0]?.buttonHover },
   components: pages[0]?.components, assets, designer,
-  pages: pages.map((p) => ({ slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
+  pages: pages.map((p) => ({ emptyPage: !!p.emptyPage, slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
 };
 fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
 
@@ -472,6 +484,7 @@ fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
 const list = (a) => a.map((x) => `\`${x.value}\` (${x.count})`).join(', ') || '—';
 const md = [
   `# 網站探索報告：${startUrl}`, `爬取 ${pages.length} 頁，耗時 ${site.seconds}s，時間 ${site.crawledAt}`, '',
+  ...(pages.some((p) => p.emptyPage) ? ['> ⚠️ **有頁面在等待後仍幾乎是空的**（' + pages.filter((p) => p.emptyPage).map((p) => p.url).join('、') + '）：設計、文字、版面可能抓不到。可能原因：3D／WebGL 體驗頁、要先點「進入」或同意 Cookie、被網站擋住、載入太慢。請看該頁的 `desktop.png` 截圖確認畫面；可加長等待（`--wait 30000`），或改用 3D／動畫擷取（`site-explorer motion <網址>`）。', ''] : []),
   ...(site.blockedPages.length ? ['> ⚠️ **部分頁面被擋住**（' + site.blockedPages.map((b) => b.reason).join('、') + '）。結果可能不完整；可降低頻率、改用 Playwright MCP 互動，或確認你有權存取。', ''] : []),
   ...(site.consentAction ? ['- 已自動處理 Cookie 橫幅：「' + site.consentAction + '」', ''] : []),
   '## 編輯方式',
