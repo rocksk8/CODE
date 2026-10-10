@@ -2,6 +2,7 @@
 // Build a single-page visual dashboard (offline, no CDN) from crawl + motion + design outputs.
 //   node build-report.mjs --site ./site-report/<host> [--motion ./motion-report/<host>] [--out ./dashboard.html]
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -86,6 +87,15 @@ try {
   }
 } catch {}
 
+// "About this folder": where things are, what ran here, how to rerun (shown in the dashboard's 關於 tab)
+{
+  let runs = []; try { runs = JSON.parse(fs.readFileSync(path.join(outDir, 'runs.json'), 'utf8')); } catch {}
+  let toolVersion = null; try { toolVersion = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version; } catch {}
+  data.about = { outputDir: outDir, dashboard: outFile, runs, toolVersion, node: process.version, platform: process.platform, outEnv: process.env.SITE_EXPLORER_OUT || null, homeDir: process.env.SITE_EXPLORER_HOME || null,
+    depsDir: path.join(process.env.SITE_EXPLORER_HOME || path.join(os.homedir(), '.site-explorer'), 'deps'), dbFile: process.env.SITE_EXPLORER_DB || path.join(process.env.SITE_EXPLORER_HOME || path.join(os.homedir(), '.site-explorer'), 'explorations.db'),
+    hasAboutFile: fs.existsSync(path.join(outDir, 'ABOUT-THIS-FOLDER.md')), hasHandoff: !!(siteDir && fs.existsSync(path.join(siteDir, 'handoff'))) };
+}
+
 // UI lives in plain files (report/report.css, report/report-client.js) so it is editable without template-literal escaping.
 const read = (f) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'report', f), 'utf8');
 const html = `<!doctype html>
@@ -98,7 +108,7 @@ ${read('report.css')}
 <nav><div class="in" id="tabs"></div></nav>
 <main>
 <section id="s-overview"></section><section id="s-design"></section><section id="s-layout"></section>
-<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-health"></section><section id="s-history"></section>
+<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-health"></section><section id="s-history"></section><section id="s-about"></section>
 </main><div class="toast" id="toast"></div>
 <script id="data" type="application/json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>
 <script>

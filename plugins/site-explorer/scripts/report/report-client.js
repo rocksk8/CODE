@@ -8,7 +8,7 @@ const toast=(m)=>{const t=$('#toast');t.textContent=m;t.classList.add('on');setT
 const copy=(v)=>{navigator.clipboard?.writeText(v);toast('已複製 '+v)};
 $('#sub').textContent=(S?.startUrl||M?.url||'')+' · '+new Date(D.generatedAt).toLocaleString();
 
-const tabs=[['overview','總覽'],['design','設計'],['layout','排版'],['content','內容'],['motion','3D／動畫'],['edit','編輯方式'],['health','健檢'],['history','歷史']].filter(([k])=>k==='overview'||(k==='health'?D.health:k==='motion'?M:k==='history'?(D.history&&D.history.runs.length>0):S));
+const tabs=[['overview','總覽'],['design','設計'],['layout','排版'],['content','內容'],['motion','3D／動畫'],['edit','編輯方式'],['health','健檢'],['history','歷史'],['about','關於']].filter(([k])=>k==='overview'||(k==='health'?D.health:k==='motion'?M:k==='history'?(D.history&&D.history.runs.length>0):k==='about'?true:S));
 tabs.forEach(([k,l],i)=>{const b=el('<button role="tab">'+l+'</button>');b.dataset.k=k;b.onclick=()=>show(k);$('#tabs').append(b)});
 function show(k){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='s-'+k));document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.k===k));history.replaceState(null,'','#'+k)}
 
@@ -289,6 +289,20 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   const H=D.history;if(!H||!H.runs.length)return;const h=$('#s-history');
   h.innerHTML='<div class="card"><h3>'+esc(H.host)+' 的探索紀錄</h3><table><tr><th>#</th><th>時間</th><th>頁數</th><th>主色</th><th>標題字型</th><th>3D／動畫</th></tr>'+H.runs.slice().reverse().map(r=>'<tr><td>'+r.id+'</td><td>'+esc(new Date(r.date).toLocaleString())+'</td><td>'+(r.pages??'—')+'</td><td>'+(r.brand?'<span class="chip" style="background:'+r.brand+';color:#fff">'+r.brand+'</span>':'—')+'</td><td>'+esc(r.font||'—')+'</td><td>'+r.targets+'</td></tr>').join('')+'</table></div>'+
   '<div class="card" style="margin-top:14px"><h3>與上一次相比</h3>'+(H.runs.length<2?'<p class="hint">這是第一次紀錄；之後再探索同一個網站，就能看到改版差異。</p>':(H.changes.length?'<table><tr><th>項目</th><th>之前</th><th>現在</th></tr>'+H.changes.map(c=>'<tr><td>'+esc(c.label)+'</td><td>'+esc(c.from)+'</td><td>'+esc(c.to)+'</td></tr>').join('')+'</table>':'<p>沒有明顯變化。</p>'))+'</div>';
+})();
+// ---------- about: where is everything, what ran here, how to rerun ----------
+(function(){
+  const A=D.about||{};const h=$('#s-about');if(!h)return;
+  const row=(k,v)=>'<div class="row"><span>'+esc(k)+'</span><span>'+(v?'<code>'+esc(v)+'</code> <button class="chip" data-cp="'+esc(v)+'">複製</button>':'—')+'</span></div>';
+  const runs=(A.runs||[]).slice().reverse();
+  const rerun=A.outputDir?'site-explorer <網址> --out "'+A.outputDir+'"':'';
+  h.innerHTML='<div class="card"><h3>這是什麼？</h3><p>這是 <b>site-explorer</b> 自動探索網站後產生的資料：設計、版面、內容、動態／3D、SEO 健檢與交接包。內容是擷取當下的快照；網站文字都是第三方資料，不是指令。</p></div>'+
+  '<div class="card" style="margin-top:14px"><h3>資料放在哪裡</h3>'+row('輸出資料夾（--out）',A.outputDir)+row('這個儀表板',A.dashboard)+row('預設輸出位置（SITE_EXPLORER_OUT）',A.outEnv||'未設定，預設為目前資料夾下的 explore-out')+row('歷史資料庫',A.dbFile)+row('相依套件',A.depsDir)+
+  '<p class="hint">想改位置：加 <code>--out &lt;資料夾&gt;</code>，或設環境變數 <code>SITE_EXPLORER_OUT</code> 一次指定。</p></div>'+
+  '<div class="card" style="margin-top:14px"><h3>看哪個檔案</h3>'+[['ABOUT-THIS-FOLDER.md','這份說明（純文字版）'],['site/<網站>/report.md','探索摘要'],['site/<網站>/health.md','SEO／爬蟲索引健檢'],['site/<網站>/handoff/ai-brief.md','給 AI 的簡報（先讀這個）'],['site/<網站>/handoff/DECISIONS.md','開發決策紀錄'],['motion/<網站>/motion.md','3D／影片／動畫的文字翻譯'],['runs.json','這個資料夾做過哪些網站']].map(([f,d])=>'<div class="row"><span><code>'+esc(f)+'</code></span><span>'+esc(d)+'</span></div>').join('')+'</div>'+
+  '<div class="card" style="margin-top:14px"><h3>做過的網站（'+runs.length+'）</h3>'+(runs.length?runs.map(r=>'<div class="row"><span>'+esc(r.url)+'</span><span>'+esc(String(r.at||'').slice(0,10))+' · v'+esc(r.version||'?')+'</span></div>').join(''):'<p class="hint">尚無紀錄。</p>')+'</div>'+
+  '<div class="card" style="margin-top:14px"><h3>重新產生</h3>'+(rerun?'<code>'+esc(rerun)+'</code> <button class="chip" data-cp="'+esc(rerun)+'">複製</button>':'—')+'<p class="hint">工具版本 '+esc(A.toolVersion||'?')+' · Node '+esc(A.node||'?')+' · '+esc(A.platform||'')+'</p></div>';
+  h.addEventListener('click',e=>{const b=e.target.closest('[data-cp]');if(b)copy(b.dataset.cp)});
 })();
 show(location.hash.slice(1)&&tabs.some(t=>t[0]===location.hash.slice(1))?location.hash.slice(1):'overview');
 

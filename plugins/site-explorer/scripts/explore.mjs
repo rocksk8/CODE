@@ -68,13 +68,6 @@ if (!args.includes('--no-db')) {
   } catch (e) { console.log('   ⚠️ 略過：' + e.message); }
 }
 
-const dash = path.join(out, 'dashboard.html');
-await run('產生圖形化儀表板', 'build-report.mjs', [...(crawlOk ? ['--site', siteDir] : []), ...(motionOk ? ['--motion', motionDir] : []), '--out', dash, ...(args.includes('--no-standalone') ? [] : ['--standalone'])]);
-
-let handoffOk = false;
-const handoffDir = path.join(out, 'handoff');
-if ((crawlOk || motionOk) && crawlOk && !args.includes('--no-handoff')) handoffOk = await run('產生交接包（AI 簡報、完整規格、決策紀錄、圖片）', 'build-handoff.mjs', ['--site', siteDir, ...(motionOk ? ['--motion', motionDir] : []), '--out', handoffDir]);
-
 // A folder nobody remembers is useless: leave a plain-language note + a run log at its root
 try {
   const runsFile = path.join(out, 'runs.json'); let runs = []; try { runs = JSON.parse(fs.readFileSync(runsFile, 'utf8')); } catch {}
@@ -90,6 +83,13 @@ try {
     '## 重新產生', '```bash', 'site-explorer <網址> --out ' + JSON.stringify(path.relative(process.cwd(), out) || '.'), '```', '',
     '工具說明與安裝：https://github.com/rocksk8/code', ''].join('\n'));
 } catch {}
+const dash = path.join(out, 'dashboard.html');
+await run('產生圖形化儀表板', 'build-report.mjs', [...(crawlOk ? ['--site', siteDir] : []), ...(motionOk ? ['--motion', motionDir] : []), '--out', dash, ...(args.includes('--no-standalone') ? [] : ['--standalone'])]);
+
+let handoffOk = false;
+const handoffDir = path.join(out, 'handoff');
+if ((crawlOk || motionOk) && crawlOk && !args.includes('--no-handoff')) handoffOk = await run('產生交接包（AI 簡報、完整規格、決策紀錄、圖片）', 'build-handoff.mjs', ['--site', siteDir, ...(motionOk ? ['--motion', motionDir] : []), '--out', handoffDir]);
+
 const failed = steps.filter((s) => !s.ok);
 console.log(`\n完成：${steps.length - failed.length}/${steps.length} 階段成功${failed.length ? '，失敗：' + failed.map((f) => f.label).join('、') : ''}`);
 try { const hj = path.join(siteDir, 'health.json'); if (fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(`健檢：${h.score}/100（${h.grade}）— 嚴重 ${h.severity.critical}・高 ${h.severity.high}・中 ${h.severity.medium}　詳見 ${path.join(siteDir, 'health.md')}`); } } catch {}

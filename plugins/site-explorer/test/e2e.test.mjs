@@ -86,9 +86,10 @@ test('explore pipeline produces all artifacts', async (t) => {
   const b = await launchBrowser(); const page = await b.newPage(); const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
   await page.goto('file://' + path.join(out, 'dashboard.html'));
-  for (const k of ['overview', 'design', 'layout', 'content', 'motion', 'edit', 'history']) { const tab = page.locator(`#tabs button[data-k=${k}]`); if (await tab.count()) await tab.click(); }
+  for (const k of ['overview', 'design', 'layout', 'content', 'motion', 'edit', 'history', 'about']) { const tab = page.locator(`#tabs button[data-k=${k}]`); if (await tab.count()) await tab.click(); }
   assert.deepEqual(errs, []);
   assert.match(await page.locator('#s-overview').innerText(), /被擋住/);
+  const about = await page.locator('#s-about').innerText(); assert.ok(about.includes(out) && /SITE_EXPLORER_OUT/.test(about) && /site-explorer/.test(about) && /127\.0\.0\.1/.test(about), 'about tab shows output location, env var, rerun command and runs');
   await b.close();
 });
 
