@@ -52,6 +52,7 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
       images: full.content.images.slice(0, 24), linkCount: full.content.links.length, forms: full.content.forms,
       sections: full.layout.sections, landmarks: full.layout.landmarks, shots: { desktop: shot('desktop'), tablet: shot('tablet'), mobile: shot('mobile') },
       mobileOverflow: full.layout.mobileOverflow,
+      states: (full.states || []).map((s) => ({ index: s.index, action: s.action, label: s.label, textChars: s.textChars, text: s.text, src: exists(path.join(siteDir, 'pages', p.slug, 'states', s.screenshot)) ? ref(path.join(siteDir, 'pages', p.slug, 'states', s.screenshot)) : null })),
       blocks: full.designer?.blocks || [], elements: full.designer?.elements || [],
     });
   }

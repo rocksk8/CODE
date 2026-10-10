@@ -260,3 +260,32 @@ test('content in shadow DOM and API responses is seen: deep text, network summar
     const br = await launchBrowser(); try { const pg = await br.newPage(); const errs = []; pg.on('pageerror', (e) => errs.push(e.message)); await pg.goto('file://' + dash); const txt = await pg.locator('#s-overview').innerText(); assert.match(txt, /頁面實際載入了什麼/); assert.match(txt, /model\.glb/); assert.match(txt, /Nuclear innovation/); assert.deepEqual(errs, []); } finally { await br.close(); }
   } finally { srv.close(); }
 });
+
+test('interaction states: "enter" buttons and scroll-driven reveals are walked through, risky controls are never touched', async (t) => {
+  if (skip(t)) return;
+  let buyHits = 0, submitHits = 0;
+  const srv = http.createServer((q, r) => {
+    if (q.url === '/buy') { buyHits++; r.end('bought'); return; }
+    if (q.url.startsWith('/submit')) { submitHits++; r.end('submitted'); return; }
+    r.setHeader('content-type', 'text/html');
+    if (q.url === '/enter') return r.end('<!doctype html><title>Gate</title><body style="margin:0"><canvas width=800 height=500 style="display:block"></canvas><div id="gate" style="position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center"><button id="go" style="font-size:28px;padding:20px 40px">Enter experience</button></div><button onclick="location.href=\'/buy\'" style="position:fixed;top:0;left:0">Buy now</button><form action="/submit"><button>Send</button></form><script>go.onclick=()=>{gate.remove();document.body.insertAdjacentHTML("beforeend","<main><h1>Welcome inside</h1><p>"+"The experience begins here with real words. ".repeat(8)+"</p></main>")}</script></body>');
+    if (q.url === '/wheel') return r.end('<!doctype html><title>Wheel</title><body style="margin:0;height:3000px"><canvas width=800 height=500 style="display:block"></canvas><script>let done=false;addEventListener("wheel",()=>{if(done)return;done=true;document.body.insertAdjacentHTML("beforeend","<main style=\'position:fixed;top:40px;left:40px\'><h2>Revealed by scrolling</h2><p>"+"Scroll driven content with enough words to count. ".repeat(6)+"</p></main>")})</script></body>');
+    r.end('<!doctype html><title>Plain</title><body><h1>Plain</h1></body>');
+  }).listen(0); await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  try {
+    for (const [name, label, action] of [['enter', 'Enter experience', '點擊'], ['wheel', '', '滾輪向下']]) {
+      const out = path.join(tmp, 'int-' + name); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/${name}`, '--max-pages', '1', '--wait', '1500', '--out', out]);
+      assert.equal(r.status, 0, r.out); const base = path.join(out, `127.0.0.1_${port}`); const site = JSON.parse(fs.readFileSync(path.join(base, 'site.json'), 'utf8')); const st = site.pages[0].states;
+      assert.ok(st && st.length >= 2, name + ': states ' + JSON.stringify(st)); assert.equal(st[1].action, action); if (label) assert.equal(st[1].label, label); assert.ok(st[1].textChars > st[0].textChars, 'content appears after the action');
+      assert.ok(fs.existsSync(path.join(base, 'pages', site.pages[0].slug, 'states', st[1].screenshot)));
+      assert.match(fs.readFileSync(path.join(base, 'report.md'), 'utf8'), /互動狀態/);
+      if (name === 'enter') {
+        const ho = path.join(tmp, 'int-ho'); const h = await run('build-handoff.mjs', ['--site', base, '--out', ho]); assert.equal(h.status, 0, h.out);
+        assert.match(fs.readFileSync(path.join(ho, 'SPEC.md'), 'utf8'), /互動狀態/); assert.ok(fs.readdirSync(path.join(ho, 'media', 'states', site.pages[0].slug)).length >= 2);
+        const dash = path.join(tmp, 'int-dash.html'); const b = await run('build-report.mjs', ['--site', base, '--out', dash]); assert.equal(b.status, 0, b.out);
+        const br = await launchBrowser(); try { const pg = await br.newPage(); const errs = []; pg.on('pageerror', (e) => errs.push(e.message)); await pg.goto('file://' + dash); assert.match(await pg.locator('#s-overview').innerText(), /互動狀態/); assert.deepEqual(errs, []); } finally { await br.close(); }
+      }
+    }
+    assert.equal(buyHits, 0, 'a "Buy now" control was clicked'); assert.equal(submitHits, 0, 'a form was submitted');
+  } finally { srv.close(); }
+});

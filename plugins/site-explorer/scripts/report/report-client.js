@@ -311,6 +311,11 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   ].join('');
   o.insertAdjacentHTML('beforeend','<div class="card" style="margin-top:14px"><h3>頁面實際載入了什麼</h3><div class="hint">'+esc(p.url)+'</div><ul>'+rows+'</ul></div>');
 })();
+// ---------- interaction states: what appeared after clicking / scrolling / pressing keys ----------
+(function(){
+  const o=$('#s-overview');if(!o||!D.pages)return;const list=D.pages.filter(p=>p.states&&p.states.length>1);if(!list.length)return;
+  o.insertAdjacentHTML('beforeend','<div class="card" style="margin-top:14px"><h3>互動狀態（自動點擊／滾動／按鍵後出現的畫面）</h3>'+list.slice(0,4).map(p=>'<div style="margin:8px 0"><b>'+esc(p.title||p.url)+'</b> <small>'+esc(p.url)+'</small><div style="display:flex;gap:10px;overflow-x:auto;padding:6px 0">'+p.states.map(s=>'<figure style="margin:0;flex:none;width:200px"><img src="'+esc(s.src||'')+'" style="width:200px;border:1px solid var(--line);border-radius:6px" alt="狀態 '+s.index+'"><figcaption style="font-size:12px">'+s.index+'. '+esc(s.action)+(s.label?'「'+esc(s.label)+'」':'')+'<br>文字 '+s.textChars+' 字</figcaption></figure>').join('')+'</div></div>').join('')+'</div>');
+})();
 // ---------- 3D / motion on every captured page ----------
 (function(){
   const P=D.motionPages;if(!P||!P.length)return;const m=$('#s-motion');if(!m)return;

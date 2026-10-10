@@ -121,6 +121,7 @@ for (const p of pages) {
   media.sections[p.slug] = [];
   for (const b of p.designer?.blocks || []) if (b.image && copy(path.join(siteDir, 'pages', p.slug, b.image), path.join(out, 'media', 'sections', p.slug, path.basename(b.image)))) { b.image = `media/sections/${p.slug}/${path.basename(b.image)}`; media.sections[p.slug].push(b.image); } else delete b.image;
   media.pages[p.slug] = {};
+  for (const s of p.states || []) { const f = String(s.screenshot || '').replace(/[^a-z0-9._-]/gi, ''); if (f && copy(path.join(siteDir, 'pages', p.slug, 'states', f), path.join(out, 'media', 'states', p.slug, f))) s.shotPath = `media/states/${p.slug}/${f}`; }
   for (const v of ['desktop', 'tablet', 'mobile']) if (copy(path.join(siteDir, 'pages', p.slug, v + '.png'), path.join(out, 'media', 'pages', `${p.slug}-${v}.png`))) media.pages[p.slug][v] = `media/pages/${p.slug}-${v}.png`;
 }
 if (motion) {
@@ -190,7 +191,7 @@ const spec = {
   components: { buttons: comps.buttons || [], inputs: comps.inputs || [], cards: comps.cards || [], navigation: comps.navigation || null, logo: comps.logo || null, buttonHover: comps.hover || null },
   pages: live.map((p) => ({
     url: p.url, path: new URL(p.url).pathname || '/', slug: p.slug, type: pageType(p),
-    observed: { emptyPage: !!p.emptyPage, emptyDiag: p.emptyDiag || null, deep: p.deep || null, network: p.network || null, aria: p.aria || null },
+    observed: { emptyPage: !!p.emptyPage, emptyDiag: p.emptyDiag || null, deep: p.deep || null, network: p.network || null, aria: p.aria || null, states: (p.states || []).map((s) => ({ index: s.index, action: s.action, label: s.label, textChars: s.textChars, text: s.text, shot: s.shotPath || null })) },
     meta: { title: p.seo?.title ?? p.title, description: p.seo?.description ?? null, canonical: p.seo?.canonical ?? null, lang: p.lang || p.seo?.lang || null, h1: p.seo?.h1 || [] },
     sections: (p.designer?.blocks || []).map((b, i) => ({ index: i + 1, kind: b.kind, kindLabel: KIND[b.kind], purpose: PURPOSE[b.kind], why: b.why, y: b.y, height: b.h, columns: b.columns, headings: b.headings, buttons: b.buttons, media: b.media, image: b.image || null, content: b.content || [] })),
     responsive: { desktopOverflow: !!p.layout?.desktopOverflow, tabletOverflow: !!p.layout?.tabletOverflow, mobileOverflow: !!p.layout?.mobileOverflow, mobile: p.seo?.mobile || null }, media: media.pages[p.slug],
@@ -241,6 +242,7 @@ for (const p of spec.pages) {
   { const o = p.observed || {}, n = o.network;
     if (o.emptyPage) L.push('', `> ⚠️ **這一頁擷取不完整**：等待後仍幾乎是空的（DOM 元素 ${o.emptyDiag?.elements ?? '?'}、可見文字 ${o.emptyDiag?.textChars ?? '?'} 字）。下方的版面與文字可能缺漏；請以截圖、網路資料與 3D 擷取為準。`);
     if (n) L.push('', '**網路與內容來源**（頁面實際載入了什麼）：', `- 請求 ${n.total} 個；第三方網域 ${(n.thirdParty || []).length} 個${n.errorCount ? `；錯誤回應 ${n.errorCount} 個（403/429：${n.blockedLike}）` : ''}`, ...(n.assets3d?.length ? [`- 3D 資源：${n.assets3d.map((a) => a.url).join('、')}`] : []), ...(n.apis?.length ? [`- API／JSON：${n.apis.slice(0, 6).map((a) => a.url).join('、')}`] : []), ...(n.apiTextSamples?.length ? ['- API 回應裡的文字：', ...n.apiTextSamples.slice(0, 10).map((t) => `  - ${t}`)] : []));
+    if (o.states?.length > 1) L.push('', `**互動狀態**（自動點擊／滾動／按鍵後出現的畫面；共 ${o.states.length} 個，請依序開啟截圖）：`, ...o.states.map((s) => `- 狀態 ${s.index}：${s.action}${s.label ? '「' + s.label + '」' : ''}　可見文字 ${s.textChars} 字${s.shot ? '　`' + s.shot + '`' : ''}${s.text ? '\n  - 文字開頭：' + String(s.text).slice(0, 160) : ''}`));
     if (o.aria?.head) L.push('', `**無障礙樹**（語意結構；${o.aria.headings} 標題、${o.aria.links} 連結、${o.aria.buttons} 按鈕）：`, '```yaml', o.aria.head, '```'); }
   if (p.sections.length) {
     L.push(...T(['#', '版型', '用途', '高', '欄', '圖片'], p.sections.map((s) => [s.index, s.kindLabel, s.purpose, s.height + 'px', s.columns, s.image ? '`' + s.image + '`' : '—'])), '');
