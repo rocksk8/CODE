@@ -216,3 +216,23 @@ test('diagnose tells "blocked by user agent" from "page really is empty"', async
     assert.equal(a2.contentAppeared, false); assert.equal(b2.contentAppeared, false); assert.doesNotMatch(verdict(a2, b2), /識別字串/);
   } finally { await browser.close(); srv.close(); }
 });
+
+test('robots.txt is judged per origin: an extra URL on the origin that redirected away keeps that origin\'s rules', async (t) => {
+  if (skip(t)) return;
+  const page = (r, title) => { r.setHeader('content-type', 'text/html'); r.end(`<!doctype html><title>${title}</title><body><h1>${title}</h1><p>${'Some words here. '.repeat(15)}</p></body>`); };
+  const B = http.createServer((q, r) => (q.url === '/robots.txt' ? (r.statusCode = 404, r.end('')) : page(r, 'B ' + q.url))).listen(0); await new Promise((res) => B.once('listening', res));
+  const A = http.createServer((q, r) => {
+    if (q.url === '/robots.txt') { r.setHeader('content-type', 'text/plain'); return r.end('User-agent: *\nDisallow: /private\n'); }
+    if (q.url === '/') { r.statusCode = 302; r.setHeader('location', `http://127.0.0.1:${B.address().port}/`); return r.end(); }
+    page(r, 'A ' + q.url);
+  }).listen(0); await new Promise((res) => A.once('listening', res));
+  try {
+    const out = path.join(tmp, 'robots-origin'); const a = A.address().port;
+    const r = await run('crawl.mjs', [`http://127.0.0.1:${a}/`, `http://127.0.0.1:${a}/private`, `http://127.0.0.1:${a}/public`, '--max-pages', '4', '--wait', '1000', '--no-screenshots', '--out', out]);
+    assert.equal(r.status, 0, r.out);
+    const dir = fs.readdirSync(out).find((d) => d.startsWith('127.0.0.1')); const site = JSON.parse(fs.readFileSync(path.join(out, dir, 'site.json'), 'utf8'));
+    const paths = site.pages.map((p) => new URL(p.url).port + new URL(p.url).pathname);
+    assert.ok(!paths.some((p) => p === a + '/private'), '/private is disallowed by the ORIGINAL origin\'s robots.txt: ' + paths.join(','));
+    assert.ok(paths.some((p) => p === a + '/public'), '/public (allowed) is still crawled: ' + paths.join(','));
+  } finally { A.close(); B.close(); }
+});

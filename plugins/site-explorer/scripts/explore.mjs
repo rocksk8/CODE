@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runChecks, printChecks } from './doctor.mjs';
 import { openDb, ingest, DB_PATH } from './db.mjs';
-import { findUrl, findUrls, intOpt } from './args.mjs';
+import { findUrl, findUrls, intOpt, sameSite } from './args.mjs';
 import { isInside, checkExploreOut, UnsafeOutputError } from './safe-out.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -26,7 +26,7 @@ const USAGE = `用法：site-explorer explore <網址> [更多網址…] [選項
   --open | --no-open   完成後是否自動開啟儀表板  --no-standalone  儀表板不內嵌圖片`;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 if (!url) { console.error(USAGE); process.exit(1); }
-const urlsGiven = findUrls(args).length;
+const urlsGiven = findUrls(args).filter((u) => { try { return sameSite(u, url); } catch { return false; } }).length; // only URLs the crawler will accept (same site as the first) raise the limits
 const maxPages = Math.max(intOpt(args, 'max-pages', 6, { min: 1, max: 500 }), urlsGiven), waitMs = intOpt(args, 'wait', 4000, { min: 0, max: 60000 });
 
 const out = path.resolve(opt('out', process.env.SITE_EXPLORER_OUT || './explore-out'));

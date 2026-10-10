@@ -315,7 +315,10 @@ async function discoverMore(fromUrl) {
 // ---- main ----
 let robotsInfo = await loadRobots(origin);
 const robotsList = () => (groupFor(robotsInfo.parsed || { groups: [] }, CRAWLER_UA_TOKEN)?.rules || []).filter((r) => r.type === 'disallow' && r.path).map((r) => r.path);
-const allowed = (u) => { const x = new URL(u); return isAllowed(robotsInfo.parsed, CRAWLER_UA_TOKEN, x.pathname + x.search).allowed; };
+// robots.txt is per ORIGIN: an extra URL queued for old.example must be judged by old.example's rules even after the first page redirected to new.example
+const robotsByOrigin = new Map([[origin, robotsInfo]]);
+const ensureRobots = async (u) => { const o = new URL(u).origin; if (!robotsByOrigin.has(o)) robotsByOrigin.set(o, await loadRobots(o)); };
+const allowed = (u) => { const x = new URL(u); const ri = robotsByOrigin.get(x.origin) || robotsInfo; if (ri.serverError) return false; return isAllowed(ri.parsed, CRAWLER_UA_TOKEN, x.pathname + x.search).allowed; };
 if (robotsInfo.serverError) {
   console.error(`\n沒有爬取任何頁面。\n原因：robots.txt 回應 HTTP ${robotsInfo.status}（伺服器錯誤）。依慣例無法確認是否允許，視為禁止抓取。請稍後再試，或確認網站 robots.txt 是否正常。`);
   process.exit(3);
@@ -341,6 +344,7 @@ let discovered = false;
 while (pages.length < maxPages) {
   if (!queue.length) { if (discovered || !pages.length) break; discovered = true; if (!(await discoverMore(pages[0].url || startUrl))) break; }
   const [url, depth] = queue.shift();
+  await ensureRobots(url).catch(() => {});
   if (!allowed(url)) { console.log('skip (robots):', url); skippedByRobots.push(url); continue; }
   const page = await ctx.newPage();
   const watchdog = setTimeout(() => { console.log('timeout (120s), giving up on:', url); page.close().catch(() => {}); }, 120000);
@@ -353,9 +357,10 @@ while (pages.length < maxPages) {
       clearTimeout(watchdog); await page.close().catch(() => {}); continue;
     }
     if (pages.length === 0 && new URL(page.url()).origin !== origin) {
-      origin = new URL(page.url()).origin; robotsInfo = await loadRobots(origin);
+      origin = new URL(page.url()).origin; robotsInfo = await loadRobots(origin); robotsByOrigin.set(origin, robotsInfo);
       console.log('redirected to', origin);
     }
+    await ensureRobots(page.url()).catch(() => {});
     if (!allowed(page.url())) { // a redirect can lead somewhere robots.txt forbids
       skippedByRobots.push(page.url()); console.log('skip (robots, after redirect):', page.url());
       clearTimeout(watchdog); await page.close().catch(() => {}); continue;
