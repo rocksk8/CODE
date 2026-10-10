@@ -13,7 +13,8 @@ const siteDir = opt('site'), motionDir = opt('motion');
 if (!siteDir && !motionDir) { console.error('Usage: build-report.mjs --site <crawl dir> [--motion <motion dir>] [--out dashboard.html]'); process.exit(1); }
 const standalone = args.includes('--standalone');
 const embedBudget = Number(opt('embed-mb', 12)) * 1024 * 1024;
-const outFile = path.resolve(opt('out', './dashboard.html'));
+import { requireExtension, UnsafeOutputError } from './safe-out.mjs';
+let outFile; try { outFile = requireExtension(opt('out', './dashboard.html'), /\.html?$/i, '*.html'); } catch (e) { if (e instanceof UnsafeOutputError) { console.error(e.message); process.exit(1); } throw e; }
 const outDir = path.dirname(outFile);
 const rel = (p) => path.relative(outDir, p).split(path.sep).map(encodeURIComponent).join('/');
 // Standalone mode: inline files as data: URIs (within a size budget) so one HTML file can be emailed or dropped into Slack.

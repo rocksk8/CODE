@@ -10,7 +10,9 @@ const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const [A, B] = [opt('a'), opt('b')];
 if (!A || !B) { console.error('Usage: compare-report.mjs --a <site dir> --b <site dir> [--out compare.html]'); process.exit(1); }
-const outFile = path.resolve(opt('out', './compare.html')), outDir = path.dirname(outFile);
+import { requireExtension, UnsafeOutputError } from './safe-out.mjs';
+let outFile; try { outFile = requireExtension(opt('out', './compare.html'), /\.html?$/i, '*.html'); } catch (e) { if (e instanceof UnsafeOutputError) { console.error(e.message); process.exit(1); } throw e; }
+const outDir = path.dirname(outFile);
 const rel = (p) => path.relative(outDir, p).split(path.sep).map(encodeURIComponent).join('/');
 const here = path.dirname(fileURLToPath(import.meta.url));
 
