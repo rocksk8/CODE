@@ -22,7 +22,8 @@ const run = (script, args) => new Promise((resolve) => {
 
 before(async () => {
   try { (await launchBrowser()).close(); } catch { haveBrowser = false; }
-  server = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(req.url === '/other' ? '<title>Other</title><h1>Other</h1><p>Plain page without much design at all here.</p>' : studio); });
+  server = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); const f = (n) => fs.readFileSync(path.join(root, 'test', 'fixtures', n), 'utf8');
+    res.end(req.url === '/other' ? '<title>Other</title><h1>Other</h1><p>Plain page without much design at all here.</p>' : req.url === '/blog' ? f('blog.html') : req.url === '/app' ? f('app.html') : studio); });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'se designer-'));
@@ -109,4 +110,16 @@ test('compare report builds for two sites without script errors', async (t) => {
   const txt = await p.locator('#root').innerText();
   assert.match(txt, /色彩角色/); assert.match(txt, /頁面骨架/); assert.match(txt, /數據對照/);
   assert.deepEqual(errs, []); await b.close();
+});
+
+test('pattern recognition does not hallucinate marketing sections on articles or app UIs', async (t) => {
+  if (!haveBrowser) return t.skip('no browser');
+  const kinds = async (route, name) => {
+    const out = path.join(tmp, name); await run('crawl.mjs', [base + route, '--max-pages', '1', '--no-screenshots', '--out', out]);
+    const dir = path.join(out, `127.0.0.1_${server.address().port}`, 'pages'), slug = fs.readdirSync(dir)[0];
+    return JSON.parse(fs.readFileSync(path.join(dir, slug, 'page.json'), 'utf8')).designer.blocks.map((b) => b.kind);
+  };
+  const blog = await kinds('/blog', 'blog'), app = await kinds('/app', 'app');
+  assert.ok(!blog.includes('features') && !blog.includes('pricing'), 'article paragraphs are not feature cards: ' + blog);
+  assert.ok(!app.includes('pricing') && !app.includes('features'), 'KPI numbers and tables are not pricing: ' + app);
 });

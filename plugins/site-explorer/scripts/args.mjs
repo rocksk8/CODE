@@ -44,19 +44,24 @@ export const sameSite = (a, b) => {
   try { return new URL(a).host.replace(/^www\./, '') === new URL(b).host.replace(/^www\./, ''); } catch { return false; }
 };
 
-/** Returns the matching `Disallow` rule for this URL under `User-agent: *`, or null when allowed/unknown. */
-export async function robotsBlocks(url) {
+/** Disallow rules that apply to `User-agent: *` for this origin ([] when robots.txt is missing). */
+export async function robotsRules(origin) {
   try {
-    const u = new URL(url);
-    const r = await fetch(u.origin + '/robots.txt', { signal: AbortSignal.timeout(8000) });
-    if (!r.ok) return null;
-    let applies = false;
+    const r = await fetch(origin + '/robots.txt', { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return [];
+    const rules = []; let applies = false;
     for (const line of (await r.text()).split('\n')) {
       const [k, ...v] = line.split('#')[0].split(':');
       const key = k.trim().toLowerCase(), val = v.join(':').trim();
       if (key === 'user-agent') applies = val === '*';
-      else if (applies && key === 'disallow' && val && u.pathname.startsWith(val)) return val;
+      else if (applies && key === 'disallow' && val) rules.push(val);
     }
-  } catch {}
-  return null;
+    return rules;
+  } catch { return []; }
+}
+
+/** The `Disallow` rule matching this URL, or null when allowed/unknown. */
+export async function robotsBlocks(url) {
+  const u = new URL(url);
+  return (await robotsRules(u.origin)).find((r) => u.pathname.startsWith(r)) ?? null;
 }

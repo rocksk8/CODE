@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Crawl a site with a real browser and capture design, content, layout and editing signals.
 import { launchBrowser } from './launch.mjs';
-import { findUrl, intOpt, sameSite } from './args.mjs';
+import { findUrl, intOpt, sameSite, robotsRules } from './args.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,21 +31,7 @@ const slugOf = (u) => {
 };
 const norm = (u) => { const x = new URL(u); x.hash = ''; return x.href.replace(/\/$/, ''); };
 
-// ---- robots.txt (Disallow for User-agent: *) ----
-async function loadRobots() {
-  try {
-    const r = await fetch(origin + '/robots.txt');
-    if (!r.ok) return [];
-    const rules = []; let applies = false;
-    for (const line of (await r.text()).split('\n')) {
-      const [k, ...v] = line.split('#')[0].split(':');
-      const key = k.trim().toLowerCase(), val = v.join(':').trim();
-      if (key === 'user-agent') applies = val === '*';
-      else if (applies && key === 'disallow' && val) rules.push(val);
-    }
-    return rules;
-  } catch { return []; }
-}
+const loadRobots = () => robotsRules(origin);
 
 // ---- runs inside the page ----
 function extractInPage() {

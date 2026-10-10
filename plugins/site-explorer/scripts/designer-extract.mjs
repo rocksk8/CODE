@@ -54,12 +54,15 @@ export function extractDesignerInPage() {
   const extras = [...document.querySelectorAll('header, footer')].filter((e) => !root.contains(e) && !e.parentElement.closest('header,footer,section,article,main,aside') && visible(e));
   blocksEls = [...extras, ...blocksEls].filter((e, i, a) => a.indexOf(e) === i).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
   blocksEls = blocksEls.filter((e) => !blocksEls.some((o) => o !== e && o.contains(e)));
+  // "cards" = repeated siblings that look like components, not bare text (paragraphs, links, table rows)
+  const NOT_CARD = /^(P|SPAN|A|BR|HR|INPUT|BUTTON|LABEL|TR|TD|TH|H[1-6]|STRONG|EM|B|I|SMALL|IMG|OPTION|DT|DD)$/;
+  const cardLike = (c) => !NOT_CARD.test(c.tagName) && visible(c) && c.getBoundingClientRect().height >= 60 && !!(c.querySelector('h1,h2,h3,h4,h5,h6,img,svg,picture,video') || c.children.length >= 2);
   const repeatOf = (el) => {
     let best = 1;
     for (const p of [el, ...[...el.querySelectorAll('*')].slice(0, 250)]) {
-      if (p.children.length < 3) continue;
+      if (p.children.length < 3 || /^(UL|OL|TABLE|TBODY|SELECT|NAV)$/.test(p.tagName) && !p.querySelector('h1,h2,h3,h4,h5,h6,img')) continue;
       const m = {};
-      for (const c of p.children) { if (!visible(c) || c.getBoundingClientRect().height < 30) continue; const sig = c.tagName + '.' + String(c.className && c.className.baseVal === undefined ? c.className : '').split(/\s+/)[0]; m[sig] = (m[sig] || 0) + 1; }
+      for (const c of p.children) { if (!cardLike(c)) continue; const sig = c.tagName + '.' + String(c.className && c.className.baseVal === undefined ? c.className : '').split(/\s+/)[0]; m[sig] = (m[sig] || 0) + 1; }
       best = Math.max(best, ...Object.values(m), 1);
     }
     return best;
@@ -74,7 +77,7 @@ export function extractDesignerInPage() {
     if (el.tagName === 'HEADER' || (idx === 0 && links >= 3 && r.height < 160) || ((s.position === 'fixed' || s.position === 'sticky') && r.top < 5 && r.height < 160)) kind = 'header';
     else if (el.tagName === 'FOOTER' || (idx === total - 1 && links >= 6 && r.height < 700)) kind = 'footer';
     else if (idx <= 2 && (q('h1').length || (h >= 1 && r.height > vh * 0.5)) && (btn || media || r.height > vh * 0.6)) kind = 'hero';
-    else if (/pricing|plans?\b|price/i.test(cls) || (/(\$|€|£|NT\$|US\$)\s?\d|\/\s?(mo|month|yr|year)|每月|月付|年付/i.test(t) && rep >= 2)) kind = 'pricing';
+    else if (/pricing|plans?\b|price/i.test(cls) || (/(\$|€|£|NT\$|US\$)\s?\d/.test(t) && rep >= 2 && (/\/\s?(mo|month|yr|year)|per (month|year)|billed|每月|月付|年付/i.test(t) || (t.match(/\b(starter|basic|pro|team|business|enterprise|free|studio|premium|plus)\b/gi) || []).length >= 2))) kind = 'pricing';
     else if (q('blockquote').length || /testimonial|review|quote|customer-stor/i.test(cls) || (rep >= 2 && /[“”"]/.test(t) && media)) kind = 'testimonial';
     else if (q('details, summary').length >= 2 || /faq|accordion/i.test(cls)) kind = 'faq';
     else if (q('form').length && q('input, textarea, select').length >= 2) kind = 'form';
@@ -83,7 +86,8 @@ export function extractDesignerInPage() {
     else if (media >= 4 && t.length < 200) kind = 'gallery';
     else if (rep >= 3) kind = 'features';
     else if (btn >= 1 && t.length < 260 && r.height < 520 && h <= 1 && idx >= total - 3) kind = 'cta';
-    return { kind, tag: el.tagName.toLowerCase(), id: el.id || undefined, class: String(cls).trim().split(/\s+/).slice(0, 3).join(' ') || undefined,
+    const why = ({ header: '頁首標籤／頂部導覽', footer: '頁尾標籤／底部大量連結', hero: '首屏大標題＋按鈕或媒體', pricing: '價格字樣與重複方案', testimonial: '引言或客戶見證', faq: '展開式問答', form: '表單欄位', logos: '多張小圖且文字少', stats: '多個數字', gallery: '多張圖片', features: '重複 ' + rep + ' 個卡片', cta: '頁尾附近的短文＋按鈕', content: '未符合特定版型' })[kind];
+    return { kind, why, tag: el.tagName.toLowerCase(), id: el.id || undefined, class: String(cls).trim().split(/\s+/).slice(0, 3).join(' ') || undefined,
       y: Math.round(r.top + scrollY), h: Math.round(r.height), w: Math.round(r.width), columns: rep, headings: h, buttons: btn, media, links,
       heading: (el.querySelector('h1,h2,h3')?.innerText || '').trim().slice(0, 80), text: t.replace(/\s+/g, ' ').slice(0, 90) };
   };
