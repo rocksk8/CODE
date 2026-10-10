@@ -301,7 +301,7 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
 (function(){
   const P=D.motionPages;if(!P||!P.length)return;const m=$('#s-motion');if(!m)return;
   const KN={webgl:'WebGL 3D','css-3d':'CSS 3D','model-viewer':'3D 模型',video:'影片',lottie:'Lottie',canvas:'Canvas',svg:'SVG 動畫',animation:'CSS 動畫'};
-  const rows=P.map(p=>'<div class="row"><span><b>'+esc(p.title||p.url)+'</b><br><small>'+esc(p.url)+'</small></span><span>'+(p.targets?p.targets+' 個元素：'+esc((p.kinds||[]).map(k=>KN[k]||k).join('、'))+(p.three?'・three.js':''):'沒有偵測到 3D／動畫')+'<br>'+(p.sheet?'<a href="'+esc(p.sheet)+'" target="_blank">畫格總覽</a> ':'')+(p.md?'<a href="'+esc(p.md)+'" target="_blank">文字規格</a>':'')+'</span></div>').join('');
+  const rows=P.map(p=>'<div class="row"><span><b>'+esc(p.title||p.url)+'</b><br><small>'+esc(p.url)+'</small></span><span>'+(p.targets?p.targets+' 個元素：'+esc((p.kinds||[]).map(k=>KN[k]||k).join('、'))+(p.three?'・three.js':''):'沒有偵測到 3D／動畫')+'<br>'+(p.sheet?'<a href="'+esc(p.sheet)+'" target="_blank">畫格總覽</a> ':'')+(p.md?'<a href="'+esc(p.md)+'" target="_blank">文字規格</a>':'')+'</span></div>'+(p.text?'<details style="margin:4px 0 10px"><summary>展開文字規格</summary><pre style="white-space:pre-wrap;font-size:12px">'+esc(p.text)+'</pre></details>':'')).join('');
   m.insertAdjacentHTML('afterbegin','<div class="card"><h3>各頁面的 3D／動畫（'+P.length+' 頁）</h3>'+rows+'<p class="hint">以 <code>--motion-pages N</code> 調整擷取頁數。</p></div>');
 })();
 // ---------- about: where is everything, what ran here, how to rerun ----------

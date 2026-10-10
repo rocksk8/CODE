@@ -77,7 +77,8 @@ if (motionDir && exists(path.join(motionDir, 'motion.json'))) {
 if (motionDir && exists(path.join(motionDir, 'pages.json'))) {
   try {
     data.motionPages = readJSON(path.join(motionDir, 'pages.json')).pages.map((e) => ({ url: e.url, slug: e.slug, title: e.title, targets: e.targets, kinds: e.kinds, three: e.three,
-      md: e.md ? ref(path.join(motionDir, e.dir, 'motion.md'), false) : null, sheet: e.sheet ? ref(path.join(motionDir, e.dir, 'contact-sheet.html'), false) : null }));
+      text: e.md ? fs.readFileSync(path.join(motionDir, e.dir, 'motion.md'), 'utf8').slice(0, 9000) : null, // inlined, so a single-file dashboard still shows it
+      md: !standalone && e.md ? ref(path.join(motionDir, e.dir, 'motion.md'), false) : null, sheet: !standalone && e.sheet ? ref(path.join(motionDir, e.dir, 'contact-sheet.html'), false) : null }));
   } catch {}
 }
 

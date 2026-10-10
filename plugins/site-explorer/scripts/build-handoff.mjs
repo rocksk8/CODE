@@ -142,8 +142,8 @@ if (motionDir && has(path.join(motionDir, 'pages.json'))) { // other pages' 3D/m
       const dir = path.join(motionDir, e.dir), name = String(e.slug).replace(/[^a-z0-9._-]/gi, '_').slice(0, 60);
       let md = fs.readFileSync(path.join(dir, 'motion.md'), 'utf8');
       const mj = has(path.join(dir, 'motion.json')) ? J(path.join(dir, 'motion.json')) : { targets: [] };
-      for (const t of mj.targets || []) { const f = path.join(dir, 'frames', String(t.id), 'filmstrip.png'); if (copy(f, path.join(out, 'media', 'motion-pages', name, `${t.id}-filmstrip.png`))) md = md.replaceAll(`frames/${t.id}/filmstrip.png`, `media/motion-pages/${name}/${t.id}-filmstrip.png`); }
-      if (copy(path.join(dir, 'frames', 'scroll', 'filmstrip.png'), path.join(out, 'media', 'motion-pages', name, 'scroll-filmstrip.png'))) md = md.replaceAll('frames/scroll/filmstrip.png', `media/motion-pages/${name}/scroll-filmstrip.png`);
+      for (const t of mj.targets || []) { const f = path.join(dir, 'frames', String(t.id), 'filmstrip.png'); if (copy(f, path.join(out, 'media', 'motion-pages', name, `${t.id}-filmstrip.png`))) md = md.replaceAll(`frames/${t.id}/filmstrip.png`, `../media/motion-pages/${name}/${t.id}-filmstrip.png`); }
+      if (copy(path.join(dir, 'frames', 'scroll', 'filmstrip.png'), path.join(out, 'media', 'motion-pages', name, 'scroll-filmstrip.png'))) md = md.replaceAll('frames/scroll/filmstrip.png', `../media/motion-pages/${name}/scroll-filmstrip.png`);
       fs.mkdirSync(path.join(out, 'motion-pages'), { recursive: true }); fs.writeFileSync(path.join(out, 'motion-pages', `${name}.md`), BANNER + '\n\n' + sanitizeDoc(md));
       motionPages.push({ url: clean(e.url, 200), file: `motion-pages/${name}.md`, targets: e.targets | 0, kinds: (e.kinds || []).map((k) => clean(k, 30)) });
     }

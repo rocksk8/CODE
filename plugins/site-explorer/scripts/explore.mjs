@@ -75,8 +75,8 @@ if (!args.includes('--no-motion') && crawlOk) {
   };
   if (motionOk) addEntry(url, '(start)', '', motionDir);
   let pg = []; try { pg = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []; } catch {}
-  const startKey = (u) => { try { const x = new URL(u); x.hash = ''; return x.href.replace(/\/$/, ''); } catch { return u; } };
-  const extra = pg.filter((p) => p.status === 200 && !p.emptyPage && startKey(p.url) !== startKey(url) && !(entries[0] && startKey(p.url) === startKey(entries[0].url))).slice(0, nPages - 1);
+  const extra = pg.filter((p, i) => i > 0 && p.status === 200 && !p.emptyPage).slice(0, nPages - 1); // pages[0] is the start page after redirects (naked host -> www)
+  if (pg[0] && entries[0]) entries[0].url = pg[0].url;
   for (const p of extra) {
     const dest = path.join(motionRoot, '_pages', p.slug), t0 = Date.now();
     console.log(`   3D／動畫：${p.url}`);

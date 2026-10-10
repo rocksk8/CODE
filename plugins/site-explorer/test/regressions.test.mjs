@@ -158,6 +158,8 @@ test('explore captures 3D/motion for several pages (--motion-pages) and the hand
     assert.ok(idx.filter((p) => p.targets > 0).length >= 2, 'the animated pages were captured');
     const ho = path.join(out, 'handoff'); const files = fs.readdirSync(path.join(ho, 'motion-pages'));
     assert.ok(files.length >= 2, 'one motion document per extra page: ' + files); assert.match(fs.readFileSync(path.join(ho, 'SPEC.md'), 'utf8'), /其他頁面的 3D／動畫/);
-    const dash = fs.readFileSync(path.join(out, 'dashboard.html'), 'utf8'); assert.match(dash, /motionPages/);
+    for (const f of files) { const md = fs.readFileSync(path.join(ho, 'motion-pages', f), 'utf8'); for (const m of md.matchAll(/\((\.\.\/media\/[^)\s]+\.png)\)|(\.\.\/media\/[^\s`)]+\.png)/g)) assert.ok(fs.existsSync(path.join(ho, 'motion-pages', m[1] || m[2])), 'filmstrip path resolves from the nested document: ' + (m[1] || m[2])); assert.ok(!/(^|[^.\/])media\/motion-pages/.test(md), 'no un-prefixed media paths'); }
+    assert.equal(new Set(idx.map((p) => p.url)).size, idx.length, 'no page is captured twice');
+    const dash = fs.readFileSync(path.join(out, 'dashboard.html'), 'utf8'); assert.match(dash, /motionPages/); assert.match(dash, /動態與 3D 規格/, 'standalone dashboard carries each page\'s motion text inline');
   } finally { srv.close(); }
 });
