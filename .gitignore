@@ -1,0 +1,6 @@
+node_modules/
+site-report/
+motion-report/
+explore-out/
+dashboard.html
+.claude/worktrees/

@@ -1,0 +1,54 @@
+{
+  "global": {
+    "color": {
+      "background": {
+        "value": "#ffffff",
+        "type": "color"
+      },
+      "text": {
+        "value": "#ffffff",
+        "type": "color"
+      }
+    },
+    "fontFamilies": {
+      "heading": {
+        "value": "system-ui",
+        "type": "fontFamilies"
+      },
+      "body": {
+        "value": "system-ui",
+        "type": "fontFamilies"
+      }
+    },
+    "fontSizes": {
+      "h2": {
+        "value": "24",
+        "type": "fontSizes"
+      }
+    },
+    "fontWeights": {
+      "h2": {
+        "value": "700",
+        "type": "fontWeights"
+      }
+    },
+    "spacing": {
+      "1": {
+        "value": "19.92",
+        "type": "spacing"
+      },
+      "2": {
+        "value": "40",
+        "type": "spacing"
+      }
+    },
+    "borderRadius": {},
+    "boxShadow": {}
+  },
+  "$themes": [],
+  "$metadata": {
+    "tokenSetOrder": [
+      "global"
+    ]
+  }
+}

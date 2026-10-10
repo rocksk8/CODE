@@ -1,0 +1,14 @@
+{
+  "name": "rocksk8-code",
+  "owner": {
+    "name": "rocksk8"
+  },
+  "plugins": [
+    {
+      "name": "site-explorer",
+      "source": "./plugins/site-explorer",
+      "description": "Let Claude drive a browser to explore a website and capture its design, content, layout and editing method."
+    }
+  ],
+  "description": "Claude 自動探索網站（設計、內容、排版、3D 動畫、編輯方式）並串接 Claude Design 的套件集合"
+}

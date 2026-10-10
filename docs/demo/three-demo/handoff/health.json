@@ -1,0 +1,606 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-10T09:25:07.661Z",
+  "origin": "http://localhost:8793",
+  "pagesAnalyzed": 1,
+  "score": 75,
+  "grade": "C",
+  "categories": {
+    "indexability": {
+      "label": "索引與爬取",
+      "weight": 25,
+      "score": 71,
+      "issues": 3,
+      "passed": 2
+    },
+    "onpage": {
+      "label": "頁面 SEO",
+      "weight": 20,
+      "score": 53,
+      "issues": 5,
+      "passed": 0
+    },
+    "links": {
+      "label": "連結",
+      "weight": 10,
+      "score": 100,
+      "issues": 0,
+      "passed": 1
+    },
+    "performance": {
+      "label": "效能（實驗室數據）",
+      "weight": 15,
+      "score": 86,
+      "issues": 1,
+      "passed": 0
+    },
+    "mobile": {
+      "label": "行動版",
+      "weight": 10,
+      "score": 60,
+      "issues": 2,
+      "passed": 0
+    },
+    "security": {
+      "label": "安全與傳輸",
+      "weight": 10,
+      "score": 90,
+      "issues": 5,
+      "passed": 0
+    },
+    "structured": {
+      "label": "結構化資料與社群",
+      "weight": 5,
+      "score": 78,
+      "issues": 4,
+      "passed": 0
+    },
+    "ai": {
+      "label": "AI 爬蟲友善度",
+      "weight": 5,
+      "score": 100,
+      "issues": 1,
+      "passed": 1
+    }
+  },
+  "severity": {
+    "critical": 0,
+    "high": 1,
+    "medium": 9,
+    "low": 6,
+    "info": 5
+  },
+  "issues": [
+    {
+      "id": "viewport-missing",
+      "category": "mobile",
+      "severity": "high",
+      "title": "1 個頁面沒有 viewport meta",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "http://localhost:8793/"
+      ],
+      "impact": "手機會以桌機寬度渲染再縮小，Google 行動優先索引會判定為不友善。",
+      "fix": "加入 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">。"
+    },
+    {
+      "id": "sitemap-missing",
+      "category": "indexability",
+      "severity": "medium",
+      "title": "找不到 sitemap.xml",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [
+        "http://localhost:8793/sitemap.xml → 404",
+        "http://localhost:8793/sitemap_index.xml → 404"
+      ],
+      "impact": "搜尋引擎較難發現深層或新頁面，收錄速度變慢。",
+      "fix": "產生 sitemap.xml，並在 robots.txt 加上 `Sitemap:` 行，同時提交到 Google Search Console 與 Bing Webmaster。"
+    },
+    {
+      "id": "canonical-missing",
+      "category": "indexability",
+      "severity": "medium",
+      "title": "1 個頁面沒有 canonical",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "http://localhost:8793/"
+      ],
+      "impact": "網址帶參數、大小寫、結尾斜線等變體可能被視為重複內容。",
+      "fix": "每頁加上指向自己最終網址的 <link rel=\"canonical\">。"
+    },
+    {
+      "id": "description-missing",
+      "category": "onpage",
+      "severity": "medium",
+      "title": "1 個頁面沒有 meta description",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "http://localhost:8793/"
+      ],
+      "impact": "搜尋結果的摘要由搜尋引擎隨機擷取，點擊率通常較低。",
+      "fix": "撰寫 70–160 字元、含行動呼籲的獨特描述。"
+    },
+    {
+      "id": "h1-missing",
+      "category": "onpage",
+      "severity": "medium",
+      "title": "1 個頁面沒有 h1",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "http://localhost:8793/"
+      ],
+      "impact": "h1 是頁面主題的最強結構訊號，也是螢幕閱讀器的導覽點。",
+      "fix": "每頁一個描述主題的 h1。"
+    },
+    {
+      "id": "thin-content",
+      "category": "onpage",
+      "severity": "medium",
+      "title": "1 個頁面文字內容偏少（< 150 字）",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "7 字：http://localhost:8793/"
+      ],
+      "impact": "內容稀薄的頁面較難排名，大量出現會拉低整站品質評價。",
+      "fix": "補充實質內容，或合併、noindex 價值低的頁面。"
+    },
+    {
+      "id": "lang-missing",
+      "category": "onpage",
+      "severity": "medium",
+      "title": "1 個頁面的 <html> 沒有 lang",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "http://localhost:8793/"
+      ],
+      "impact": "影響語言判斷、翻譯提示與螢幕閱讀器發音。",
+      "fix": "例如 <html lang=\"zh-Hant-TW\">。"
+    },
+    {
+      "id": "cls",
+      "category": "performance",
+      "severity": "medium",
+      "title": "1 個頁面版面位移（CLS）偏高（> 0.1）",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "CLS 0.206：http://localhost:8793/"
+      ],
+      "impact": "內容跳動讓使用者誤點，也是 Core Web Vitals 指標。",
+      "fix": "為圖片／廣告／iframe 預留寬高，避免在內容上方動態插入元素。"
+    },
+    {
+      "id": "mobile-overflow",
+      "category": "mobile",
+      "severity": "medium",
+      "title": "1 個頁面在手機寬度出現橫向捲動",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "http://localhost:8793/"
+      ],
+      "impact": "內容超出螢幕，使用者需要左右滑動。",
+      "fix": "檢查固定寬度元素；容器使用 max-width:100%、圖片 max-width:100%。"
+    },
+    {
+      "id": "jsonld-none",
+      "category": "structured",
+      "severity": "medium",
+      "title": "全站沒有結構化資料（JSON-LD／microdata）",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [],
+      "impact": "搜尋引擎與 AI 較難確定頁面實體（組織、商品、文章），也失去豐富搜尋結果資格。",
+      "fix": "至少加入 Organization／WebSite；內容頁加 Article，商品頁加 Product，並用 Rich Results Test 驗證。"
+    },
+    {
+      "id": "robots-missing",
+      "category": "indexability",
+      "severity": "low",
+      "title": "沒有 robots.txt",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [],
+      "impact": "爬蟲沒有明確的抓取指引，也無法在此宣告 sitemap。",
+      "fix": "在網站根目錄建立 /robots.txt，至少包含 `User-agent: *` 與 `Sitemap: https://你的網域/sitemap.xml`。"
+    },
+    {
+      "id": "title-short",
+      "category": "onpage",
+      "severity": "low",
+      "title": "1 個頁面標題過短（< 20）",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "Three demo"
+      ],
+      "impact": "",
+      "fix": "加入主要關鍵字與品牌，描述頁面實際內容。"
+    },
+    {
+      "id": "nosniff",
+      "category": "security",
+      "severity": "low",
+      "title": "缺少 X-Content-Type-Options: nosniff",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [],
+      "impact": "",
+      "fix": "加入此標頭以防止 MIME 嗅探。"
+    },
+    {
+      "id": "clickjack",
+      "category": "security",
+      "severity": "low",
+      "title": "沒有防止被嵌入 iframe 的設定（X-Frame-Options／frame-ancestors）",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [],
+      "impact": "",
+      "fix": "加入 `X-Frame-Options: SAMEORIGIN` 或 CSP frame-ancestors。"
+    },
+    {
+      "id": "og-missing",
+      "category": "structured",
+      "severity": "low",
+      "title": "1 個頁面缺少 Open Graph 標題或圖片",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "http://localhost:8793/"
+      ],
+      "impact": "分享到 Facebook／LINE／Slack 時沒有預覽卡片。",
+      "fix": "加入 og:title、og:description、og:image（建議 1200×630）、og:url。"
+    },
+    {
+      "id": "favicon",
+      "category": "structured",
+      "severity": "low",
+      "title": "沒有 favicon",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [],
+      "impact": "搜尋結果行動版會顯示 favicon，缺少時顯示預設圖示。",
+      "fix": "加入 <link rel=\"icon\">（至少 48×48 的倍數）。"
+    },
+    {
+      "id": "csp",
+      "category": "security",
+      "severity": "info",
+      "title": "沒有 Content-Security-Policy",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [],
+      "impact": "",
+      "fix": "逐步導入 CSP，先以 Report-Only 觀察。"
+    },
+    {
+      "id": "referrer-policy",
+      "category": "security",
+      "severity": "info",
+      "title": "沒有 Referrer-Policy",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [],
+      "impact": "",
+      "fix": "建議 `strict-origin-when-cross-origin`。"
+    },
+    {
+      "id": "version-disclosure",
+      "category": "security",
+      "severity": "info",
+      "title": "回應標頭洩漏伺服器版本資訊",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [
+        "SimpleHTTP/0.6 Python/3.13.16"
+      ],
+      "impact": "",
+      "fix": "隱藏 Server／X-Powered-By 的版本號。"
+    },
+    {
+      "id": "twitter-card",
+      "category": "structured",
+      "severity": "info",
+      "title": "沒有 Twitter／X Card 標籤",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [],
+      "impact": "",
+      "fix": "加入 twitter:card=summary_large_image。"
+    },
+    {
+      "id": "llms-txt",
+      "category": "ai",
+      "severity": "info",
+      "title": "沒有 /llms.txt",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [],
+      "impact": "llms.txt 是新興約定（非標準），用來給 AI 提供網站內容導覽；目前各家支援程度不一。",
+      "fix": "可選：提供 /llms.txt 摘要重點頁面與說明。"
+    }
+  ],
+  "passed": [
+    {
+      "category": "indexability",
+      "title": "主要內容在原始 HTML 中即可讀取（不需執行 JavaScript）"
+    },
+    {
+      "category": "indexability",
+      "title": "不存在的網址正確回應 404／410"
+    },
+    {
+      "category": "links",
+      "title": "已檢查 1 個內部連結，沒有壞連結"
+    },
+    {
+      "category": "ai",
+      "title": "未在 robots.txt 擋任何已知 AI 爬蟲"
+    }
+  ],
+  "facts": {
+    "robots": {
+      "status": 404,
+      "exists": false,
+      "sitemaps": [],
+      "issues": [],
+      "bytes": 0,
+      "aiBots": [
+        {
+          "bot": "GPTBot",
+          "who": "OpenAI（訓練）",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "OAI-SearchBot",
+          "who": "OpenAI（搜尋）",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "ChatGPT-User",
+          "who": "OpenAI（使用者代為瀏覽）",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "ClaudeBot",
+          "who": "Anthropic（訓練）",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "Claude-User",
+          "who": "Anthropic（使用者代為瀏覽）",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "Claude-SearchBot",
+          "who": "Anthropic（搜尋）",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "anthropic-ai",
+          "who": "Anthropic（舊）",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "Google-Extended",
+          "who": "Google（Gemini 訓練）",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "PerplexityBot",
+          "who": "Perplexity",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "Applebot-Extended",
+          "who": "Apple（AI 訓練）",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "CCBot",
+          "who": "Common Crawl",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "Bytespider",
+          "who": "ByteDance",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "Amazonbot",
+          "who": "Amazon",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "Meta-ExternalAgent",
+          "who": "Meta",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "cohere-ai",
+          "who": "Cohere",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "Diffbot",
+          "who": "Diffbot",
+          "allowed": true,
+          "rule": null
+        }
+      ],
+      "searchBots": [
+        {
+          "bot": "Googlebot",
+          "who": "Google 搜尋",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "Bingbot",
+          "who": "Bing 搜尋",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "DuckDuckBot",
+          "who": "DuckDuckGo",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "Baiduspider",
+          "who": "百度",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "YandexBot",
+          "who": "Yandex",
+          "allowed": true,
+          "rule": null
+        },
+        {
+          "bot": "Slurp",
+          "who": "Yahoo",
+          "allowed": true,
+          "rule": null
+        }
+      ],
+      "aiBlockedCount": 0
+    },
+    "sitemap": {
+      "found": [],
+      "children": [],
+      "urlCount": 0,
+      "withLastmod": 0,
+      "errors": [
+        "http://localhost:8793/sitemap.xml → 404",
+        "http://localhost:8793/sitemap_index.xml → 404"
+      ]
+    },
+    "soft404": {
+      "status": 404
+    },
+    "performance": {
+      "ttfbMs": 1,
+      "lcpMs": 92,
+      "cls": 0.206,
+      "totalBytes": 2137602,
+      "requests": 5,
+      "domNodes": 15,
+      "thirdParty": 0,
+      "note": "實驗室數據：無頭瀏覽器、無節流、單次載入；僅供相對比較，真實使用者數據（CrUX）請看 Search Console／PageSpeed Insights。"
+    },
+    "security": {
+      "https": false,
+      "headers": {
+        "strict-transport-security": null,
+        "content-security-policy": null,
+        "x-content-type-options": null,
+        "x-frame-options": null,
+        "referrer-policy": null,
+        "permissions-policy": null,
+        "server": "SimpleHTTP/0.6 Python/3.13.16",
+        "x-powered-by": null
+      }
+    },
+    "llmsTxt": false
+  },
+  "links": {
+    "internalChecked": 0,
+    "externalChecked": 0,
+    "broken": [],
+    "redirects": 0,
+    "externalBroken": [],
+    "unreachable": 0
+  },
+  "pages": [
+    {
+      "url": "http://localhost:8793/",
+      "status": 200,
+      "title": "Three demo",
+      "titleLen": 10,
+      "descLen": 0,
+      "h1": 0,
+      "words": 7,
+      "rawWords": 7,
+      "canonical": null,
+      "indexable": true,
+      "ttfbMs": 1,
+      "lcpMs": 92,
+      "cls": 0.206,
+      "bytes": 2137602,
+      "inlinks": 0
+    }
+  ],
+  "notes": [
+    "僅分析本次爬取的頁面（抽樣），不代表全站；請以 Google Search Console 的涵蓋範圍與 Core Web Vitals 真實數據為準。",
+    "效能為實驗室數據（無頭瀏覽器、無節流）。",
+    "檢查只做讀取：未登入、未送出表單；額外請求僅限 robots.txt、sitemap、連結狀態（HEAD）與一次 404 探測，並限制併發。"
+  ]
+}
