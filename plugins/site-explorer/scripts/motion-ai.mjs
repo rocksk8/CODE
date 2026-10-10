@@ -191,7 +191,9 @@ function fs_writeFile(f, b) { fs.writeFileSync(f, b); }
 
 /** motion.md — the AI-facing document for everything that moves. */
 export function renderMotionMd(report0) {
-  const report = cleanDeep(report0, 'motion', [], { max: 800, skip: ['ai', 'three'] }); // site-derived strings only; our own generated text (ai) is already clean
+  // site-derived strings only; our own generated text (target.ai) and the top-level three summary are handled separately
+  const report = cleanDeep({ ...report0, three: null }, 'motion', [], { max: 800, skip: ['ai'] });
+  report.three = report0.three;
   report.targets.forEach((t, i) => { t.ai = report0.targets[i].ai; });
   const L = [`# 動態與 3D 規格（AI 可讀版）`, '', `來源：${report.url}　擷取時間：${report.capturedAt}`, '',
     '> AI 無法直接觀看 3D、影片或動畫。本文件把它們翻譯成：**文字描述 + 量化數據 + 影格序列圖（filmstrip，單張圖片）**。判讀時以文字與數據為準，圖片用來交叉驗證。', '', BANNER, ''];
