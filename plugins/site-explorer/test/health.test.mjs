@@ -95,3 +95,39 @@ test('health.md is AI-readable and the dashboard health tab works', async (t) =>
   for (const v of ['pages', 'crawl', 'sitemap', 'perf', 'sec']) { await p.click(`[data-view=${v}]`); }
   assert.match(await p.locator('#hv').innerText(), /TLS|HTTPS|傳輸/); assert.deepEqual(errs, []); await b.close();
 });
+
+test('verdict, broken images, page errors-ready and chains found only by the link check', (t) => {
+  if (skip(t)) return;
+  assert.equal(H.verdict.status, 'conditional', 'high issues but no critical → conditional pass');
+  assert.ok(H.verdict.blocking.length > 0 && H.verdict.blocking.every((b) => ['critical', 'high'].includes(b.severity)));
+  assert.ok(ids().has('img-broken'), 'the planted missing images (/x.png) are reported as broken');
+  const chain = H.issues.find((i) => i.id === 'redirect-chain');
+  assert.ok(chain.examples.some((e) => /chain1/.test(e) && /chain2/.test(e)), 'the 302 → 301 chain starting at /chain1 is shown in full: ' + JSON.stringify(chain.examples));
+  assert.match(fs.readFileSync(path.join(siteDir, 'health.md'), 'utf8'), /驗收結論：⚠️ 有條件通過/);
+});
+
+test('--fail-on gives a CI exit code; a second run reports what changed and keeps the previous result', async (t) => {
+  if (skip(t)) return;
+  let r = await run('health-check.mjs', ['--site', siteDir, '--no-link-check', '--fail-on', 'high']);
+  assert.equal(r.status, 4, r.out);
+  r = await run('health-check.mjs', ['--site', siteDir, '--no-link-check', '--fail-on', 'bogus']);
+  assert.equal(r.status, 1, r.out);
+  const h = JSON.parse(fs.readFileSync(path.join(siteDir, 'health.json'), 'utf8'));
+  assert.ok(h.changes && h.changes.prevScore != null, 'compared with the previous run');
+  assert.ok(h.changes.fixed.includes('broken-internal') || h.changes.persisting.length > 0);
+  assert.ok(fs.existsSync(path.join(siteDir, 'health.prev.json')));
+  assert.match(fs.readFileSync(path.join(siteDir, 'health.md'), 'utf8'), /與上次/);
+});
+
+test('an unreachable site is a critical finding, not a quiet improvement', async (t) => {
+  if (skip(t)) return;
+  const dead = http.createServer(); const p = await listen(dead); dead.close(); // port now refuses connections
+  const d = path.join(tmp, 'unreach'); fs.mkdirSync(path.join(d, 'pages', 'home'), { recursive: true });
+  const seo = { title: 'T', description: '', h1Count: 1, words: 200, lang: 'en', viewport: 'x', images: { total: 0, missingAlt: 0 }, links: { generic: 0, empty: 0, externalNoRel: 0 }, structuredData: { jsonld: [] }, social: {}, hreflang: [], favicons: [] };
+  fs.writeFileSync(path.join(d, 'site.json'), JSON.stringify({ startUrl: `http://127.0.0.1:${p}/`, finalOrigin: `http://127.0.0.1:${p}`, pages: [{ slug: 'home', url: `http://127.0.0.1:${p}/`, status: 200 }] }));
+  fs.writeFileSync(path.join(d, 'pages', 'home', 'page.json'), JSON.stringify({ title: 'T', seo, content: { links: [] } }));
+  const r = await run('health-check.mjs', ['--site', d, '--no-link-check']); assert.equal(r.status, 0, r.out);
+  const h = JSON.parse(fs.readFileSync(path.join(d, 'health.json'), 'utf8'));
+  assert.ok(h.issues.some((i) => i.id === 'site-unreachable' && i.severity === 'critical'));
+  assert.equal(h.verdict.status, 'fail'); assert.ok(h.score <= 55);
+});

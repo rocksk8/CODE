@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 /** Everything the handoff builder generates. Anything else in the folder belongs to the user. */
-export const HANDOFF_GENERATED = ['tokens', 'media', 'README.md', 'CLAUDE.md', 'ai-brief.md', 'SPEC.md', 'spec.json', 'handoff.json', 'health.md', 'health.json', 'motion.md', 'motion.json', 'motion-pages'];
+export const HANDOFF_GENERATED = ['tokens', 'media', 'README.md', 'CLAUDE.md', 'ai-brief.md', 'SPEC.md', 'spec.json', 'handoff.json', 'health.md', 'health.json', 'inventory.csv', 'motion.md', 'motion.json', 'motion-pages'];
 /** The living record is the user's: it is preserved across regeneration. */
 export const HANDOFF_PRESERVED = ['DECISIONS.md'];
 

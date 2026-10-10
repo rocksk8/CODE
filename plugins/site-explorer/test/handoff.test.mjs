@@ -98,3 +98,12 @@ test('3D and video arrive as text + numbers + single-image filmstrips, with vali
   assert.equal(j.motion.targets.length, 2); assert.ok(j.motion.targets.every((x) => x.filmstrip && x.ai.description.length >= 3));
   assert.ok(fs.readdirSync(path.join(H2, 'media', 'motion')).length >= 3);
 });
+
+test('inventory.csv lists every page for the redesign, opens in a spreadsheet and cannot run formulas', (t) => {
+  if (skip(t)) return;
+  const c = read(H1, 'inventory.csv');
+  assert.ok(c.startsWith('﻿'), 'BOM so Excel reads Chinese correctly');
+  const lines = c.trim().split('\n'); assert.match(lines[0], /網址.*標題.*改版時請保留/);
+  assert.ok(lines.length >= 2 && lines[1].includes(`http://127.0.0.1:${port}/`), lines[1]);
+  assert.ok(!/(^|,)"[=+\-@]/m.test(lines.slice(1).join('\n')), 'no cell starts with a formula character');
+});
