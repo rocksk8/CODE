@@ -163,3 +163,36 @@ test('explore captures 3D/motion for several pages (--motion-pages) and the hand
     const dash = fs.readFileSync(path.join(out, 'dashboard.html'), 'utf8'); assert.match(dash, /motionPages/); assert.match(dash, /動態與 3D 規格/, 'standalone dashboard carries each page\'s motion text inline');
   } finally { srv.close(); }
 });
+
+test('a deep link whose page shows no links still crawls the rest of the site (sitemap + home page)', async (t) => {
+  if (skip(t)) return;
+  let port = 0;
+  const srv = http.createServer((q, r) => {
+    const page = (title, body = '') => { r.setHeader('content-type', 'text/html'); r.end(`<!doctype html><title>${title}</title><body style="font:16px system-ui"><h1>${title}</h1><p>${'Words words words. '.repeat(15)}</p>${body}</body>`); };
+    if (q.url === '/sitemap.xml') { r.setHeader('content-type', 'application/xml'); return r.end(`<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>http://127.0.0.1:${port}/other/z</loc></url><url><loc>http://127.0.0.1:${port}/deep/a</loc></url><url><loc>http://127.0.0.1:${port}/deep/b</loc></url></urlset>`); }
+    if (q.url === '/deep/start') return page('Deep start', '<canvas width=300 height=200></canvas>'); // no links at all
+    if (q.url === '/') return page('Home');
+    if (q.url.startsWith('/deep/') || q.url.startsWith('/other/')) return page('Page ' + q.url);
+    r.statusCode = 404; r.end('nope');
+  }).listen(0); await new Promise((res) => srv.once('listening', res)); port = srv.address().port;
+  try {
+    const out = path.join(tmp, 'deep'); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/deep/start`, '--max-pages', '4', '--wait', '1000', '--no-screenshots', '--out', out]);
+    assert.equal(r.status, 0, r.out); assert.match(r.out, /找到 \d+ 個候選頁面/);
+    const site = JSON.parse(fs.readFileSync(path.join(out, `127.0.0.1_${port}`, 'site.json'), 'utf8')); const urls = site.pages.map((p) => new URL(p.url).pathname);
+    assert.equal(urls[0], '/deep/start'); assert.ok(site.pages.length >= 4, urls.join(','));
+    assert.ok(urls.indexOf('/deep/a') > 0 && urls.indexOf('/deep/b') > 0, 'pages from the same section come first: ' + urls.join(','));
+  } finally { srv.close(); }
+});
+
+test('several URLs on the command line are all crawled, even when no page links to the others', async (t) => {
+  if (skip(t)) return;
+  const { findUrls } = await import('../scripts/args.mjs');
+  assert.deepEqual(findUrls(['--out', './o', 'example.com/a', '--wait', '5', 'https://example.com/b', 'example.com/a']), ['https://example.com/a', 'https://example.com/b']);
+  const srv = http.createServer((q, r) => { r.setHeader('content-type', 'text/html'); r.end(`<!doctype html><title>T ${q.url}</title><body><h1>Page ${q.url}</h1><p>${'Some words here. '.repeat(15)}</p><canvas></canvas></body>`); }).listen(0);
+  await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  try {
+    const out = path.join(tmp, 'multi'); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/start`, `http://127.0.0.1:${port}/hidden-1`, `http://127.0.0.1:${port}/hidden-2`, '--max-pages', '3', '--wait', '1000', '--no-screenshots', '--out', out]);
+    assert.equal(r.status, 0, r.out); const site = JSON.parse(fs.readFileSync(path.join(out, `127.0.0.1_${port}`, 'site.json'), 'utf8'));
+    assert.deepEqual(site.pages.map((p) => new URL(p.url).pathname).sort(), ['/hidden-1', '/hidden-2', '/start']);
+  } finally { srv.close(); }
+});
