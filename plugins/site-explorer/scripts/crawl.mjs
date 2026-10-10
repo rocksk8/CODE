@@ -163,7 +163,23 @@ function extractInPage() {
     meta: { description: meta('description'), generator: meta('generator'), ogTitle: meta('og:title'), ogImage: meta('og:image'), themeColor: meta('theme-color'), viewport: meta('viewport'), canonical: document.querySelector('link[rel=canonical]')?.href },
     content: {
       headings: [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map((h) => ({ level: Number(h.tagName[1]), text: text(h).slice(0, 200) })).filter((h) => h.text),
-      paragraphs: [...document.querySelectorAll('main p, article p, body p')].map(text).filter((t) => t.length > 20).slice(0, 60),
+      paragraphs: (() => {
+        const ps = [...document.querySelectorAll('main p, article p, body p')].map(text).filter((t) => t.length > 20).slice(0, 60);
+        if (ps.length >= 3) return ps;
+        // Many JS-built sites render copy into <div>/<span>/<li> and never use <p>: fall back to elements that own their text.
+        const own = (el) => [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ').replace(/\s+/g, ' ').trim();
+        const seenT = new Set(ps), extra = [];
+        for (const el of document.querySelectorAll('body div, body span, body li, body td, body a, body button, body figcaption, body blockquote, body dd')) {
+          if (extra.length + ps.length >= 60) break;
+          if (/^(SCRIPT|STYLE|NOSCRIPT)$/.test(el.tagName)) continue;
+          const t = own(el); if (t.length <= 20 || seenT.has(t)) continue;
+          const r = el.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0) continue;
+          seenT.add(t); extra.push(t);
+        }
+        return [...ps, ...extra];
+      })(),
+      bodyText: (document.body?.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 4000),
+      wordCount: (() => { const t = (document.body?.innerText || ''); return (t.match(/[A-Za-z0-9À-ɏ']+/g) || []).length + Math.round((t.match(/[㐀-鿿぀-ヿ가-힯]/g) || []).length / 1.8); })(),
       links: [...document.querySelectorAll('a[href]')].map((a) => ({ text: text(a).slice(0, 80), href: abs(a.getAttribute('href')), area: a.closest('nav') ? 'nav' : a.closest('footer') ? 'footer' : a.closest('header') ? 'header' : 'body' })).slice(0, 300),
       images: [...document.images].map((i) => ({ src: i.currentSrc || i.src, alt: i.alt, w: i.naturalWidth, h: i.naturalHeight })).slice(0, 100),
       forms: [...document.forms].map((f) => ({ action: abs(f.getAttribute('action') || ''), method: f.method, fields: [...f.elements].filter((e) => e.name).map((e) => ({ name: e.name, type: e.type, required: e.required })) })),
@@ -227,11 +243,11 @@ async function detect(pages, headers, fetchStatus) {
 async function dismissConsent(page) {
   try {
     return await page.evaluate(() => {
-      const box = [...document.querySelectorAll('[id*=cookie i],[class*=cookie i],[id*=consent i],[class*=consent i],[id*=onetrust i]')].find((e) => e.getBoundingClientRect().height > 40);
+      const box = [...document.querySelectorAll('[id*=cookie i],[class*=cookie i],[id*=consent i],[class*=consent i],[id*=onetrust i],[id*=didomi i],[class*=didomi i],[id*=tarteaucitron i],[id*=axeptio i],[class*=axeptio i],[id*=cookiebot i],[id*=usercentrics i],[id*=trustarc i],[id*=osano i],[id*=cmp i],[class*=cmp- i],[role=dialog][aria-label*=cookie i],[role=dialog][aria-label*=cookies i]')].find((e) => e.getBoundingClientRect().height > 40);
       if (!box) return null;
       const btns = [...box.querySelectorAll('button, a[role=button], [role=button]')];
       const pick = (re) => btns.find((b) => re.test((b.innerText || b.getAttribute('aria-label') || '').trim()));
-      const b = pick(/reject|decline|necessary only|refuse|deny|拒絕|僅必要|只接受必要/i) || pick(/accept|agree|got it|allow|ok\b|同意|接受|我知道/i);
+      const b = pick(/reject|decline|necessary only|refuse|deny|continue without|refuser|continuer sans|tout refuser|拒絕|僅必要|只接受必要/i) || pick(/accept|agree|got it|allow|ok\b|accepter|tout accepter|j'accepte|同意|接受|我知道/i);
       if (!b) return null;
       b.click();
       return (b.innerText || '').trim().slice(0, 30);
@@ -258,6 +274,20 @@ async function openPage(page, url) {
   await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
   return resp;
 }
+
+// A 200 response is not "the content arrived": SPAs and hydrating sites paint text seconds after `load`. Wait until the
+// visible text stops growing (bounded), instead of extracting an empty shell.
+async function settleContent(page, { maxMs = 10000, quietMs = 1200 } = {}) {
+  const t0 = Date.now(); let last = -1, lastChange = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    const len = await page.evaluate(() => (document.body?.innerText || '').length).catch(() => last);
+    if (len !== last) { last = len; lastChange = Date.now(); }
+    else if (len > 0 && Date.now() - lastChange >= quietMs) break;
+    await page.waitForTimeout(300);
+  }
+  return last;
+}
+const THIN_WORDS = 40; // fewer visible words than this on a 200 page = probably captured an empty shell, consent wall or challenge
 
 // What a crawler that does NOT run JavaScript would receive for this URL.
 async function fetchRaw(u) {
@@ -335,8 +365,17 @@ while (queue.length && pages.length < maxPages) {
     // trigger lazy content
     // bounded: infinite-scroll pages grow forever while you scroll
     await page.evaluate(async () => { const t0 = Date.now(); for (let y = 0, n = 0; y < document.body.scrollHeight && n < 40 && Date.now() - t0 < 4000; y += 600, n++) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 80)); } scrollTo(0, 0); });
-    await page.waitForTimeout(400);
-    const data = await page.evaluate(extractInPage);
+    await settleContent(page);
+    let data = await page.evaluate(extractInPage);
+    if (data.content.wordCount < THIN_WORDS && (resp?.status() ?? 200) < 400) { // thin: try once more with consent handling + a longer wait
+      const again = await dismissConsent(page); if (again && !consentAction) consentAction = again;
+      await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+      await page.evaluate(async () => { for (let y = 0; y < document.body.scrollHeight && y < 8000; y += 500) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 120)); } scrollTo(0, 0); }).catch(() => {});
+      await settleContent(page, { maxMs: 15000, quietMs: 2000 });
+      const retry = await page.evaluate(extractInPage);
+      if (retry.content.wordCount > data.content.wordCount) data = retry;
+    }
+    if (data.content.wordCount < THIN_WORDS) data.thin = { words: data.content.wordCount, hint: '頁面可見文字極少：可能是需要互動才載入的內容、Cookie／同意牆、防機器人挑戰頁，或 JavaScript 沒有成功執行。' };
     data.designer = await page.evaluate(extractDesignerInPage).catch((e) => { console.log('   (designer data skipped:', e.message.split('\n')[0] + ')'); return null; });
     data.status = resp?.status();
     // --- SEO / indexability signals ---
@@ -459,12 +498,12 @@ const designer = {
 const toolVersion = (() => { try { return JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version; } catch { return null; } })();
 const site = {
   schemaVersion: 3, tool: { name: 'site-explorer', version: toolVersion }, userAgent: UA, requestedUrl: startUrl, finalOrigin: origin,
-  startUrl, crawledAt: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), robotsDisallow: robotsList(), robotsTxt: { status: robotsInfo.status, text: (robotsInfo.text || '').slice(0, 20000) }, consentAction, redirects: redirectLog, nonHtmlSkipped: nonHtmlLog, blockedPages: pages.filter((p) => p.blocked).map((p) => ({ url: p.url, reason: p.blocked })), skippedByRobots,
+  startUrl, crawledAt: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), robotsDisallow: robotsList(), robotsTxt: { status: robotsInfo.status, text: (robotsInfo.text || '').slice(0, 20000) }, consentAction, redirects: redirectLog, nonHtmlSkipped: nonHtmlLog, blockedPages: pages.filter((p) => p.blocked).map((p) => ({ url: p.url, reason: p.blocked })), thinPages: pages.filter((p) => p.thin).map((p) => ({ url: p.url, words: p.thin.words })), skippedByRobots,
   server: { server: headers.main?.server, poweredBy: headers.main?.['x-powered-by'], generator: pages[0]?.meta.generator },
   editing: { platforms, contenteditablePages: pages.filter((p) => p.editing.contenteditable).map((p) => p.url), loginOrAdminLinks: [...new Map(pages.flatMap((p) => p.editing.editLinks).map((l) => [l.href, l])).values()].slice(0, 15) },
   design: { textColors: merge('textColors'), backgrounds: merge('backgrounds'), fontFamilies: merge('fontFamilies', 6), fontSizes: merge('fontSizes'), radii: merge('radii', 6), shadows: merge('shadows', 5), spacing: merge('spacing'), cssVars: pages[0]?.design.cssVars || {}, webFonts: [...new Set(pages.flatMap((p) => p.design.webFonts))], typography: pages[0]?.design.typography, breakpoints: (() => { const m = {}; for (const p of pages) for (const b of p.breakpoints) m[b.px] = (m[b.px] || 0) + b.uses; return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([px, uses]) => ({ px: Number(px), uses })); })(), darkMode: pages[0]?.darkMode, buttonHover: pages[0]?.buttonHover },
   components: pages[0]?.components, assets, designer,
-  pages: pages.map((p) => ({ slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
+  pages: pages.map((p) => ({ slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, words: p.content.wordCount, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
 };
 fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
 
@@ -473,6 +512,7 @@ const list = (a) => a.map((x) => `\`${x.value}\` (${x.count})`).join(', ') || '�
 const md = [
   `# 網站探索報告：${startUrl}`, `爬取 ${pages.length} 頁，耗時 ${site.seconds}s，時間 ${site.crawledAt}`, '',
   ...(site.blockedPages.length ? ['> ⚠️ **部分頁面被擋住**（' + site.blockedPages.map((b) => b.reason).join('、') + '）。結果可能不完整；可降低頻率、改用 Playwright MCP 互動，或確認你有權存取。', ''] : []),
+  ...(site.thinPages.length ? ['> ⚠️ **' + site.thinPages.length + ' 頁幾乎沒有抓到文字內容**（可見文字少於 ' + THIN_WORDS + ' 字）：' + site.thinPages.map((t) => t.url + '（' + t.words + ' 字）').join('、') + '。HTTP 狀態雖正常，但內容可能由 JavaScript 延後載入、被 Cookie／同意牆或防機器人頁面擋住；請查看截圖，必要時改用 Playwright MCP 互動瀏覽或加長等待。', ''] : []),
   ...(site.consentAction ? ['- 已自動處理 Cookie 橫幅：「' + site.consentAction + '」', ''] : []),
   '## 編輯方式',
   platforms.length ? platforms.map((p) => `- **${p.platform}**：${p.howToEdit}${Object.keys(p.adminProbes).length ? `（後台探測：${Object.entries(p.adminProbes).map(([k, v]) => `${k}→${v}`).join(', ')}）` : ''}`).join('\n') : '- 未偵測到已知平台特徵（可能為自訂程式碼或靜態站）',
