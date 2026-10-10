@@ -168,7 +168,7 @@ export function extractDesignerInPage() {
   const navLabels = [...document.querySelectorAll('nav a, header a')].map((a) => (a.innerText || '').trim()).filter((t) => t && t.length < 30);
 
   return {
-    viewport: { w: vw, h: vh }, elements: picked, blocks,
+    viewport: { w: vw, h: vh }, elements: picked, blocks, blocksTotal: blocksEls.length,
     contrast: { checked, failing: [...issues.values()].sort((a, b) => b.count - a.count).slice(0, 15) },
     motion: { transitions: top(tm, 8).map(([k, count]) => ({ token: k, count })), animations: top(an, 6).map(([k, count]) => ({ token: k, count })) },
     grid: { containerWidths: top(widths, 4).map(([w, count]) => ({ px: +w, count })), columns: top(cols, 5).map(([n, count]) => ({ columns: +n, count })), gaps: top(gaps, 5).map(([v, count]) => ({ value: v, count })) },

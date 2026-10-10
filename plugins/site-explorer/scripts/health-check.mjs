@@ -9,6 +9,7 @@ import tls from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import { fetchRobots, isAllowed, groupFor, AI_BOTS, SEARCH_BOTS } from './robots.mjs';
 import { intOpt } from './args.mjs';
+import { cleanDeep, clean, BANNER } from './untrusted.mjs';
 
 const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
 const SEV = { critical: 40, high: 20, medium: 8, low: 3, info: 0 };
@@ -49,12 +50,13 @@ function parseSitemap(xml) {
 
 export async function runHealth(siteDir, opts = {}) {
   const site = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8'));
-  const pages = site.pages.map((p) => { const f = path.join(siteDir, 'pages', p.slug, 'page.json'); if (!fs.existsSync(f)) return null; const j = JSON.parse(fs.readFileSync(f, 'utf8')); return { slug: p.slug, url: p.url, status: p.status, blocked: p.blocked, seo: j.seo, links: j.content?.links || [], title: j.title }; }).filter((p) => p && p.seo);
+  const injection = []; // site text that looks like instructions aimed at an AI
+  const pages = site.pages.map((p) => { const f = path.join(siteDir, 'pages', p.slug, 'page.json'); if (!fs.existsSync(f)) return null; const j = JSON.parse(fs.readFileSync(f, 'utf8')); return { slug: p.slug, url: p.url, status: p.status, blocked: p.blocked, /* perf = numbers + resource URLs; URLs only reach the report via add(), which sanitises */ seo: { ...cleanDeep({ ...j.seo, perf: undefined }, `page[${p.slug}].seo`, injection, { max: 400 }), perf: j.seo?.perf }, links: cleanDeep(j.content?.links || [], `page[${p.slug}].links`, injection), title: clean(j.title) }; }).filter((p) => p && p.seo);
   const origin = new URL(site.finalOrigin || site.startUrl).origin, host = new URL(origin).hostname, https = origin.startsWith('https:');
   const live = pages.filter((p) => !p.status || p.status < 400); // error pages are reported once (status-errors), not scored as content
   const total = live.length || 1;
   const issues = [], passed = [], facts = {};
-  const add = (category, severity, id, title, { detail = '', affected = 1, examples = [], impact = '', fix = '', scope = 'site' } = {}) => issues.push({ id, category, severity, title, detail, affected, total: scope === 'site' ? 1 : total, scope, examples: examples.slice(0, 6), impact, fix });
+  const add = (category, severity, id, title, { detail = '', affected = 1, examples = [], impact = '', fix = '', scope = 'site' } = {}) => issues.push({ id, category, severity, title, detail: clean(detail, 300), affected, total: scope === 'site' ? 1 : total, scope, examples: examples.slice(0, 6).map((e) => clean(e, 300)), impact, fix }); // examples / detail echo site data: sanitise
   const ok = (category, title) => passed.push({ category, title });
   const perPage = (pred) => live.filter(pred);
   const urls = (arr) => arr.map((p) => p.url);
@@ -285,6 +287,8 @@ export async function runHealth(siteDir, opts = {}) {
   if (gap.length) add('ai', 'high', 'ai-js-only', 'AI 爬蟲多半不執行 JavaScript，看不到主要內容', { affected: gap.length, scope: 'page', examples: urls(gap), impact: 'AI 搜尋與摘要只能讀到空殼，等於不存在。', fix: '同「內容依賴 JavaScript」：改用 SSR／SSG。' });
   if (pages.some((p) => p.blocked)) add('ai', 'medium', 'bot-wall', '部分頁面對自動化存取顯示驗證／防機器人頁面', { examples: pages.filter((p) => p.blocked).map((p) => `${p.blocked}：${p.url}`), impact: '搜尋與 AI 爬蟲同樣可能被擋在外面。', fix: '確認防火牆／WAF 對已驗證的搜尋爬蟲（Googlebot、Bingbot 等）放行。' });
 
+  if (injection.length) add('ai', 'high', 'prompt-injection', `頁面中有 ${injection.length} 處疑似針對 AI 的指令文字`, { examples: [...new Map(injection.map((x) => [x.text, x])).values()].map((x) => `${x.where.replace(/^page\[([^\]]*)\]\./, '頁面 $1 的 ')}（${x.text.length} 字元；內容已隔離，不在此重述）`), impact: '這類文字對人類看不見或不顯眼，但會被 AI 爬蟲／助理讀進去並可能影響它們的行為（提示注入）。若不是你自己放的，網站可能被入侵或含有第三方惡意內容。', fix: '檢查並移除；確認第三方嵌入、留言／使用者生成內容與外掛是否被竄改。若是刻意測試或安全研究用途則忽略。' });
+
   // ---------------------------------------------------------------- scoring
   const cats = {};
   for (const [k, [label, weight]] of Object.entries(CATEGORIES)) {
@@ -311,7 +315,7 @@ export async function runHealth(siteDir, opts = {}) {
 
 const SEV_LABEL = { critical: '🔴 嚴重', high: '🟠 高', medium: '🟡 中', low: '🔵 低', info: '⚪ 資訊' };
 export function renderHealthMd(h) {
-  const L = [`# 網站健檢報告（SEO／爬蟲索引）`, '', `網站：${h.origin}　檢查時間：${h.checkedAt}　分析頁數：${h.pagesAnalyzed}`, '', `## 總分：${h.score} / 100（${h.grade}）`, '', '| 面向 | 分數 | 問題數 | 通過項 |', '|---|---|---|---|', ...Object.values(h.categories).map((c) => `| ${c.label} | ${c.score} | ${c.issues} | ${c.passed} |`), '',
+  const L = [`# 網站健檢報告（SEO／爬蟲索引）`, '', BANNER, '', `網站：${h.origin}　檢查時間：${h.checkedAt}　分析頁數：${h.pagesAnalyzed}`, '', `## 總分：${h.score} / 100（${h.grade}）`, '', '| 面向 | 分數 | 問題數 | 通過項 |', '|---|---|---|---|', ...Object.values(h.categories).map((c) => `| ${c.label} | ${c.score} | ${c.issues} | ${c.passed} |`), '',
     `問題分布：${Object.entries(h.severity).filter(([, n]) => n).map(([s, n]) => `${SEV_LABEL[s]} ${n}`).join('　') || '無'}`, '', '> ' + h.notes.join('\n> '), ''];
   const top = h.issues.filter((i) => ['critical', 'high', 'medium'].includes(i.severity)).slice(0, 10);
   if (top.length) { L.push('## 最該先處理的事', ...top.map((i, n) => `${n + 1}. **${i.title}**（${SEV_LABEL[i.severity]}）— ${i.fix}`), ''); }
