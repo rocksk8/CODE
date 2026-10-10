@@ -2,6 +2,7 @@
 // One command: check → crawl → design bundle → 3D capture → database → dashboard.
 //   explore.mjs <url> [--max-pages 6] [--out ./explore-out] [--no-motion] [--no-db] [--wait 4000]
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,10 +57,18 @@ if (!args.includes('--no-db')) {
 }
 
 const dash = path.join(out, 'dashboard.html');
-await run('產生圖形化儀表板', 'build-report.mjs', [...(crawlOk ? ['--site', siteDir] : []), ...(motionOk ? ['--motion', motionDir] : []), '--out', dash]);
+await run('產生圖形化儀表板', 'build-report.mjs', [...(crawlOk ? ['--site', siteDir] : []), ...(motionOk ? ['--motion', motionDir] : []), '--out', dash, ...(args.includes('--no-standalone') ? [] : ['--standalone'])]);
 
 const failed = steps.filter((s) => !s.ok);
 console.log(`\n完成：${steps.length - failed.length}/${steps.length} 階段成功${failed.length ? '，失敗：' + failed.map((f) => f.label).join('、') : ''}`);
-if (fs.existsSync(dash)) console.log(`儀表板：${dash}\n  Mac 開啟：open "${dash}"`);
+if (fs.existsSync(dash)) {
+  const mb = (fs.statSync(dash).size / 1048576).toFixed(1);
+  console.log(`儀表板：${dash}（${mb} MB${args.includes('--no-standalone') ? '，需連同資料夾一起搬移' : '，單一檔案，可直接寄送或丟進聊天室'}）\n  Mac 開啟：open "${dash}"`);
+  // open it for humans at a terminal; never when driven by another program (e.g. Claude Code)
+  if (args.includes('--open') || (process.stdout.isTTY && !args.includes('--no-open'))) {
+    const [cmd, a] = process.platform === 'darwin' ? ['open', [dash]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', dash]] : ['xdg-open', [dash]];
+    try { spawn(cmd, a, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref(); } catch {}
+  }
+}
 if (fs.existsSync(path.join(siteDir, 'report.md')) && fs.readFileSync(path.join(siteDir, 'report.md'), 'utf8').includes('被擋住')) console.log('\n⚠️ 部分頁面被擋住，結果可能不完整（見儀表板或 report.md）。');
 process.exit(crawlOk || motionOk ? 0 : 1);

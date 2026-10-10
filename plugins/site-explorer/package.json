@@ -13,5 +13,8 @@
     "test": "node --test \"test/*.test.mjs\"",
     "doctor": "node scripts/doctor.mjs",
     "explore": "node scripts/explore.mjs"
+  },
+  "devDependencies": {
+    "three": "^0.170.0"
   }
 }

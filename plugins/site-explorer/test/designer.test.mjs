@@ -123,3 +123,24 @@ test('pattern recognition does not hallucinate marketing sections on articles or
   assert.ok(!blog.includes('features') && !blog.includes('pricing'), 'article paragraphs are not feature cards: ' + blog);
   assert.ok(!app.includes('pricing') && !app.includes('features'), 'KPI numbers and tables are not pricing: ' + app);
 });
+
+test('standalone dashboard is one self-contained file (images and downloads inlined) with an audit trail', async (t) => {
+  if (!haveBrowser) return t.skip('no browser');
+  const full = path.join(tmp, 'standalone-src.html');
+  const r = await run('build-report.mjs', ['--site', siteDir, '--standalone', '--out', full]); assert.equal(r.status, 0, r.out);
+  const lone = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'se lone ')), 'moved report.html'); // move it away from every other file
+  fs.copyFileSync(full, lone);
+  const b = await launchBrowser(), p = await b.newPage({ viewport: { width: 1280, height: 900 } }), errs = [], missing = [];
+  p.on('pageerror', (e) => errs.push(e.message)); p.on('requestfailed', (q) => missing.push(q.url().slice(0, 80)));
+  await p.goto('file://' + lone);
+  const ov = await p.locator('#s-overview').innerText();
+  assert.match(ov, /探索紀錄（可稽核）/); assert.match(ov, /site-explorer-claude-plugin/); assert.match(ov, /未登入、未送出表單、未繞過驗證/);
+  await p.click('#tabs button[data-k=layout]'); await p.waitForTimeout(400);
+  assert.ok(await p.evaluate(() => { const i = document.getElementById('shotimg'); return i.complete && i.naturalWidth === 1440 && i.src.startsWith('data:image/png'); }), 'screenshot is inlined and renders');
+  await p.click('#tabs button[data-k=design]');
+  const hrefs = await p.locator('#s-design a[download]').evaluateAll((as) => as.map((a) => a.href.slice(0, 5)));
+  assert.ok(hrefs.length >= 3 && hrefs.every((h) => h === 'data:'), 'design files are downloadable without the folder: ' + hrefs);
+  assert.deepEqual(errs, []); assert.deepEqual(missing, []);
+  await b.close();
+  assert.ok(fs.statSync(lone).size < 6 * 1024 * 1024);
+});

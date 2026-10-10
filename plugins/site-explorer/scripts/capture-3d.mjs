@@ -4,6 +4,7 @@
 // plus a screen recording, a motion report and an HTML contact sheet.
 import { launchBrowser } from './launch.mjs';
 import { findUrl, intOpt, robotsBlocks } from './args.mjs';
+import { threeHookInit, summarizeThreeInPage, analyzeFramesInBrowser, describeTarget, buildFilmstrip, renderMotionMd } from './motion-ai.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -46,6 +47,7 @@ const newCtx = async (video) => {
     ...(video ? { recordVideo: { dir: path.join(out, 'video'), size: { width: 1280, height: 800 } } } : {}),
   });
   await c.addInitScript(initScript);
+  await c.addInitScript(threeHookInit);
   return [c, await c.newPage()];
 };
 let ctx, page;
@@ -72,9 +74,21 @@ const detected = await page.evaluate(() => {
     if (el.dataset.s3dId) return;
     el.dataset.s3dId = 't' + n++;
     const r = el.getBoundingClientRect();
-    targets.push({ id: el.dataset.s3dId, kind, selector: sel(el), box: { x: Math.round(r.x), y: Math.round(r.y + scrollY), w: Math.round(r.width), h: Math.round(r.height) }, ...extra });
+    const lm = el.closest('header,nav,main,section,footer,aside,article');
+    let context = { landmark: lm ? lm.tagName.toLowerCase() : undefined };
+    for (let a = el, i = 0; a && a !== document.body && i < 12; a = a.parentElement, i++) { const h = a.querySelector('h1,h2,h3'); if (h && h.innerText.trim()) { context.heading = h.innerText.trim().slice(0, 80); break; } }
+    context.position = +((r.y + scrollY) / Math.max(1, document.documentElement.scrollHeight)).toFixed(2);
+    const ai = {};
+    const anim = [el, ...el.querySelectorAll('*')].slice(0, 40).find((x) => getComputedStyle(x).animationName !== 'none');
+    if (anim) {
+      const cs = getComputedStyle(anim); ai.animation = `${cs.animationName} ${cs.animationDuration} ${cs.animationTimingFunction} ${cs.animationIterationCount}`;
+      const nm = cs.animationName.split(',')[0].trim();
+      for (const sh of document.styleSheets) { try { for (const rule of sh.cssRules) if (rule.type === CSSRule.KEYFRAMES_RULE && rule.name === nm) { ai.keyframesText = rule.cssText.slice(0, 700); } } catch {} }
+    }
+    if (el.tagName === 'VIDEO') ai.video = { duration: Number.isFinite(el.duration) ? el.duration : null, videoWidth: el.videoWidth, videoHeight: el.videoHeight, src: el.currentSrc || el.src, poster: el.poster || null, autoplay: el.autoplay, loop: el.loop, muted: el.muted, controls: el.controls, readyState: el.readyState };
+    targets.push({ id: el.dataset.s3dId, kind, selector: sel(el), box: { x: Math.round(r.x), y: Math.round(r.y + scrollY), w: Math.round(r.width), h: Math.round(r.height) }, context, ...ai, ...extra });
   };
-  document.querySelectorAll('canvas').forEach((c) => vis(c) && add(c, c.dataset.s3dCtx ? ({ webgl: 'webgl', webgl2: 'webgl', 'experimental-webgl': 'webgl', '2d': 'canvas2d', bitmaprenderer: 'canvas2d', webgpu: 'webgpu' })[c.dataset.s3dCtx] || 'canvas' : 'canvas', { context: c.dataset.s3dCtx || null, pixelSize: [c.width, c.height] }));
+  document.querySelectorAll('canvas').forEach((c) => vis(c) && add(c, c.dataset.s3dCtx ? ({ webgl: 'webgl', webgl2: 'webgl', 'experimental-webgl': 'webgl', '2d': 'canvas2d', bitmaprenderer: 'canvas2d', webgpu: 'webgpu' })[c.dataset.s3dCtx] || 'canvas' : 'canvas', { glContext: c.dataset.s3dCtx || null, pixelSize: [c.width, c.height] }));
   document.querySelectorAll('model-viewer, spline-viewer, a-scene, lottie-player, dotlottie-player, rive-canvas').forEach((e) => vis(e) && add(e, e.tagName.toLowerCase(), { src: e.getAttribute('src') }));
   document.querySelectorAll('video').forEach((v) => vis(v) && add(v, 'video', { src: v.currentSrc, autoplay: v.autoplay, loop: v.loop }));
   document.querySelectorAll('svg').forEach((s) => vis(s) && s.querySelector('animate, animateTransform, animateMotion') && add(s, 'svg-smil'));
@@ -106,38 +120,82 @@ const targets = detected.targets.sort((a, b) => (order[a.kind] ?? 9) - (order[b.
 
 const hash = (b) => crypto.createHash('sha1').update(b).digest('hex').slice(0, 10);
 const sleep = (ms) => page.waitForTimeout(ms);
-async function shoot(loc, file) { const buf = await loc.screenshot({ animations: 'allow', timeout: 8000 }); fs.writeFileSync(file, buf); return hash(buf); }
+const pad = (i) => String(i).padStart(2, '0');
+async function shoot(loc, file) { const buf = await loc.screenshot({ animations: 'allow', timeout: 8000 }); fs.writeFileSync(file, buf); return { h: hash(buf), buf }; }
 
+// three.js facts (scene graph, camera, which objects move) — gathered once, attached to the main WebGL target
+const threeInfo = await page.evaluate(summarizeThreeInPage).catch(() => null);
+if (threeInfo) console.log(`three.js scene captured: ${threeInfo.scene.objects} objects, ${threeInfo.movingCount} moving`);
+
+const buffers = {}; // target id -> { idle:[], hover:[], drag:[], video:[] } PNG buffers (for analysis + filmstrip)
 for (const t of targets) {
   const dir = path.join(out, 'frames', t.id); fs.mkdirSync(dir, { recursive: true });
-  const loc = page.locator(`[data-s3d-id="${t.id}"]`);
+  const loc = page.locator(`[data-s3d-id="${t.id}"]`), B = (buffers[t.id] = { idle: [], hover: [], drag: [], video: [] });
+  t.intervalMs = INTERVAL;
   try {
     await loc.scrollIntoViewIfNeeded({ timeout: 4000 }); await sleep(500);
     // 1. idle animation over time
     const idle = [];
-    for (let i = 0; i < FRAMES; i++) { idle.push(await shoot(loc, path.join(dir, `idle-${String(i).padStart(2, '0')}.png`))); await sleep(INTERVAL); }
+    for (let i = 0; i < FRAMES; i++) { const r = await shoot(loc, path.join(dir, `idle-${pad(i)}.png`)); idle.push(r.h); B.idle.push(r.buf); await sleep(INTERVAL); }
     t.idleFrames = FRAMES; t.uniqueIdleFrames = new Set(idle).size; t.animatesOnItsOwn = t.uniqueIdleFrames > 1;
     // 2. mouse interaction: hover sweep, then drag (orbit-style)
     const bb = await loc.boundingBox();
     if (bb) {
-      const cx = bb.x + bb.width / 2, cy = bb.y + bb.height / 2, inter = [];
-      for (let i = 0; i < 6; i++) { await page.mouse.move(bb.x + (bb.width * (i + 0.5)) / 6, cy + Math.sin(i) * bb.height * 0.2, { steps: 6 }); await sleep(180); inter.push(await shoot(loc, path.join(dir, `hover-${i}.png`))); }
+      const cx = bb.x + bb.width / 2, cy = bb.y + bb.height / 2;
+      for (let i = 0; i < 6; i++) { await page.mouse.move(bb.x + (bb.width * (i + 0.5)) / 6, cy + Math.sin(i) * bb.height * 0.2, { steps: 6 }); await sleep(180); B.hover.push((await shoot(loc, path.join(dir, `hover-${i}.png`))).buf); }
       await page.mouse.move(cx, cy); await page.mouse.down();
-      for (let i = 0; i < 6; i++) { await page.mouse.move(cx + (i + 1) * bb.width * 0.07, cy + (i % 2 ? 1 : -1) * bb.height * 0.03, { steps: 8 }); await sleep(150); inter.push(await shoot(loc, path.join(dir, `drag-${i}.png`))); }
+      for (let i = 0; i < 6; i++) { await page.mouse.move(cx + (i + 1) * bb.width * 0.07, cy + (i % 2 ? 1 : -1) * bb.height * 0.03, { steps: 8 }); await sleep(150); B.drag.push((await shoot(loc, path.join(dir, `drag-${i}.png`))).buf); }
       await page.mouse.up();
-      t.reactsToMouse = new Set(inter).size > 1 && !t.animatesOnItsOwn ? true : new Set(inter).size > Math.min(inter.length, t.uniqueIdleFrames || 1) + 1;
+    }
+    // 3. video: seek to several positions (AI cannot watch video; frames + facts replace it)
+    if (t.kind === 'video' && t.video && Number.isFinite(t.video.duration) && t.video.duration > 0) {
+      for (const [i, f] of [0, 0.25, 0.5, 0.75].entries()) {
+        await loc.evaluate((v, time) => new Promise((res) => { const done = () => { v.removeEventListener('seeked', done); res(); }; v.addEventListener('seeked', done); v.pause(); v.currentTime = time; setTimeout(res, 1500); }), t.video.duration * f).catch(() => {});
+        B.video.push((await shoot(loc, path.join(dir, `video-${i}.png`))).buf);
+      }
     }
   } catch (e) { t.error = e.message.split('\n')[0]; }
 }
 
-// 3. scroll-driven sequence: viewport frames while scrolling the whole page
+// 4. scroll-driven sequence: viewport frames while scrolling the whole page, plus each target's own appearance while in view
 const scrollDir = path.join(out, 'frames', 'scroll'); fs.mkdirSync(scrollDir, { recursive: true });
-const steps = Math.min(16, Math.max(4, Math.ceil(detected.docHeight / 700))), scrollHashes = [];
+const steps = Math.min(16, Math.max(4, Math.ceil(detected.docHeight / 700))), scrollHashes = [], scrollBufs = [], perTarget = Object.fromEntries(targets.map((t) => [t.id, []]));
 await page.evaluate(() => scrollTo(0, 0)); await sleep(500);
 for (let i = 0; i <= steps; i++) {
   await page.mouse.wheel(0, Math.min(detected.docHeight / steps, 1200)); await sleep(600);
-  const buf = await page.screenshot({ animations: 'allow' }); fs.writeFileSync(path.join(scrollDir, `s-${String(i).padStart(2, '0')}.png`), buf); scrollHashes.push(hash(buf));
+  const buf = await page.screenshot({ animations: 'allow' }); fs.writeFileSync(path.join(scrollDir, `s-${pad(i)}.png`), buf); scrollHashes.push(hash(buf)); scrollBufs.push(buf);
+  for (const t of targets) {
+    try {
+      const r = await page.locator(`[data-s3d-id="${t.id}"]`).evaluate((e) => { const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, vh: innerHeight, vw: innerWidth }; });
+      const visibleH = Math.min(r.y + r.h, r.vh) - Math.max(r.y, 0);
+      if (visibleH >= r.h * 0.6 && r.w > 20) perTarget[t.id].push(hash(await page.screenshot({ clip: { x: Math.max(0, r.x), y: Math.max(0, r.y), width: Math.min(r.w, r.vw - Math.max(0, r.x)), height: Math.min(r.h, r.vh - Math.max(0, r.y)) }, animations: 'allow' })));
+    } catch {}
+  }
 }
+for (const t of targets) { const h = perTarget[t.id]; t.scrollSamples = h.length; t.scrollUnique = new Set(h).size; t.scrollDriven = h.length >= 3 && new Set(h).size >= 3 && !t.animatesOnItsOwn; }
+
+// 5. AI layer: numbers, language, filmstrips
+const b64 = (arr) => arr.map((b) => b.toString('base64'));
+const ap = await browser.newPage(); await ap.setContent('<!doctype html><html></html>');
+const stats = {};
+for (const t of targets) {
+  const B = buffers[t.id]; if (!B) continue;
+  try { stats[t.id] = await ap.evaluate(analyzeFramesInBrowser, { idle: b64(B.idle), hover: b64(B.hover), drag: b64(B.drag), video: b64(B.video) }); } catch (e) { stats[t.id] = null; }
+  const st = stats[t.id];
+  if (st?.idle) t.animatesOnItsOwn = t.animatesOnItsOwn && st.idle.meanStepChange > 0.05 ? true : t.animatesOnItsOwn;
+  if (st && (st.hover || st.drag)) {
+    const inter = Math.max(st.hover?.meanStepChange || 0, st.drag?.meanStepChange || 0), idleStep = st.idle?.meanStepChange || 0;
+    t.reactsToMouse = t.animatesOnItsOwn ? inter > idleStep * 1.5 + 0.8 : inter > 0.5;
+  }
+}
+await ap.close();
+const mainWebgl = targets.find((t) => t.kind === 'webgl' || t.kind === 'webgpu');
+for (const t of targets) {
+  t.ai = describeTarget(t, stats[t.id], threeInfo && t === mainWebgl ? threeInfo : null);
+  const B = buffers[t.id];
+  if (B && (await buildFilmstrip(browser, [{ label: '靜置', files: B.idle }, { label: '滑鼠掃過', files: B.hover }, { label: '拖曳', files: B.drag }, { label: '影片位置', files: B.video }], path.join(out, 'frames', t.id, 'filmstrip.png'), `${t.kind} ${t.selector}（${t.box.w}×${t.box.h}）— 每格間隔 ${INTERVAL} ms`))) t.filmstrip = `frames/${t.id}/filmstrip.png`;
+}
+const scrollFilmstrip = (await buildFilmstrip(browser, [{ label: '捲動位置', files: scrollBufs }], path.join(scrollDir, 'filmstrip.png'), '整頁捲動序列（由上到下）')) ? 'frames/scroll/filmstrip.png' : null;
 
 // ---- finish: video, report, contact sheet ----
 const video = wantVideo ? await page.video()?.path() : null;
@@ -145,8 +203,9 @@ await ctx.close(); await browser.close();
 let videoFile = null;
 if (video && fs.existsSync(video)) { videoFile = path.join(out, 'recording.webm'); fs.renameSync(video, videoFile); fs.rmSync(path.join(out, 'video'), { recursive: true, force: true }); }
 
-const report = { schemaVersion: 2, url, capturedAt: new Date().toISOString(), webglContexts: detected.contexts, libs: detected.libs, raf: detected.rafCount, assets3d: [...assets3d], shaderSamples: detected.shaders.slice(0, 4), cssKeyframes: detected.keyframes, targets, scrollFrames: scrollHashes.length, scrollChangedFrames: new Set(scrollHashes).size, video: videoFile && path.basename(videoFile) };
+const report = { schemaVersion: 3, aiDocument: 'motion.md', three: threeInfo, scrollFilmstrip, url, capturedAt: new Date().toISOString(), webglContexts: detected.contexts, libs: detected.libs, raf: detected.rafCount, assets3d: [...assets3d], shaderSamples: detected.shaders.slice(0, 4), cssKeyframes: detected.keyframes, targets, scrollFrames: scrollHashes.length, scrollChangedFrames: new Set(scrollHashes).size, video: videoFile && path.basename(videoFile) };
 fs.writeFileSync(path.join(out, 'motion.json'), JSON.stringify(report, null, 2));
+fs.writeFileSync(path.join(out, 'motion.md'), renderMotionMd(report));
 
 const imgs = (d) => (fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.png')).sort() : []);
 const html = `<!doctype html><meta charset=utf-8><title>Motion capture — ${host}</title><style>body{font:14px system-ui;background:#111;color:#eee;margin:24px}h2{margin-top:32px}.row{display:flex;gap:6px;overflow-x:auto;padding:6px 0}.row img{height:160px;border:1px solid #333;border-radius:4px}code{color:#9cf}</style>
@@ -158,4 +217,4 @@ ${targets.map((t) => `<h2>${t.kind} <code>${t.selector}</code> ${t.animatesOnIts
 fs.writeFileSync(path.join(out, 'contact-sheet.html'), html);
 
 console.log(`Targets captured: ${targets.map((t) => `${t.kind}${t.animatesOnItsOwn ? '*' : ''}`).join(', ') || 'none'}   (* = animates by itself)`);
-console.log(`Report: ${path.join(out, 'motion.json')}\nContact sheet: ${path.join(out, 'contact-sheet.html')}${videoFile ? '\nVideo: ' + videoFile : ''}`);
+console.log(`AI-readable: ${path.join(out, 'motion.md')}\nReport: ${path.join(out, 'motion.json')}\nContact sheet: ${path.join(out, 'contact-sheet.html')}${videoFile ? '\nVideo: ' + videoFile : ''}`);

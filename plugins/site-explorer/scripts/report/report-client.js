@@ -32,12 +32,23 @@ function show(k){document.querySelectorAll('section').forEach(s=>s.classList.tog
   if(blocked.length)o.insertAdjacentHTML('afterbegin','<div class="card" style="border-color:var(--warn);margin-bottom:14px"><h3 style="color:var(--warn)">⚠️ 部分頁面被擋住</h3><p>'+blocked.map(b=>esc(b.reason)+'：'+esc(b.url)).join('<br>')+'</p><p class="hint">以下結果可能不完整。可降低頻率、確認你有權存取，或請 Claude 用瀏覽器工具互動補查。</p></div>');
   const steps=[];
   if(S)steps.push(['把這個風格變成 Claude Design 的設計系統','在 Claude Code 輸入：<code>/site-explorer:to-design '+esc(S.startUrl)+'</code>']);
-  if(D.files.length)steps.push(['給開發者的檔案',D.files.map(f=>'<a href="'+f.href+'" target="_blank">'+esc(f.name)+'</a>').join('　')]);
+  if(D.files.length)steps.push(['給開發者的檔案',D.files.map(f=>'<a href="'+f.href+'" download="'+esc(f.name)+'">'+esc(f.name)+'</a>').join('　')]);
   if(T&&(T.contrastAudit||[]).some(a=>!a.pass))steps.push(['修正對比不足','有 '+T.contrastAudit.filter(a=>!a.pass).length+' 項文字／按鈕對比低於 4.5:1，改版時建議調深前景或底色']);
   if(M&&M.targets.length)steps.push(['理解動畫','到「3D／動畫」分頁播放畫格；要推算節奏與觸發方式，請 Claude 逐張檢視畫格並對照 motion.json']);
   if(D.history&&D.history.runs.length>1)steps.push(['追蹤改版','這個網站已有 '+D.history.runs.length+' 次紀錄，見「歷史」分頁']);
   steps.push(['比較其他網站','終端機：<code>node scripts/db.mjs search --lib three</code>、<code>node scripts/db.mjs list</code>']);
   o.insertAdjacentHTML('beforeend','<div class="card" style="margin-top:14px"><h3>下一步可以做什麼</h3>'+steps.map(x=>'<p class="say"><b>'+x[0]+'</b><br><span class="hint">'+x[1]+'</span></p>').join('')+'</div>');
+
+  if(S){const rb=(S.robotsDisallow||[]);
+    o.insertAdjacentHTML('beforeend','<div class="card" style="margin-top:14px"><h3>探索紀錄（可稽核）</h3>'+
+      '<div class="spec"><small>時間</small><span>'+esc(new Date(S.crawledAt).toLocaleString())+'，耗時 '+S.seconds+' 秒</span></div>'+
+      '<div class="spec"><small>範圍</small><span>共讀取 '+S.pages.length+' 個頁面（同網域），'+((S.skippedByRobots||[]).length)+' 個因 robots.txt 略過</span></div>'+
+      '<div class="spec"><small>robots.txt</small><span>'+(rb.length?'已遵守 '+rb.length+' 條 Disallow：'+esc(rb.slice(0,5).join(', ')):'無限制或未提供')+'</span></div>'+
+      '<div class="spec"><small>身分</small><span>'+esc(S.userAgent||'site-explorer')+'（明確標示為自動化工具）</span></div>'+
+      '<div class="spec"><small>互動</small><span>未登入、未送出表單、未繞過驗證'+(S.consentAction?'；Cookie 橫幅：「'+esc(S.consentAction)+'」':'')+'</span></div>'+
+      (S.tool&&S.tool.version?'<div class="spec"><small>工具版本</small><span>site-explorer '+esc(S.tool.version)+'</span></div>':'')+
+      '<p class="hint">本報告為對公開頁面的觀察結果，僅供研究與參考；字型、圖片、文案、3D 素材仍受原權利人保護。</p></div>');}
+  if(D.standalone&&D.embed.skipped>0)o.insertAdjacentHTML('afterbegin','<div class="card" style="margin-bottom:14px"><span class="chip warn">部分檔案未內嵌</span> 有 '+D.embed.skipped+' 個檔案超過內嵌上限，僅以相對路徑連結；搬移此 HTML 時請連同資料夾，或調高 <code>--embed-mb</code>。</div>');
 })();
 
 // ---------- design ----------
@@ -78,7 +89,7 @@ function show(k){document.querySelectorAll('section').forEach(s=>s.classList.tog
   h+='<div class="card" style="margin-top:14px"><h3>真實背景上的對比檢查（掃描 '+(dz.contrast?dz.contrast.checked:0)+' 個文字元素）</h3>'+(cf.length?cf.map(c=>'<div class="spec"><small><span class="chip warn">'+c.ratio+':1</span><div class="hint">需 '+c.need+'</div></small><span style="background:'+c.bg+';color:'+c.fg+';padding:6px 14px;border-radius:8px;font-size:'+(c.large?'22px':'15px')+'">'+esc(c.sample||'Aa 範例文字')+'</span><span class="hint">'+c.fg+' on '+c.bg+' · 出現 '+c.count+' 次'+(c.uncertain?' · 背景有圖片，請人工確認':'')+'</span></div>').join(''):'<p>✅ 沒有發現對比不足的文字。</p>')+'</div>';
   if(dz.icons&&dz.icons.length)h+='<div class="card" style="margin-top:14px"><h3>行內圖示（'+dz.icons.length+'）</h3><div class="icons">'+dz.icons.map(i=>'<div><img alt="" src="data:image/svg+xml;charset=utf-8,'+encodeURIComponent(i.svg)+'"></div>').join('')+'</div><p class="hint">以圖片方式顯示（不執行腳本）。圖示受版權或授權保護，僅供參考。</p></div>';
   const ex=D.files.filter(f=>/palette.svg|tokens.studio|tailwind|tokens.css|w3c/.test(f.name));
-  if(ex.length)h+='<div class="card" style="margin-top:14px"><h3>帶走（Figma／開發）</h3>'+ex.map(f=>'<a href="'+f.href+'" target="_blank" style="margin-right:14px">'+esc(f.name)+'</a>').join('')+'<p class="hint">palette.svg 拖進 Figma 即成色票；tokens.studio.json 用 Tokens Studio 外掛匯入。</p></div>';
+  if(ex.length)h+='<div class="card" style="margin-top:14px"><h3>帶走（Figma／開發）</h3>'+ex.map(f=>'<a href="'+f.href+'" download="'+esc(f.name)+'" style="margin-right:14px">'+esc(f.name)+'</a>').join('')+'<p class="hint">palette.svg 拖進 Figma 即成色票；tokens.studio.json 用 Tokens Studio 外掛匯入。</p></div>';
   d.insertAdjacentHTML('beforeend',h);
 })();
 
@@ -145,7 +156,7 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
     const seq=p.blocks.map(b=>KIND[b.kind]||b.kind).join(' → ');
     body.innerHTML='<p class="say">頁面骨架：<b>'+esc(seq)+'</b></p><div class="skel">'+p.blocks.map(b=>{const h=Math.max(34,Math.min(b.h*.14,150));const cols=Math.min(b.columns,6);
       return '<div class="b" style="background:'+(KCOL[b.kind]||'#94a3b8')+';height:'+h+'px"><b>'+esc(KIND[b.kind]||b.kind)+' · '+b.h+'px'+(b.columns>1?' · '+b.columns+' 欄':'')+'</b>'+(cols>1?'<div class="cols">'+Array.from({length:cols},()=>'<i></i>').join('')+'</div>':'<div class="ln" style="width:70%"></div><div class="ln" style="width:45%"></div>')+'</div>'}).join('')+'</div>'+
-      '<p class="hint">想做同類型頁面時，直接依這個順序規劃區塊；也可交給 Claude Design 照骨架產出線框。</p>';
+      '<p class="hint">想做同類型頁面時，直接依這個順序規劃區塊；也可交給 Claude Design 照骨架產出線框。<br>⚠️ 版型是依 DOM 規則推測（每個區塊的「推測依據」見「區塊切片」），遇到非行銷型頁面（文章、後台）請以截圖為準。</p>';
   }
   function sideView(p,body){
     const devs=[['desktop','桌機 1440',.3],['tablet','平板 768',.3],['mobile','手機 390',.3]].filter(d=>p.shots[d[0]]);

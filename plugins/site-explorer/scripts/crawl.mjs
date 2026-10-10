@@ -229,7 +229,8 @@ if (!allowed(startUrl)) {
   process.exit(3);
 }
 const browser = await launchBrowser();
-const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)' });
+const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA });
 const queue = [[norm(startUrl), 0]], seen = new Set([norm(startUrl)]), pages = [], headers = {};
 let consentAction = null;
 const skippedByRobots = [];
@@ -348,8 +349,9 @@ const designer = {
   copy: { ctas: sumBy((x) => x.text, (d) => d?.copy.ctas, 12), nav: [...new Set(pages.flatMap((p) => p.designer?.copy.nav || []))].slice(0, 20) },
   patterns: pages.map((p) => ({ slug: p.slug, kinds: (p.designer?.blocks || []).map((b) => b.kind) })),
 };
+const toolVersion = (() => { try { return JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version; } catch { return null; } })();
 const site = {
-  schemaVersion: 3,
+  schemaVersion: 3, tool: { name: 'site-explorer', version: toolVersion }, userAgent: UA, requestedUrl: startUrl, finalOrigin: origin,
   startUrl, crawledAt: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), robotsDisallow: robots, consentAction, blockedPages: pages.filter((p) => p.blocked).map((p) => ({ url: p.url, reason: p.blocked })), skippedByRobots,
   server: { server: headers.main?.server, poweredBy: headers.main?.['x-powered-by'], generator: pages[0]?.meta.generator },
   editing: { platforms, contenteditablePages: pages.filter((p) => p.editing.contenteditable).map((p) => p.url), loginOrAdminLinks: [...new Map(pages.flatMap((p) => p.editing.editLinks).map((l) => [l.href, l])).values()].slice(0, 15) },

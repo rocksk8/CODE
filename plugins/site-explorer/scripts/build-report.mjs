@@ -11,13 +11,27 @@ const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const siteDir = opt('site'), motionDir = opt('motion');
 if (!siteDir && !motionDir) { console.error('Usage: build-report.mjs --site <crawl dir> [--motion <motion dir>] [--out dashboard.html]'); process.exit(1); }
+const standalone = args.includes('--standalone');
+const embedBudget = Number(opt('embed-mb', 12)) * 1024 * 1024;
 const outFile = path.resolve(opt('out', './dashboard.html'));
 const outDir = path.dirname(outFile);
 const rel = (p) => path.relative(outDir, p).split(path.sep).map(encodeURIComponent).join('/');
+// Standalone mode: inline files as data: URIs (within a size budget) so one HTML file can be emailed or dropped into Slack.
+const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml', ico: 'image/x-icon', css: 'text/css', json: 'application/json', js: 'text/javascript', md: 'text/markdown' };
+const embed = { used: 0, embedded: 0, skipped: 0 };
+const ref = (file, allowEmbed = true) => {
+  const mime = MIME[path.extname(file).slice(1).toLowerCase()];
+  if (standalone && allowEmbed && mime && fs.existsSync(file)) {
+    const size = fs.statSync(file).size, enc = Math.ceil(size / 3) * 4;
+    if (embed.used + enc <= embedBudget) { embed.used += enc; embed.embedded++; return `data:${mime};base64,${fs.readFileSync(file).toString('base64')}`; }
+    embed.skipped++;
+  }
+  return rel(file);
+};
 const readJSON = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const exists = fs.existsSync;
 
-const data = { generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, files: [] };
+const data = { standalone, embed, generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, files: [] };
 
 if (siteDir && exists(path.join(siteDir, 'site.json'))) {
   data.site = readJSON(path.join(siteDir, 'site.json'));
@@ -28,7 +42,7 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
     const pj = path.join(siteDir, 'pages', p.slug, 'page.json');
     if (!exists(pj)) continue;
     const full = readJSON(pj);
-    const shot = (v) => (exists(path.join(siteDir, 'pages', p.slug, v + '.png')) ? rel(path.join(siteDir, 'pages', p.slug, v + '.png')) : null);
+    const shot = (v) => (exists(path.join(siteDir, 'pages', p.slug, v + '.png')) ? ref(path.join(siteDir, 'pages', p.slug, v + '.png')) : null);
     data.pages.push({
       slug: p.slug, url: p.url, title: p.title, status: p.status, docHeight: full.layout.docHeight,
       headings: full.content.headings.slice(0, 60), paragraphs: full.content.paragraphs.slice(0, 6),
@@ -40,19 +54,19 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
   }
   for (const f of ['palette.svg', 'tokens.studio.json', 'tokens.css', 'tailwind.config.js', 'tokens.w3c.json', 'tokens.json', 'README.md']) {
     const fp = path.join(siteDir, 'design-bundle', f);
-    if (exists(fp)) data.files.push({ name: f, href: rel(fp) });
+    if (exists(fp)) data.files.push({ name: f, href: ref(fp) });
   }
-  if (data.site.assets) data.site.assets = data.site.assets.map((a) => ({ ...a, src: rel(path.join(siteDir, a.file)) }));
+  if (data.site.assets) data.site.assets = data.site.assets.map((a) => ({ ...a, src: ref(path.join(siteDir, a.file)) }));
 }
 if (motionDir && exists(path.join(motionDir, 'motion.json'))) {
   const m = readJSON(path.join(motionDir, 'motion.json'));
-  const list = (d) => (exists(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.png')).sort().map((f) => rel(path.join(d, f))) : []);
+  const list = (d) => (exists(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.png')).sort().map((f) => ref(path.join(d, f))) : []);
   for (const t of m.targets) {
     const d = path.join(motionDir, 'frames', t.id);
     t.frames = { idle: list(d).filter((f) => /idle-/.test(f)), hover: list(d).filter((f) => /hover-/.test(f)), drag: list(d).filter((f) => /drag-/.test(f)) };
   }
   m.scroll = list(path.join(motionDir, 'frames', 'scroll'));
-  if (m.video) m.video = rel(path.join(motionDir, m.video));
+  if (m.video) m.video = ref(path.join(motionDir, m.video), false);
   data.motion = m;
 }
 
