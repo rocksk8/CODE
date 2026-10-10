@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One command: check → crawl → design bundle → 3D capture → database → dashboard.
+// One command: check → crawl → design bundle → SEO health → 3D capture → database → dashboard → handoff package.
 //   explore.mjs <url> [--max-pages 6] [--out ./explore-out] [--no-motion] [--no-db] [--wait 4000]
 import { spawn } from 'node:child_process';
 import os from 'node:os';
@@ -22,7 +22,7 @@ const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
 const siteDir = path.join(siteRoot, host), motionDir = path.join(motionRoot, host);
 const steps = [];
-const total = 5 - (args.includes('--no-motion') ? 1 : 0) - (args.includes('--no-db') ? 1 : 0);
+const total = 7 - ['--no-motion', '--no-db', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length;
 let n = 0;
 
 function run(label, script, a) {
@@ -44,6 +44,8 @@ if (checks.some((c) => c.level === 'fail')) { console.error('\n環境檢查未�
 
 const crawlOk = await run('爬取頁面、設計、內容、排版', 'crawl.mjs', [url, '--max-pages', String(maxPages), '--out', siteRoot]);
 if (crawlOk) await run('整理設計包（tokens、Tailwind、W3C）', 'export-design.mjs', [siteDir]);
+let healthOk = false;
+if (crawlOk && !args.includes('--no-health')) healthOk = await run('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）', 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
 let motionOk = false;
 if (!args.includes('--no-motion')) motionOk = await run('擷取 3D／動畫畫格', 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', String(waitMs)]);
 
@@ -59,8 +61,14 @@ if (!args.includes('--no-db')) {
 const dash = path.join(out, 'dashboard.html');
 await run('產生圖形化儀表板', 'build-report.mjs', [...(crawlOk ? ['--site', siteDir] : []), ...(motionOk ? ['--motion', motionDir] : []), '--out', dash, ...(args.includes('--no-standalone') ? [] : ['--standalone'])]);
 
+let handoffOk = false;
+const handoffDir = path.join(out, 'handoff');
+if ((crawlOk || motionOk) && crawlOk && !args.includes('--no-handoff')) handoffOk = await run('產生交接包（AI 簡報、完整規格、決策紀錄、圖片）', 'build-handoff.mjs', ['--site', siteDir, ...(motionOk ? ['--motion', motionDir] : []), '--out', handoffDir]);
+
 const failed = steps.filter((s) => !s.ok);
 console.log(`\n完成：${steps.length - failed.length}/${steps.length} 階段成功${failed.length ? '，失敗：' + failed.map((f) => f.label).join('、') : ''}`);
+try { const hj = path.join(siteDir, 'health.json'); if (fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(`健檢：${h.score}/100（${h.grade}）— 嚴重 ${h.severity.critical}・高 ${h.severity.high}・中 ${h.severity.medium}　詳見 ${path.join(siteDir, 'health.md')}`); } } catch {}
+if (handoffOk) console.log(`交接包：${handoffDir}\n  先讀 ai-brief.md（給 AI）；完整規格 SPEC.md；決策紀錄 DECISIONS.md`);
 if (fs.existsSync(dash)) {
   const mb = (fs.statSync(dash).size / 1048576).toFixed(1);
   console.log(`儀表板：${dash}（${mb} MB${args.includes('--no-standalone') ? '，需連同資料夾一起搬移' : '，單一檔案，可直接寄送或丟進聊天室'}）\n  Mac 開啟：open "${dash}"`);

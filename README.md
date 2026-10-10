@@ -1,16 +1,23 @@
 # site-explorer（Claude Code 套件）
 
-讓 Claude 自動控制瀏覽器探索網站：**設計、內容、排版、3D／動畫、編輯方式**，整理成圖形化儀表板，累積在本機資料庫，並可一鍵串接 Claude Design。
+讓 Claude 自動控制瀏覽器探索網站，並把結果整理成**人看得懂、AI 看得懂、開發接得住**的形式：
+
+- 🎨 **設計**：色彩、字型（含授權與替代）、間距、元件、版面網格、動態節奏
+- 🧱 **結構**：自動辨識 Hero／功能格／價格／見證／CTA…，逐區塊裁切與骨架圖
+- 🌀 **3D／影片／動畫**：AI 看不懂它們，所以翻譯成「文字描述＋量化數據＋three.js 場景事實＋單張影格序列圖」
+- 🩺 **網站健檢**：SEO、爬蟲索引（robots／sitemap／canonical／noindex／soft 404／JS 依賴）、連結、效能、行動版、安全、AI 爬蟲友善度
+- 📦 **交接包**：`ai-brief.md`＋`SPEC.md`＋`spec.json`＋`DECISIONS.md`＋圖片，讓 AI 做設計範本、讓後續開發知道所有該知道的事
+- 🗄️ **本機資料庫**：累積每次探索，搜尋、比較、追蹤改版與健檢分數變化
 
 ## 30 秒上手（Mac／Windows／Linux）
 
-需要 Node 18+ 與 Google Chrome（資料庫功能需要 Node 22.13+）。
+需要 Node 18+ 與 Google Chrome（資料庫需要 Node 22.13+）。
 
 ```bash
 cd plugins/site-explorer && npm install
-node scripts/doctor.mjs https://example.com      # 先檢查環境，每個問題都附修復指令
-node scripts/explore.mjs example.com             # 一鍵：爬取→設計包→3D→資料庫→儀表板（可省略 https://）
-open explore-out/dashboard.html                  # Mac
+node scripts/doctor.mjs https://example.com        # 先檢查環境，每個問題都附修復指令
+node scripts/explore.mjs example.com               # 一鍵：爬取→設計包→健檢→3D→資料庫→儀表板→交接包（可省略 https://）
+open explore-out/dashboard.html                    # Mac；單一檔案，可直接寄送或丟進聊天室
 ```
 
 在 Claude Code 裡安裝：
@@ -23,53 +30,79 @@ open explore-out/dashboard.html                  # Mac
 
 | 指令 | 做什麼 |
 |---|---|
-| `/site-explorer:explore <url>` | 一鍵探索並產生儀表板 |
-| `/site-explorer:to-design <url> [要做的設計]` | 萃取 token → 建立 Claude Design 的 Design System → 產出設計稿 |
-| `/site-explorer:capture-motion <url>` | 只做 3D／動畫視覺擷取 |
+| `/site-explorer:explore <url>` | 一鍵探索，產生儀表板與交接包 |
+| `/site-explorer:handoff <url>` | 產生交接包，並說明風格、結構、動態、健檢與未知 |
+| `/site-explorer:health <url>` | 網站健檢（SEO／索引／連結／效能／行動／安全／AI 爬蟲） |
+| `/site-explorer:to-design <url> [要做的設計]` | 探索 → 交接包 → 建立 Claude Design 的 Design System → 設計稿 |
+| `/site-explorer:capture-motion <url>` | 只做 3D／動畫擷取（AI 可讀） |
+| `/site-explorer:compare <A> <B>` | 並排比較兩個網站（競品／改版前後） |
 | `/site-explorer:report <url>` | 分階段產生儀表板 |
 | `/site-explorer:history list｜search --lib three｜history <host>｜compare a b` | 查詢、比較以前探索過的網站 |
-| `/site-explorer:compare <網址A> <網址B>` | 並排比較兩個網站（競品／改版前後） |
 | `/site-explorer:doctor [url]` | 環境診斷 |
 
-## 設計師工作台
+## 讓 AI 看得懂：3D、影片、動畫、超長頁面
 
-| 你想做的事 | 儀表板裡的功能 |
+AI 只能讀文字和圖片。所以：
+
+| 原始內容 | AI 拿到的 |
 |---|---|
-| 「這個標題是什麼字型、多大、什麼色？」 | **檢視元素**：游標移到截圖上即時顯示字型、字級、色碼、對比、間距、圓角；點擊釘選並複製 CSS |
-| 「這頁是怎麼組成的？」 | **區塊切片**＋**頁面骨架**：自動辨識 Hero／功能格／價格／見證／FAQ／CTA／頁尾，逐段裁切，並畫出骨架 |
-| 「手機版怎麼重排？」 | **響應式並排**：桌機、平板、手機同比例並排、捲動同步 |
-| 「這字型我能用嗎？」 | **字型來源**：Google Fonts／Adobe／自架／系統，非免費字型附 Google 替代建議 |
-| 「哪些字在真實背景上看不清？」 | **真實背景對比檢查**：以疊合後的背景計算，列出不足組合與出現次數 |
-| 「它的版面網格與動態是什麼？」 | 容器寬、欄數、間距，以及 transition／animation 的時長與緩動 |
-| 「帶進 Figma」 | `palette.svg`（拖進 Figma 即成色票）、`tokens.studio.json`（Tokens Studio 外掛匯入） |
-| 「和競品比」 | `/site-explorer:compare`：並排比較色彩、字型、骨架、網格、動態、對比 |
+| three.js／WebGL 場景 | 物件清單（名稱、幾何、材質色、光源）、相機（fov／位置）、**哪些物件在轉**、每幀 draw call，加影格序列圖 |
+| 影片 | 時長、解析度、自動播放／循環／靜音、來源，加 0／25／50／75% 的畫格 |
+| 一般動畫 | 是否自走、週期、變化量與集中區域、主色、是否回應滑鼠／拖曳／捲動，加影格序列圖 |
+| CSS 3D／keyframes | transform／perspective、keyframes 原文、時長與緩動、重現建議 |
+| 超長整頁截圖（會被縮到看不清） | 每個區塊一張裁切圖（≤ 1800px 高） |
 
-## 你會得到什麼
+全部寫進 `motion.md`，並在每項註明「AI 無法直接觀看，請以文字與數據為準」。
 
-- **圖形化儀表板** `dashboard.html`（離線單檔）：色票、字型實際渲染、按鈕 hover、桌機／平板／手機截圖切換、區塊地圖、標題大綱、3D 畫格播放器、編輯方式、歷史比較、「下一步」建議
-- **設計包**：`tokens.css`、`tokens.w3c.json`（W3C Design Tokens）、`tailwind.config.js`、元件樣式、logo／favicon、對比檢查
-- **3D／動畫**：WebGL／CSS 3D／model-viewer／影片的靜置、滑鼠、拖曳、捲動畫格；shader、3D 素材、函式庫
-- **資料庫**（SQLite，`~/.site-explorer/explorations.db`，可用 `SITE_EXPLORER_DB` 改位置）：搜尋「誰用了 three.js」「主色偏橘的網站」，追蹤同一網站的改版
+## 交接包 `handoff/`
+
+| 檔案 | 給誰／用途 |
+|---|---|
+| `ai-brief.md` | **AI 先讀**：風格一句話、可貼的 CSS token、元件、頁面骨架（含真實內容結構）、文案語氣、必守規則、該先看的圖 |
+| `SPEC.md`／`spec.json` | 完整規格：資訊架構、設計系統、元件、各頁各區塊內容、動態、素材、技術與編輯方式、健檢、實作順序、**未知與限制** |
+| `motion.md`、`health.md` | 動態與健檢 |
+| `DECISIONS.md` | **持續更新**的決策紀錄、待確認問題、假設、擷取紀錄（誰在何時用什麼身分讀了哪些頁面） |
+| `CLAUDE.md` | 給在此資料夾工作的 AI：怎麼讀、不能做什麼、每個決策都要記錄 |
+| `tokens/`、`media/` | css／W3C／Tokens Studio／Tailwind／色票 SVG；區塊裁切圖、影格序列圖、品牌素材 |
+
+整包可獨立搬移：文件中引用的每個檔案都在包內（有測試保證）。
+
+## 設計師工作台（儀表板）
+
+| 你想做的事 | 功能 |
+|---|---|
+| 「這個標題是什麼字型、多大、什麼色？」 | **檢視元素**：游標移上截圖即時顯示字型、字級、色碼、對比、間距、圓角；點擊釘選並複製 CSS |
+| 「這頁怎麼組成？」 | **區塊切片**＋**頁面骨架**，並標示「推測依據」 |
+| 「手機版怎麼重排？」 | **響應式並排**（捲動同步） |
+| 「這字型我能用嗎？」 | **字型來源**（Google／Adobe／自架／系統）與替代建議 |
+| 「哪些字看不清？」 | **真實背景對比檢查** |
+| 「帶進 Figma」 | `palette.svg`、`tokens.studio.json` |
+| 「SEO 哪裡有問題？」 | **健檢**分頁：分數、問題清單（為什麼重要＋怎麼修＋範例）、頁面一覽、robots／AI 爬蟲、sitemap、效能、安全 |
+| 「和競品比」 | `/site-explorer:compare` |
+
+## 網站健檢涵蓋
+
+索引與爬取 25%・頁面 SEO 20%・連結 10%・效能 15%・行動版 10%・安全與傳輸 10%・結構化資料與社群 5%・AI 爬蟲友善度 5%。評分有遞減效果，且出現「嚴重」問題（全站被擋、全站 noindex、無 HTTPS、憑證過期）時總分上限 55。**分數是相對指標，不是 Google 的評分**；只分析本次爬取的頁面（抽樣）；效能為實驗室數據。
 
 ## 內容
 
 | 元件 | 作用 |
 |---|---|
 | `.mcp.json` | 掛載 Playwright MCP，Claude 可即時操作瀏覽器 |
-| `scripts/explore.mjs` | 單一入口，分階段、有進度，單階段失敗不中斷其他階段 |
-| `scripts/doctor.mjs` | Node／瀏覽器／ffmpeg／資料庫／網路檢查 |
-| `scripts/crawl.mjs` | 爬取；偵測被擋（403／驗證碼）、自動處理 Cookie 橫幅、遵守 robots.txt |
-| `scripts/export-design.mjs` | 設計包 |
-| `scripts/capture-3d.mjs` | 3D／動畫擷取 |
-| `scripts/db.mjs` | 資料庫：ingest／list／search／history／compare／export |
-| `scripts/designer-extract.mjs` | 頁面內擷取：可檢視元素、區塊辨識、真實背景對比、動態、網格、字型來源、圖示 |
-| `scripts/compare-report.mjs` | 兩站並排比較 |
-| `scripts/build-report.mjs` | 儀表板 |
-| `skills/`、`commands/`、`agents/` | `site-explore`、`site-to-design`、`capture-motion` 與對應指令、分析 agent |
-| `test/e2e.test.mjs` | `npm test`：本機夾具網站端到端測試（含 WebGL、CSS 3D、被擋頁面、資料庫歷史） |
+| `scripts/explore.mjs` | 單一入口：環境檢查→爬取→設計包→健檢→3D→資料庫→儀表板→交接包；單階段失敗不中斷其他 |
+| `scripts/crawl.mjs` | 爬取；遵守 robots.txt（含 Allow 規則）、偵測被擋、處理 Cookie 橫幅、依最終網址去重、區塊裁切圖 |
+| `scripts/designer-extract.mjs`、`seo-extract.mjs` | 頁面內擷取：設計師資料；SEO／效能／結構化資料 |
+| `scripts/export-design.mjs` | 設計包（tokens、Tailwind、W3C、Tokens Studio、色票 SVG、字型授權） |
+| `scripts/health-check.mjs`、`robots.mjs` | 健檢；Google 語意的 robots.txt 解析器 |
+| `scripts/capture-3d.mjs`、`motion-ai.mjs` | 3D／動畫擷取；AI 可讀化（three.js 場景、影片、量化、影格序列圖） |
+| `scripts/build-handoff.mjs` | 交接包 |
+| `scripts/build-report.mjs`、`report/` | 離線儀表板（可單檔內嵌圖片分享） |
+| `scripts/compare-report.mjs`、`db.mjs`、`doctor.mjs` | 比較；資料庫；環境診斷 |
+| `skills/`、`commands/`、`agents/` | `site-explore`、`site-to-design`、`site-health`、`capture-motion` 與對應指令、分析 agent |
+| `test/` | `npm test`：端到端與回歸測試（含真實 three.js、故意有毛病的網站、對抗性案例） |
 
-設計取捨與使用者旅途盤點見 [`docs/ux-review.md`](docs/ux-review.md)。
+設計取捨與審視記錄見 [`docs/ux-review.md`](docs/ux-review.md)。
 
 ## 邊界
 
-遵守 robots.txt（網站全面禁止時會明確說明並停止，不會硬爬）；不登入、不繞過驗證碼或防機器人；後台路徑只探測是否存在。被擋住時會明確標示而不是回報空白結果。3D 模型與網站素材受版權保護，只供參考。僅用於公開或已授權的網站。
+遵守 robots.txt（網站全面禁止時會明確說明並停止）；明確標示為自動化工具（User-Agent：`site-explorer-claude-plugin`）；不登入、不送出表單、不繞過驗證碼或防機器人；額外請求（robots、sitemap、連結狀態、404 探測）限制併發。被擋住時會明確標示而不是回報空白結果。字型、圖片、文案、3D 模型受版權保護，只供參考，不要複製。僅用於公開或已授權的網站。

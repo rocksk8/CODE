@@ -72,6 +72,10 @@ test('explore pipeline produces all artifacts', async (t) => {
   assert.equal(tok.color.brand, '#e4572e');
   for (const f of ['tokens.css', 'tokens.w3c.json', 'tailwind.config.js', 'README.md']) assert.ok(fs.existsSync(path.join(bundle, f)), f);
   JSON.parse(fs.readFileSync(path.join(bundle, 'tokens.w3c.json'), 'utf8'));
+  // the new stages of the pipeline: health check + handoff package
+  const health = JSON.parse(fs.readFileSync(path.join(out, 'site', host, 'health.json'), 'utf8'));
+  assert.ok(health.score >= 0 && health.score <= 100 && health.issues.length > 0, 'health check ran');
+  for (const f of ['ai-brief.md', 'SPEC.md', 'spec.json', 'DECISIONS.md', 'CLAUDE.md', 'motion.md', 'health.md']) assert.ok(fs.existsSync(path.join(out, 'handoff', f)), 'handoff/' + f);
   const motion = JSON.parse(fs.readFileSync(path.join(out, 'motion', host, 'motion.json'), 'utf8'));
   const kinds = motion.targets.map((x) => x.kind);
   assert.ok(kinds.includes('webgl') && kinds.includes('css-3d'), 'finds WebGL and CSS 3D: ' + kinds);

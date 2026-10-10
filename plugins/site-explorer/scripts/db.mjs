@@ -2,7 +2,7 @@
 // Local knowledge base of explorations (SQLite via node:sqlite, Node >= 22.13).
 //   db.mjs ingest --site DIR [--motion DIR]     store a run
 //   db.mjs list                                  all runs
-//   db.mjs search [--lib three] [--platform WordPress] [--font Georgia] [--color "#e4572e"] [--has-3d]
+//   db.mjs search [--lib three] [--platform WordPress] [--font Georgia] [--color "#e4572e"] [--has-3d] [--health-below 60]
 //   db.mjs history <host>                        runs of one site + what changed
 //   db.mjs compare <runId> <runId>               side-by-side diff
 //   db.mjs export [--out file.json]              dump everything as JSON
@@ -12,7 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const DB_PATH = process.env.SITE_EXPLORER_DB || path.join(os.homedir(), '.site-explorer', 'explorations.db');
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export async function openDb(file = DB_PATH) {
   let DatabaseSync;
@@ -40,6 +40,9 @@ export async function openDb(file = DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_libs_name ON libs(name);
     CREATE INDEX IF NOT EXISTS idx_colors_run ON colors(run_id);
   `);
+  // lightweight migration: older databases get the new columns
+  const have = new Set(db.prepare("PRAGMA table_info(runs)").all().map((c) => c.name));
+  for (const [col, type] of [['health_score', 'INTEGER'], ['health_grade', 'TEXT'], ['health_json', 'TEXT'], ['issues_critical', 'INTEGER'], ['issues_high', 'INTEGER']]) if (!have.has(col)) db.exec(`ALTER TABLE runs ADD COLUMN ${col} ${type}`);
   db.prepare('INSERT OR IGNORE INTO meta VALUES(?,?)').run('schema_version', String(SCHEMA_VERSION));
   return db;
 }
@@ -56,13 +59,15 @@ export function ingest(db, { siteDir, motionDir }) {
   const host = new URL(url).host;
   const t = tok || {};
   const targets = motion?.targets || [];
-  const info = db.prepare(`INSERT INTO runs(host,url,crawled_at,out_dir,motion_dir,pages,blocked,brand,accent,background,text_color,heading_font,body_font,base_unit,dark_mode,breakpoints,contrast_fail,motion_targets,animated_targets,webgl,assets3d)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+  const hl = site?.health;
+  const info = db.prepare(`INSERT INTO runs(host,url,crawled_at,out_dir,motion_dir,pages,blocked,brand,accent,background,text_color,heading_font,body_font,base_unit,dark_mode,breakpoints,contrast_fail,motion_targets,animated_targets,webgl,assets3d,health_score,health_grade,health_json,issues_critical,issues_high)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
     host, url, site?.crawledAt || motion?.capturedAt, siteDir ? path.resolve(siteDir) : null, motionDir ? path.resolve(motionDir) : null,
     site?.pages.length ?? null, site?.blockedPages?.length ?? 0, t.color?.brand ?? null, t.color?.accent ?? null, t.color?.background ?? null, t.color?.text ?? null,
     t.typography?.fontStack?.heading ?? null, t.typography?.fontStack?.body ?? null, t.spacing?.baseUnit ?? null, t.darkMode?.supported ? 1 : 0,
     JSON.stringify(t.breakpoints || []), (t.contrastAudit || []).filter((a) => !a.pass).length,
-    targets.length, targets.filter((x) => x.animatesOnItsOwn).length, (motion?.webglContexts || []).length, (motion?.assets3d || []).length);
+    targets.length, targets.filter((x) => x.animatesOnItsOwn).length, (motion?.webglContexts || []).length, (motion?.assets3d || []).length,
+    hl?.score ?? null, hl?.grade ?? null, hl ? JSON.stringify(hl.categories) : null, hl?.severity?.critical ?? null, hl?.severity?.high ?? null);
   const id = Number(info.lastInsertRowid);
   const q = (sql) => db.prepare(sql);
   for (const [role, hex] of Object.entries(t.color || {})) q('INSERT INTO colors VALUES(?,?,?,?)').run(id, hex, role, null);
@@ -105,6 +110,7 @@ export function diffRuns(db, a, b) {
   cmp('間距基準', A.run.base_unit, B.run.base_unit); cmp('深色模式', A.run.dark_mode ? '有' : '無', B.run.dark_mode ? '有' : '無');
   cmp('斷點', A.run.breakpoints, B.run.breakpoints); cmp('頁數', A.run.pages, B.run.pages);
   cmp('平台', A.platforms.join(', '), B.platforms.join(', ')); cmp('對比不足項', A.run.contrast_fail, B.run.contrast_fail);
+  if (A.run.health_score != null && B.run.health_score != null) { cmp('健檢分數', `${A.run.health_score}（${A.run.health_grade}）`, `${B.run.health_score}（${B.run.health_grade}）`); cmp('嚴重／高優先問題', (A.run.issues_critical ?? 0) + (A.run.issues_high ?? 0), (B.run.issues_critical ?? 0) + (B.run.issues_high ?? 0)); }
   // only compare motion when both runs actually measured it (a --no-motion run is "unknown", not "zero")
   if (A.run.motion_dir && B.run.motion_dir) { cmp('3D／動畫元素數', A.run.motion_targets, B.run.motion_targets); cmp('3D 函式庫', A.libs.join(', '), B.libs.join(', ')); }
   return changes;
@@ -115,6 +121,7 @@ export function search(db, f) {
   const has = (sql, ...p) => new Set(db.prepare(sql).all(...p).map((r) => r.run_id));
   if (f.lib) { const s = has('SELECT run_id FROM libs WHERE name LIKE ?', f.lib); rows = rows.filter((r) => s.has(r.id)); }
   if (f.platform) { const s = has('SELECT run_id FROM platforms WHERE name LIKE ?', '%' + f.platform + '%'); rows = rows.filter((r) => s.has(r.id)); }
+  if (f.healthBelow != null) rows = rows.filter((r) => r.health_score != null && r.health_score < f.healthBelow).sort((a, b) => a.health_score - b.health_score);
   if (f.font) rows = rows.filter((r) => [r.heading_font, r.body_font].some((x) => x && x.toLowerCase().includes(f.font.toLowerCase())));
   if (f.has3d) rows = rows.filter((r) => r.motion_targets > 0 && (r.webgl > 0 || db.prepare("SELECT 1 FROM motion WHERE run_id=? AND kind IN ('webgl','css-3d','webgpu','model-viewer')").get(r.id)));
   if (f.color) rows = rows.filter((r) => [r.brand, r.accent].some((c) => c && dist(c, f.color) < (f.tolerance ?? 70))).sort((a, b) => dist(a.brand || '#000000', f.color) - dist(b.brand || '#000000', f.color));
@@ -127,12 +134,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const opt = (n) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : undefined; };
   const db = await openDb();
   if (!db) { console.error('此功能需要 Node ≥ 22.13（內建 node:sqlite）。目前版本：' + process.version + '。請升級：brew install node'); process.exit(2); }
-  const fmt = (r) => `#${String(r.id).padEnd(3)} ${r.host.padEnd(30)} ${String(r.crawled_at || '').slice(0, 10)}  頁${r.pages ?? '-'}  主色 ${r.brand || '-'}  字型 ${r.heading_font || '-'}  3D/動畫 ${r.motion_targets}`;
+  const fmt = (r) => `#${String(r.id).padEnd(3)} ${r.host.padEnd(30)} ${String(r.crawled_at || '').slice(0, 10)}  頁${r.pages ?? '-'}  健檢 ${r.health_score ?? '-'}  主色 ${r.brand || '-'}  字型 ${r.heading_font || '-'}  3D/動畫 ${r.motion_targets}`;
   switch (cmd) {
     case 'ingest': { const id = ingest(db, { siteDir: opt('site'), motionDir: opt('motion') }); console.log(`已存入資料庫 run #${id}  (${DB_PATH})`); break; }
     case 'list': { const rows = db.prepare('SELECT * FROM runs ORDER BY id DESC').all(); console.log(rows.length ? rows.map(fmt).join('\n') : '（資料庫是空的）'); break; }
     case 'search': {
-      const rows = search(db, { lib: opt('lib'), platform: opt('platform'), font: opt('font'), color: opt('color'), has3d: rest.includes('--has-3d') });
+      const rows = search(db, { lib: opt('lib'), platform: opt('platform'), font: opt('font'), color: opt('color'), has3d: rest.includes('--has-3d'), healthBelow: opt('health-below') != null ? Number(opt('health-below')) : undefined });
       console.log(rows.length ? rows.map(fmt).join('\n') : '沒有符合的網站'); break;
     }
     case 'history': {

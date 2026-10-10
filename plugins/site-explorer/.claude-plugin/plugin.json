@@ -1,7 +1,18 @@
 {
   "name": "site-explorer",
-  "version": "0.2.0",
-  "description": "Claude 自動控制瀏覽器探索網站，並取得網站設計、網頁內容、網站排版與編輯方式。",
-  "author": { "name": "rocksk8" },
-  "keywords": ["browser", "playwright", "design", "scraping", "layout", "cms"]
+  "version": "0.3.0",
+  "description": "Claude 自動控制瀏覽器探索網站：設計、內容、排版、3D／動畫（AI 可讀化）、SEO／爬蟲索引健檢、編輯方式，並產生可交接給 AI 與開發者的規格包。",
+  "author": {
+    "name": "rocksk8"
+  },
+  "keywords": [
+    "browser",
+    "playwright",
+    "design",
+    "seo",
+    "crawler",
+    "handoff",
+    "3d",
+    "cms"
+  ]
 }
