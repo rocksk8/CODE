@@ -341,12 +341,13 @@ while (queue.length && pages.length < maxPages) {
     crawledFinal.add(finalKey); crawledFinal.add(norm(url));
     if (pages.length === 0 && resp) headers.main = resp.headers();
     if (pages.length === 0) { consentAction = await dismissConsent(page); if (consentAction) await page.waitForTimeout(600); }
-    const contentReady = await waitForContent(page, contentWaitMs);
-    if (!contentReady) console.log('   ⚠️ 頁面在等待後仍幾乎是空的（可能是 3D／WebGL 體驗頁、要先點「進入」、被擋或載入逾時）：' + url);
+    let contentReady = await waitForContent(page, contentWaitMs);
     // trigger lazy content
     // bounded: infinite-scroll pages grow forever while you scroll
     await page.evaluate(async () => { const t0 = Date.now(); for (let y = 0, n = 0; y < document.body.scrollHeight && n < 40 && Date.now() - t0 < 4000; y += 600, n++) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 80)); } scrollTo(0, 0); });
     await page.waitForTimeout(400);
+    if (!contentReady) contentReady = await waitForContent(page, 0); // content inserted only by the lazy-load scroll counts
+    if (!contentReady) console.log('   ⚠️ 頁面在等待後仍幾乎是空的（可能是 3D／WebGL 體驗頁、要先點「進入」、被擋或載入逾時）：' + url);
     const data = await page.evaluate(extractInPage);
     data.emptyPage = !contentReady;
     data.designer = await page.evaluate(extractDesignerInPage).catch((e) => { console.log('   (designer data skipped:', e.message.split('\n')[0] + ')'); return null; });
