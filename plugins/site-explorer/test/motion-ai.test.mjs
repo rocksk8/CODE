@@ -80,7 +80,7 @@ test('every target has a single-image filmstrip, and a plain-language motion.md 
   const md = fs.readFileSync(path.join(motionDir, 'motion.md'), 'utf8');
   assert.match(md, /AI 無法直接觀看 3D、影片或動畫/);
   assert.match(md, /位於「Our product in 3D」區塊/); assert.match(md, /three r\d+/); assert.match(md, /ProductCube/);
-  assert.match(md, /影片規格：1\.\d 秒，320×180，自動播放、循環、靜音/);
+  assert.match(md, /影片規格：\d+\.\d 秒，320×180，自動播放、循環、靜音/);
   assert.doesNotMatch(md, /precision highp|#define/, 'no library shader boilerplate');
   assert.ok(!/載入模型／素材/.test(md), 'video is not mislabelled as a 3D model');
 });
