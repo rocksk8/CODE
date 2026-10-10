@@ -29,6 +29,8 @@ site-explorer doctor              # 出問題時，每項都附修復指令
 ```
 免安裝：`npx github:rocksk8/code example.com`。
 
+**輸出位置**：預設在目前資料夾的 `explore-out/`。用 `--out <資料夾>` 指定，或設環境變數 `SITE_EXPLORER_OUT` 一次指定。資料夾根目錄會自動放 `ABOUT-THIS-FOLDER.md`（這是什麼、看哪裡、怎麼重跑）和 `runs.json`（做過哪些網站），日後打開就知道來歷。
+
 貢獻者：`cd plugins/site-explorer && npm run test:full`。
 
 ## 指令
