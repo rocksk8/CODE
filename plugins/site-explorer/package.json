@@ -10,7 +10,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test \"test/*.test.mjs\"",
+    "test": "node test/run-all.mjs",
     "doctor": "node bin/site-explorer.mjs doctor",
     "explore": "node bin/site-explorer.mjs explore",
     "setup": "node bin/site-explorer.mjs setup",
