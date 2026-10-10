@@ -93,5 +93,7 @@ test('health.md is AI-readable and the dashboard health tab works', async (t) =>
   const all = await p.locator('details.is').count(); await p.click('[data-cat=indexability]');
   assert.ok(await p.locator('details.is').count() < all, 'category filter narrows the list');
   for (const v of ['pages', 'crawl', 'sitemap', 'perf', 'sec']) { await p.click(`[data-view=${v}]`); }
+  await p.click('#tabs button[data-k=rules]'); assert.match(await p.locator('#s-rules').innerText(), /第 1 步.*第 2 步.*第 3 步.*成因/s);
+  await p.click('#tabs button[data-k=health]');
   assert.match(await p.locator('#hv').innerText(), /TLS|HTTPS|傳輸/); assert.deepEqual(errs, []); await b.close();
 });
