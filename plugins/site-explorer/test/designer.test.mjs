@@ -96,6 +96,12 @@ test('dashboard: inspector, slices, skeleton, side-by-side, designer cards', asy
   await p.click('#tabs button[data-k=design]');
   const txt = await p.locator('#s-design').innerText();
   for (const needle of ['Google Fonts', '自架字型檔', '版面網格', '動態節奏', '真實背景上的對比檢查', '行內圖示', 'palette.svg']) assert.ok(txt.includes(needle), needle);
+  await p.click('#tabs button[data-k=overview]');
+  assert.match(await p.locator('#s-overview').innerText(), /版面組成/);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#exp-md')]);
+  assert.equal(dl.suggestedFilename(), 'design-reference.md');
+  const md = fs.readFileSync(await dl.path(), 'utf8');
+  assert.match(md, /## 色彩/); assert.match(md, /## 版面/); assert.match(md, /頁首.*主視覺 Hero/s);
   assert.deepEqual(errs, []);
   await b.close();
 });
