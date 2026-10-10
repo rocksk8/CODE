@@ -44,24 +44,15 @@ export const sameSite = (a, b) => {
   try { return new URL(a).host.replace(/^www\./, '') === new URL(b).host.replace(/^www\./, ''); } catch { return false; }
 };
 
-/** Disallow rules that apply to `User-agent: *` for this origin ([] when robots.txt is missing). */
-export async function robotsRules(origin) {
-  try {
-    const r = await fetch(origin + '/robots.txt', { signal: AbortSignal.timeout(8000) });
-    if (!r.ok) return [];
-    const rules = []; let applies = false;
-    for (const line of (await r.text()).split('\n')) {
-      const [k, ...v] = line.split('#')[0].split(':');
-      const key = k.trim().toLowerCase(), val = v.join(':').trim();
-      if (key === 'user-agent') applies = val === '*';
-      else if (applies && key === 'disallow' && val) rules.push(val);
-    }
-    return rules;
-  } catch { return []; }
-}
+import { fetchRobots, isAllowed } from './robots.mjs';
+export const CRAWLER_UA_TOKEN = 'site-explorer-claude-plugin';
 
-/** The `Disallow` rule matching this URL, or null when allowed/unknown. */
+/** Parsed robots.txt for an origin (null parsed when missing). */
+export const loadRobots = (origin) => fetchRobots(origin, CRAWLER_UA_TOKEN);
+
+/** The rule that blocks this URL for our crawler, or null when allowed/unknown. */
 export async function robotsBlocks(url) {
-  const u = new URL(url);
-  return (await robotsRules(u.origin)).find((r) => u.pathname.startsWith(r)) ?? null;
+  const u = new URL(url), r = await loadRobots(u.origin);
+  const v = isAllowed(r.parsed, CRAWLER_UA_TOKEN, u.pathname + u.search);
+  return v.allowed ? null : v.rule;
 }

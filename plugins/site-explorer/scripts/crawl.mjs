@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Crawl a site with a real browser and capture design, content, layout and editing signals.
 import { launchBrowser } from './launch.mjs';
-import { findUrl, intOpt, sameSite, robotsRules } from './args.mjs';
+import { findUrl, intOpt, sameSite, loadRobots, CRAWLER_UA_TOKEN } from './args.mjs';
+import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
+import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -30,8 +32,6 @@ const slugOf = (u) => {
   return ((x.pathname + x.search).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'home').slice(0, 80);
 };
 const norm = (u) => { const x = new URL(u); x.hash = ''; return x.href.replace(/\/$/, ''); };
-
-const loadRobots = () => robotsRules(origin);
 
 // ---- runs inside the page ----
 function extractInPage() {
@@ -213,6 +213,11 @@ async function detectBlock(page, status) {
   return null;
 }
 
+async function redirectHops(resp) {
+  const hops = []; let rq = resp?.request();
+  while (rq && rq.redirectedFrom()) { rq = rq.redirectedFrom(); const rs = await rq.response().catch(() => null); hops.unshift({ url: rq.url(), status: rs?.status() }); }
+  return hops;
+}
 // Never wait for "networkidle" indefinitely: many sites keep analytics/websocket requests open forever.
 async function openPage(page, url) {
   const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -221,11 +226,30 @@ async function openPage(page, url) {
   return resp;
 }
 
+// What a crawler that does NOT run JavaScript would receive for this URL.
+async function fetchRaw(u) {
+  try {
+    const r = await fetch(u, { headers: { 'user-agent': UA, accept: 'text/html' }, redirect: 'follow', signal: AbortSignal.timeout(15000) });
+    const html = (await r.text()).slice(0, 3_000_000);
+    const body = (html.match(/<body[\s\S]*<\/body>/i) || [html])[0];
+    const text = body.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<noscript[\s\S]*?<\/noscript>|<!--[\s\S]*?-->/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ');
+    const latin = (text.match(/[A-Za-z0-9À-ɏ']+/g) || []).length, cjk = (text.match(/[㐀-鿿぀-ヿ가-힯]/g) || []).length;
+    return {
+      status: r.status, finalUrl: r.url, bytes: html.length, contentType: r.headers.get('content-type') || '',
+      title: ((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim(), h1Count: (html.match(/<h1[\s>]/gi) || []).length,
+      words: latin + Math.round(cjk / 1.8), links: (html.match(/<a\s[^>]*href=/gi) || []).length, canonical: /<link[^>]+rel=["']?canonical/i.test(html), jsonld: (html.match(/application\/ld\+json/gi) || []).length,
+      metaRobots: ((html.match(/<meta[^>]+name=["']robots["'][^>]*content=["']([^"']*)/i) || [])[1] || null), csrShell: /<div[^>]+id=["'](root|app|__next|__nuxt)["'][^>]*>\s*<\/div>/i.test(html),
+    };
+  } catch (e) { return { error: String(e.message).slice(0, 100) }; }
+}
+const pickHeaders = (h = {}) => Object.fromEntries(['content-type', 'x-robots-tag', 'cache-control', 'content-encoding', 'strict-transport-security', 'content-security-policy', 'x-content-type-options', 'x-frame-options', 'referrer-policy', 'permissions-policy', 'server', 'x-powered-by', 'link', 'last-modified', 'etag', 'vary', 'age', 'cf-cache-status', 'x-cache'].filter((k) => h[k] !== undefined).map((k) => [k, k === 'content-security-policy' ? String(h[k]).slice(0, 200) : h[k]]));
+
 // ---- main ----
-let robots = await loadRobots();
-const allowed = (u) => !robots.some((r) => new URL(u).pathname.startsWith(r));
+let robotsInfo = await loadRobots(origin);
+const robotsList = () => (groupFor(robotsInfo.parsed || { groups: [] }, CRAWLER_UA_TOKEN)?.rules || []).filter((r) => r.type === 'disallow' && r.path).map((r) => r.path);
+const allowed = (u) => { const x = new URL(u); return isAllowed(robotsInfo.parsed, CRAWLER_UA_TOKEN, x.pathname + x.search).allowed; };
 if (!allowed(startUrl)) {
-  console.error('\n沒有成功爬取任何頁面。\n原因：robots.txt 不允許爬取此網站（' + robots.join(', ') + '）。已依網站設定停止；若你擁有此網站，請調整 robots.txt，或改用 Playwright MCP 手動瀏覽。');
+  console.error('\n沒有成功爬取任何頁面。\n原因：robots.txt 不允許爬取此網站（' + robotsList().join(', ') + '）。已依網站設定停止；若你擁有此網站，請調整 robots.txt，或改用 Playwright MCP 手動瀏覽。');
   process.exit(3);
 }
 const browser = await launchBrowser();
@@ -233,6 +257,7 @@ const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA });
 const queue = [[norm(startUrl), 0]], seen = new Set([norm(startUrl)]), pages = [], headers = {};
 let consentAction = null;
+const crawledFinal = new Set(), redirectLog = []; // dedupe by FINAL url: /old and /new that land on the same page are one page
 const skippedByRobots = [];
 const t0 = Date.now();
 
@@ -242,11 +267,19 @@ while (queue.length && pages.length < maxPages) {
   const page = await ctx.newPage();
   const watchdog = setTimeout(() => { console.log('timeout (120s), giving up on:', url); page.close().catch(() => {}); }, 120000);
   try {
+    const mixed = new Set(); page.on('request', (r) => { if (/^https:/.test(page.url()) && /^http:/.test(r.url())) mixed.add(r.url().slice(0, 140)); });
     const resp = await openPage(page, url);
     if (pages.length === 0 && new URL(page.url()).origin !== origin) {
-      origin = new URL(page.url()).origin; robots = await loadRobots();
+      origin = new URL(page.url()).origin; robotsInfo = await loadRobots(origin);
       console.log('redirected to', origin);
     }
+    const finalKey = norm(page.url());
+    if (crawledFinal.has(finalKey)) {
+      redirectLog.push({ from: url, to: page.url(), hops: await redirectHops(resp), status: resp?.status() });
+      console.log(`   (same page as ${page.url()} — counted once)`);
+      clearTimeout(watchdog); await page.close().catch(() => {}); continue;
+    }
+    crawledFinal.add(finalKey); crawledFinal.add(norm(url));
     if (pages.length === 0 && resp) headers.main = resp.headers();
     if (pages.length === 0) { consentAction = await dismissConsent(page); if (consentAction) await page.waitForTimeout(600); }
     // trigger lazy content
@@ -256,6 +289,15 @@ while (queue.length && pages.length < maxPages) {
     const data = await page.evaluate(extractInPage);
     data.designer = await page.evaluate(extractDesignerInPage).catch((e) => { console.log('   (designer data skipped:', e.message.split('\n')[0] + ')'); return null; });
     data.status = resp?.status();
+    // --- SEO / indexability signals ---
+    data.seo = await page.evaluate(extractSeoInPage).catch((e) => { console.log('   (seo data skipped:', e.message.split('\n')[0] + ')'); return null; });
+    if (data.seo) {
+      const hops = await redirectHops(resp);
+      const timing = resp?.request().timing();
+      data.seo.http = { status: resp?.status(), requestedUrl: url, finalUrl: page.url(), redirects: hops, headers: pickHeaders(resp?.headers()), ttfbMs: timing && timing.responseStart >= 0 ? Math.round(timing.responseStart) : null, mixedContent: [...mixed].slice(0, 10), mixedContentCount: mixed.size };
+      data.seo.raw = await fetchRaw(url);
+      if (hops.length) redirectLog.push({ from: url, to: page.url(), hops, status: resp?.status() });
+    }
     data.blocked = await detectBlock(page, data.status);
     if (pages.length === 0) {
       try {
@@ -281,7 +323,19 @@ while (queue.length && pages.length < maxPages) {
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
         data.layout[`${name}Overflow`] = overflow;
         await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true });
+        if (name === 'desktop') {
+          // Per-section crops: a 1440x9000 full-page image gets downscaled until it is unreadable (for people and for AI)
+          const secDir = path.join(dir, 'sections'); fs.mkdirSync(secDir, { recursive: true });
+          for (const [i, b] of (data.designer?.blocks || []).slice(0, 30).entries()) {
+            const file = `${String(i + 1).padStart(2, '0')}-${b.kind}.png`;
+            try { await page.screenshot({ path: path.join(secDir, file), fullPage: true, clip: { x: 0, y: b.y, width: w, height: Math.min(b.h, 1800) } }); b.image = `sections/${file}`; } catch {}
+          }
+        }
+        if (name === 'mobile' && data.seo) data.seo.mobile = await page.evaluate(extractMobileInPage).catch(() => null);
       }
+    } else if (data.seo) {
+      await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(250);
+      data.seo.mobile = await page.evaluate(extractMobileInPage).catch(() => null);
     }
     fs.writeFileSync(path.join(dir, 'page.json'), JSON.stringify(data, null, 2));
     data.slug = slugOf(url);
@@ -307,7 +361,7 @@ await browser.close();
 
 if (pages.length === 0) {
   console.error('\n沒有成功爬取任何頁面。');
-  if (skippedByRobots.length) console.error(`原因：robots.txt 不允許爬取此網站（${robots.join(', ')}）。已依網站設定停止；若你擁有此網站，請調整 robots.txt，或改用 Playwright MCP 手動瀏覽。`);
+  if (skippedByRobots.length) console.error(`原因：robots.txt 不允許爬取此網站（${robotsList().join(', ')}）。已依網站設定停止；若你擁有此網站，請調整 robots.txt，或改用 Playwright MCP 手動瀏覽。`);
   else console.error('原因：頁面無法載入（網址錯誤、逾時或被擋住）。請先執行 doctor.mjs <網址> 確認連線。');
   process.exit(3);
 }
@@ -352,7 +406,7 @@ const designer = {
 const toolVersion = (() => { try { return JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version; } catch { return null; } })();
 const site = {
   schemaVersion: 3, tool: { name: 'site-explorer', version: toolVersion }, userAgent: UA, requestedUrl: startUrl, finalOrigin: origin,
-  startUrl, crawledAt: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), robotsDisallow: robots, consentAction, blockedPages: pages.filter((p) => p.blocked).map((p) => ({ url: p.url, reason: p.blocked })), skippedByRobots,
+  startUrl, crawledAt: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), robotsDisallow: robotsList(), robotsTxt: { status: robotsInfo.status, text: (robotsInfo.text || '').slice(0, 20000) }, consentAction, redirects: redirectLog, blockedPages: pages.filter((p) => p.blocked).map((p) => ({ url: p.url, reason: p.blocked })), skippedByRobots,
   server: { server: headers.main?.server, poweredBy: headers.main?.['x-powered-by'], generator: pages[0]?.meta.generator },
   editing: { platforms, contenteditablePages: pages.filter((p) => p.editing.contenteditable).map((p) => p.url), loginOrAdminLinks: [...new Map(pages.flatMap((p) => p.editing.editLinks).map((l) => [l.href, l])).values()].slice(0, 15) },
   design: { textColors: merge('textColors'), backgrounds: merge('backgrounds'), fontFamilies: merge('fontFamilies', 6), fontSizes: merge('fontSizes'), radii: merge('radii', 6), shadows: merge('shadows', 5), spacing: merge('spacing'), cssVars: pages[0]?.design.cssVars || {}, webFonts: [...new Set(pages.flatMap((p) => p.design.webFonts))], typography: pages[0]?.design.typography, breakpoints: (() => { const m = {}; for (const p of pages) for (const b of p.breakpoints) m[b.px] = (m[b.px] || 0) + b.uses; return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([px, uses]) => ({ px: Number(px), uses })); })(), darkMode: pages[0]?.darkMode, buttonHover: pages[0]?.buttonHover },

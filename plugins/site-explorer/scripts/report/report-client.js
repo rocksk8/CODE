@@ -7,7 +7,7 @@ const toast=(m)=>{const t=$('#toast');t.textContent=m;t.classList.add('on');setT
 const copy=(v)=>{navigator.clipboard?.writeText(v);toast('已複製 '+v)};
 $('#sub').textContent=(S?.startUrl||M?.url||'')+' · '+new Date(D.generatedAt).toLocaleString();
 
-const tabs=[['overview','總覽'],['design','設計'],['layout','排版'],['content','內容'],['motion','3D／動畫'],['edit','編輯方式'],['history','歷史']].filter(([k])=>k==='overview'||(k==='motion'?M:k==='history'?(D.history&&D.history.runs.length>0):S));
+const tabs=[['overview','總覽'],['design','設計'],['layout','排版'],['content','內容'],['motion','3D／動畫'],['edit','編輯方式'],['health','健檢'],['history','歷史']].filter(([k])=>k==='overview'||(k==='health'?D.health:k==='motion'?M:k==='history'?(D.history&&D.history.runs.length>0):S));
 tabs.forEach(([k,l],i)=>{const b=el('<button role="tab">'+l+'</button>');b.dataset.k=k;b.onclick=()=>show(k);$('#tabs').append(b)});
 function show(k){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='s-'+k));document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.k===k));history.replaceState(null,'','#'+k)}
 
@@ -23,6 +23,7 @@ function show(k){document.querySelectorAll('section').forEach(s=>s.classList.tog
    (S?'<div class="card"><h3>頁面</h3><div class="big">'+S.pages.length+'</div><div class="hint">耗時 '+S.seconds+' 秒</div></div>':'')+
    (T?'<div class="card"><h3>色彩</h3><div class="big">'+T.palette.length+'</div><div class="hint">'+Object.keys(c).length+' 個角色色</div></div>':'')+
    (M?'<div class="card"><h3>3D／動畫</h3><div class="big">'+ms+'</div><div class="hint">WebGL 實例 '+M.webglContexts.length+'・3D 素材 '+M.assets3d.length+'</div></div>':'')+
+   (D.health?'<div class="card"><h3>網站健檢</h3><div class="big" style="color:'+(D.health.score>=80?'var(--ok)':D.health.score>=60?'var(--warn)':'#dc2626')+'">'+D.health.score+' <span style="font-size:16px">'+D.health.grade+'</span></div><div class="hint">'+D.health.severity.critical+' 嚴重・'+D.health.severity.high+' 高・'+D.health.severity.medium+' 中</div></div>':'')+
    (plat.length?'<div class="card"><h3>平台</h3><div class="big" style="font-size:20px">'+plat.map(p=>esc(p.platform)).join(' / ')+'</div></div>':'')+
   '</div><div class="card" style="margin-top:14px"><h3>重點摘要</h3>'+sentences.map(s=>'<p class="say">'+s+'</p>').join('')+'</div>'+
   (T?'<div class="card" style="margin-top:14px"><h3>色彩速覽</h3><div style="display:flex;height:44px;border-radius:8px;overflow:hidden">'+T.palette.slice(0,10).map(p=>'<div title="'+p.hex+'" style="flex:'+Math.max(1,Math.log2(p.uses+1))+';background:'+p.hex+'"></div>').join('')+'</div></div>':'')+
@@ -31,6 +32,7 @@ function show(k){document.querySelectorAll('section').forEach(s=>s.classList.tog
   const blocked=S?.blockedPages||[];
   if(blocked.length)o.insertAdjacentHTML('afterbegin','<div class="card" style="border-color:var(--warn);margin-bottom:14px"><h3 style="color:var(--warn)">⚠️ 部分頁面被擋住</h3><p>'+blocked.map(b=>esc(b.reason)+'：'+esc(b.url)).join('<br>')+'</p><p class="hint">以下結果可能不完整。可降低頻率、確認你有權存取，或請 Claude 用瀏覽器工具互動補查。</p></div>');
   const steps=[];
+  if(D.health){const t=D.health.issues.filter(i=>['critical','high'].includes(i.severity))[0];steps.push(['先處理 SEO／索引問題',t?esc(t.title)+'（共 '+D.health.issues.filter(i=>['critical','high'].includes(i.severity)).length+' 項嚴重／高優先，見「健檢」分頁）':'沒有嚴重問題，可到「健檢」分頁看中低優先建議']);}
   if(S)steps.push(['把這個風格變成 Claude Design 的設計系統','在 Claude Code 輸入：<code>/site-explorer:to-design '+esc(S.startUrl)+'</code>']);
   if(D.files.length)steps.push(['給開發者的檔案',D.files.map(f=>'<a href="'+f.href+'" download="'+esc(f.name)+'">'+esc(f.name)+'</a>').join('　')]);
   if(T&&(T.contrastAudit||[]).some(a=>!a.pass))steps.push(['修正對比不足','有 '+T.contrastAudit.filter(a=>!a.pass).length+' 項文字／按鈕對比低於 4.5:1，改版時建議調深前景或底色']);
@@ -217,6 +219,68 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   if(!S)return;const e=$('#s-edit');const E=S.editing;
   e.innerHTML='<div class="grid g2">'+(E.platforms.length?E.platforms.map(p=>'<div class="card"><h3>偵測到的平台</h3><div class="big" style="font-size:20px">'+esc(p.platform)+'</div><p>'+esc(p.howToEdit)+'</p>'+Object.entries(p.adminProbes).map(([k,v])=>'<span class="chip '+(v===200||v===301||v===302?'ok':'')+'">'+esc(k)+' → '+v+'</span>').join('')+'</div>').join(''):'<div class="card"><h3>平台</h3><p>未偵測到已知建站平台，可能是自訂程式或靜態站。</p></div>')+
    '<div class="card"><h3>伺服器線索</h3><p>Server：'+esc(S.server.server||'?')+'<br>X-Powered-By：'+esc(S.server.poweredBy||'?')+'<br>Generator：'+esc(S.server.generator||'?')+'</p><h3>登入／後台連結</h3>'+(E.loginOrAdminLinks.map(l=>'<div class="hint">'+esc(l.text)+' → '+esc(l.href)+'</div>').join('')||'<span class="hint">無</span>')+'<p class="hint">可直接編輯頁面（contenteditable）：'+E.contenteditablePages.length+'</p></div></div>';
+})();
+
+// ---------- health (SEO / indexability) ----------
+(function(){
+  const H=D.health;if(!H)return;const h=$('#s-health');
+  const SEVN={critical:'嚴重',high:'高',medium:'中',low:'低',info:'資訊'};
+  const col=(v)=>v>=80?'var(--ok)':v>=60?'var(--warn)':'#dc2626';
+  let catF=null,sevF=null,view='issues';
+  const VIEWS=[['issues','問題清單'],['pages','頁面一覽'],['crawl','爬蟲與 robots'],['sitemap','Sitemap'],['perf','效能'],['sec','安全']];
+  function draw(){
+    const cats=Object.entries(H.categories);
+    let list=H.issues.filter(i=>(!catF||i.category===catF)&&(!sevF||i.severity===sevF));
+    h.innerHTML='<div class="card"><div class="score"><div><div class="ring" style="--p:'+H.score+';--c:'+col(H.score)+'"><b>'+H.score+'</b></div><small class="hint" style="display:block;text-align:center;margin-top:4px">等級 '+H.grade+'</small></div>'+
+      '<div style="flex:1;min-width:260px">'+cats.map(([k,c])=>'<div class="cat'+(catF&&catF!==k?' off':'')+'" data-cat="'+k+'"><span>'+esc(c.label)+'</span><i><b style="width:'+c.score+'%;background:'+col(c.score)+'"></b></i><span>'+c.score+'</span></div>').join('')+'<div class="hint">點類別可篩選問題</div></div>'+
+      '<div style="min-width:170px">'+Object.entries(H.severity).map(([k,n])=>'<div style="margin:3px 0;cursor:pointer" data-sev="'+k+'"><span class="sev '+k+'" style="opacity:'+(sevF&&sevF!==k?.4:1)+'">'+SEVN[k]+'</span> <b>'+n+'</b></div>').join('')+'</div></div>'+
+      (H.notes.length?'<p class="hint" style="margin-top:10px">'+H.notes.map(esc).join('<br>')+'</p>':'')+'</div>'+
+      '<div class="sub2 seg" style="display:flex">'+VIEWS.map(v=>'<button data-view="'+v[0]+'" aria-pressed="'+(v[0]===view)+'">'+v[1]+'</button>').join('')+'</div><div id="hv"></div>';
+    h.querySelectorAll('[data-cat]').forEach(e=>e.onclick=()=>{catF=catF===e.dataset.cat?null:e.dataset.cat;draw()});
+    h.querySelectorAll('[data-sev]').forEach(e=>e.onclick=()=>{sevF=sevF===e.dataset.sev?null:e.dataset.sev;draw()});
+    h.querySelectorAll('[data-view]').forEach(e=>e.onclick=()=>{view=e.dataset.view;draw()});
+    ({issues:vIssues,pages:vPages,crawl:vCrawl,sitemap:vSitemap,perf:vPerf,sec:vSec})[view]($('#hv',h),list);
+  }
+  const catName=(k)=>(H.categories[k]||{}).label||k;
+  function vIssues(el,list){
+    const top=H.issues.filter(i=>['critical','high','medium'].includes(i.severity)).slice(0,5);
+    el.innerHTML=(!catF&&!sevF&&top.length?'<div class="card"><h3>最該先處理的 '+top.length+' 件事</h3>'+top.map((i,n)=>'<p class="say"><b>'+(n+1)+'. '+esc(i.title)+'</b> <span class="sev '+i.severity+'">'+SEVN[i.severity]+'</span><br><span class="hint">'+esc(i.fix)+'</span></p>').join('')+'</div>':'')+
+      '<div style="margin-top:12px">'+(list.length?list.map(i=>'<details class="is"><summary><span class="sev '+i.severity+'">'+SEVN[i.severity]+'</span><b>'+esc(i.title)+'</b><span class="hint">'+esc(catName(i.category))+' · '+(i.scope==='site'?'全站':i.affected+' / '+i.total+' 頁')+'</span></summary><div class="bd">'+
+        (i.impact?'<p><b>為什麼重要：</b>'+esc(i.impact)+'</p>':'')+(i.fix?'<div class="fix"><b>怎麼修：</b>'+esc(i.fix)+'</div>':'')+(i.detail?'<p class="hint">'+esc(i.detail)+'</p>':'')+
+        (i.examples.length?'<b>範例</b><ul>'+i.examples.map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul>':'')+'<span class="hint mono">'+esc(i.id)+'</span></div></details>').join(''):'<div class="empty">沒有符合條件的問題 🎉</div>')+'</div>'+
+      '<details class="is" style="margin-top:14px"><summary><b>已通過的檢查（'+H.passed.length+'）</b></summary><div class="bd"><ul>'+H.passed.map(p=>'<li>✅ '+esc(catName(p.category))+'：'+esc(p.title)+'</li>').join('')+'</ul></div></details>';
+  }
+  function vPages(el){
+    el.innerHTML='<div class="card" style="overflow:auto"><table class="t"><tr><th>網址</th><th>狀態</th><th>可索引</th><th>標題</th><th>描述</th><th>H1</th><th>字數 渲染／原始</th><th>LCP</th><th>連入</th></tr>'+H.pages.map(p=>{
+      const tl=p.titleLen,dl=p.descLen;return '<tr><td class="mono">'+esc(p.url.replace(/^https?:\/\/[^/]+/,'')||'/')+'</td><td>'+p.status+'</td><td>'+(p.indexable?'✅':'<span class="chip warn">noindex／錯誤</span>')+'</td>'+
+        '<td><span class="'+(tl===0?'poor':tl<20||tl>60?'warn2':'good')+'">'+tl+'</span></td><td><span class="'+(dl===0?'poor':dl<70||dl>160?'warn2':'good')+'">'+dl+'</span></td><td class="'+(p.h1===1?'good':'warn2')+'">'+p.h1+'</td>'+
+        '<td>'+p.words+'／<span class="'+(p.rawWords!=null&&p.rawWords<p.words*.35?'poor':'')+'">'+(p.rawWords??'—')+'</span></td><td class="'+(p.lcpMs==null?'':p.lcpMs<=2500?'good':p.lcpMs<=4000?'warn2':'poor')+'">'+(p.lcpMs??'—')+'</td><td>'+p.inlinks+'</td></tr>'}).join('')+'</table><p class="hint">標題／描述為「字元寬度」（中日韓字元算 2）。建議標題 20–60、描述 70–160、h1 恰好 1。</p></div>';
+  }
+  function vCrawl(el){
+    const f=H.facts.robots,row=(b)=>'<tr><td class="mono">'+esc(b.bot)+'</td><td>'+esc(b.who)+'</td><td>'+(b.allowed?'<span class="chip ok">允許</span>':'<span class="chip warn">禁止</span> <span class="hint mono">'+esc(b.rule||'')+'</span>')+'</td></tr>';
+    el.innerHTML='<div class="grid g2"><div class="card"><h3>搜尋引擎爬蟲</h3><table class="t">'+f.searchBots.map(row).join('')+'</table></div><div class="card"><h3>AI 爬蟲</h3><table class="t">'+f.aiBots.map(row).join('')+'</table><p class="hint">訓練類（GPTBot、ClaudeBot、Google-Extended…）與搜尋／代使用者類（OAI-SearchBot、ChatGPT-User、Claude-User…）政策可以不同。</p></div></div>'+
+      '<div class="card" style="margin-top:14px"><h3>robots.txt（HTTP '+(f.status??'—')+'）'+(f.issues.length?' · <span class="chip warn">'+f.issues.length+' 個語法問題</span>':'')+'</h3>'+(f.issues.length?'<ul>'+f.issues.map(i=>'<li>第 '+i.line+' 行：'+esc(i.msg)+'</li>').join('')+'</ul>':'')+'<pre class="raw">'+esc((D.site&&D.site.robotsTxt&&D.site.robotsTxt.text)||'（無內容）')+'</pre></div>'+
+      '<div class="card" style="margin-top:14px"><h3>其他爬蟲相關</h3><div class="spec"><small>llms.txt</small><span>'+(H.facts.llmsTxt?'有':'無')+'</span></div><div class="spec"><small>不存在網址</small><span>回應 '+(H.facts.soft404.status??'—')+'（應為 404／410）</span></div>'+(H.facts.variants?'<div class="spec"><small>網域變體</small><span>'+H.facts.variants.map(v=>esc(v.variant)+' → '+(v.status||v.error)).join('<br>')+'</span></div>':'')+(H.facts.linkCheckLimited?'<p class="hint">'+esc(H.facts.linkCheckLimited)+'</p>':'')+(H.links?'<div class="spec"><small>連結檢查</small><span>內部 '+H.links.internalChecked+' 個、外部 '+H.links.externalChecked+' 個；壞連結 '+H.links.broken.length+'，外部失效 '+H.links.externalBroken.length+'</span></div>':'<div class="hint">未檢查連結狀態（--no-link-check）</div>')+'</div>';
+  }
+  function vSitemap(el){
+    const s=H.facts.sitemap;
+    el.innerHTML='<div class="card"><h3>Sitemap</h3><div class="spec"><small>位置</small><span>'+(s.found.map(esc).join('<br>')||'<span class="chip warn">找不到</span>')+'</span></div><div class="spec"><small>網址數</small><span>'+s.urlCount+'（含 lastmod：'+s.withLastmod+'）</span></div>'+(s.children.length?'<div class="spec"><small>子 sitemap</small><span>'+s.children.map(esc).join('<br>')+'</span></div>':'')+
+      (s.sampleChecked?'<div class="spec"><small>抽樣檢查</small><span>'+s.sampleChecked+' 筆；異常 '+s.sampleBad.length+'</span></div>':'')+(s.sampleBad.length?'<ul>'+s.sampleBad.map(x=>'<li class="mono">'+esc(x)+'</li>').join('')+'</ul>':'')+(s.errors.length?'<p class="hint">'+s.errors.map(esc).join('<br>')+'</p>':'')+'</div>';
+  }
+  function vPerf(el){
+    const p=H.facts.performance,fmt=(v,u)=>v==null?'—':v+u;
+    const m=(label,v,u,good,poor)=>'<div class="metric"><span class="hint">'+label+'</span><b class="'+(v==null?'':v<=good?'good':v<=poor?'warn2':'poor')+'">'+fmt(v,u)+'</b></div>';
+    el.innerHTML='<div class="card"><h3>中位數（各頁）</h3>'+m('TTFB',p.ttfbMs,' ms',800,1800)+m('LCP',p.lcpMs,' ms',2500,4000)+m('CLS',p.cls,'',.1,.25)+m('總下載量',p.totalBytes!=null?+(p.totalBytes/1048576).toFixed(2):null,' MB',3,6)+m('請求數',p.requests,'',100,200)+m('DOM 節點',p.domNodes,'',1500,3000)+'<p class="hint">'+esc(p.note)+'</p></div>'+
+      '<div class="card" style="margin-top:14px;overflow:auto"><table class="t"><tr><th>網址</th><th>TTFB</th><th>LCP</th><th>CLS</th><th>下載量</th></tr>'+H.pages.map(x=>'<tr><td class="mono">'+esc(x.url.replace(/^https?:\/\/[^/]+/,'')||'/')+'</td><td>'+fmt(x.ttfbMs,' ms')+'</td><td>'+fmt(x.lcpMs,' ms')+'</td><td>'+fmt(x.cls,'')+'</td><td>'+(x.bytes!=null?(x.bytes/1024).toFixed(0)+' KB':'—')+'</td></tr>').join('')+'</table></div>';
+  }
+  function vSec(el){
+    const s=H.facts.security,c=s.certificate;
+    const lab={'strict-transport-security':'HSTS','content-security-policy':'CSP','x-content-type-options':'nosniff','x-frame-options':'X-Frame-Options','referrer-policy':'Referrer-Policy','permissions-policy':'Permissions-Policy'};
+    el.innerHTML='<div class="card"><h3>傳輸與標頭</h3><div class="spec"><small>HTTPS</small><span>'+(s.https?'<span class="chip ok">是</span>':'<span class="chip warn">否</span>')+'</span></div>'+(c&&c.ok?'<div class="spec"><small>憑證</small><span>'+esc(c.issuer||'')+'，到期 '+esc((c.validTo||'').slice(0,10))+'（剩 '+c.daysLeft+' 天），'+esc(c.protocol||'')+'</span></div>':'')+
+      Object.entries(lab).map(([k,v])=>'<div class="spec"><small>'+v+'</small><span>'+(s.headers[k]?'<span class="chip ok">已設定</span> <span class="hint mono">'+esc(String(s.headers[k]).slice(0,90))+'</span>':'<span class="chip warn">未設定</span>')+'</span></div>').join('')+
+      (s.headers.server||s.headers['x-powered-by']?'<div class="spec"><small>洩漏資訊</small><span class="mono">'+esc([s.headers.server,s.headers['x-powered-by']].filter(Boolean).join('、'))+'</span></div>':'')+'</div>';
+  }
+  draw();
 })();
 
 // ---------- history ----------

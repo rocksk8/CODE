@@ -31,10 +31,11 @@ const ref = (file, allowEmbed = true) => {
 const readJSON = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const exists = fs.existsSync;
 
-const data = { standalone, embed, generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, files: [] };
+const data = { standalone, embed, generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, health: null, files: [] };
 
 if (siteDir && exists(path.join(siteDir, 'site.json'))) {
   data.site = readJSON(path.join(siteDir, 'site.json'));
+  if (exists(path.join(siteDir, 'health.json'))) data.health = readJSON(path.join(siteDir, 'health.json'));
   const tok = path.join(siteDir, 'design-bundle', 'tokens.json');
   if (!exists(tok)) spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'export-design.mjs'), siteDir], { stdio: 'ignore' });
   if (exists(tok)) data.tokens = readJSON(tok);
@@ -96,7 +97,7 @@ ${read('report.css')}
 <nav><div class="in" id="tabs"></div></nav>
 <main>
 <section id="s-overview"></section><section id="s-design"></section><section id="s-layout"></section>
-<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-history"></section>
+<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-health"></section><section id="s-history"></section>
 </main><div class="toast" id="toast"></div>
 <script id="data" type="application/json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>
 <script>
