@@ -196,3 +196,23 @@ test('several URLs on the command line are all crawled, even when no page links 
     assert.deepEqual(site.pages.map((p) => new URL(p.url).pathname).sort(), ['/hidden-1', '/hidden-2', '/start']);
   } finally { srv.close(); }
 });
+
+test('diagnose tells "blocked by user agent" from "page really is empty"', async (t) => {
+  if (skip(t)) return;
+  const { probe, verdict } = await import('../scripts/diagnose.mjs');
+  const srv = http.createServer((q, r) => {
+    r.setHeader('content-type', 'text/html');
+    if (q.url === '/ua-block') return r.end(/site-explorer/.test(q.headers['user-agent'] || '') ? '<!doctype html><title>Access denied</title><body><div></div>' : `<!doctype html><title>Real</title><body><h1>Hello</h1><p>${'Real content. '.repeat(20)}</p>`);
+    r.end('<!doctype html><title>Shell</title><body><div id="root"></div><script>/* app never boots */</script>');
+  }).listen(0); await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  const browser = await launchBrowser();
+  try {
+    const dir = path.join(tmp, 'diag'); const UAC = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
+    const a1 = await probe(browser, `http://127.0.0.1:${port}/ua-block`, { label: 'a', userAgent: UAC, outDir: dir, waitMs: 1500 });
+    const b1 = await probe(browser, `http://127.0.0.1:${port}/ua-block`, { label: 'b', userAgent: null, outDir: dir, waitMs: 1500 });
+    assert.equal(a1.contentAppeared, false); assert.equal(b1.contentAppeared, true); assert.match(verdict(a1, b1), /識別字串/); assert.ok(fs.existsSync(a1.screenshot));
+    const a2 = await probe(browser, `http://127.0.0.1:${port}/shell`, { label: 'c', userAgent: UAC, outDir: dir, waitMs: 1000 });
+    const b2 = await probe(browser, `http://127.0.0.1:${port}/shell`, { label: 'd', userAgent: null, outDir: dir, waitMs: 1000 });
+    assert.equal(a2.contentAppeared, false); assert.equal(b2.contentAppeared, false); assert.doesNotMatch(verdict(a2, b2), /識別字串/);
+  } finally { await browser.close(); srv.close(); }
+});
