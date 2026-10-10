@@ -1,0 +1,7 @@
+{
+  "name": "site-explorer",
+  "version": "0.1.0",
+  "description": "Claude 自動控制瀏覽器探索網站，並取得網站設計、網頁內容、網站排版與編輯方式。",
+  "author": { "name": "rocksk8" },
+  "keywords": ["browser", "playwright", "design", "scraping", "layout", "cms"]
+}

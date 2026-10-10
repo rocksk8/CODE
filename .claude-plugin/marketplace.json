@@ -1,0 +1,11 @@
+{
+  "name": "rocksk8-code",
+  "owner": { "name": "rocksk8" },
+  "plugins": [
+    {
+      "name": "site-explorer",
+      "source": "./plugins/site-explorer",
+      "description": "Let Claude drive a browser to explore a website and capture its design, content, layout and editing method."
+    }
+  ]
+}
