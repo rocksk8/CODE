@@ -76,7 +76,10 @@ export function browserCandidates() {
 export async function launchBrowser(options = {}) {
   const { chromium } = await loadPlaywright();
   // behind a corporate proxy: SITE_EXPLORER_PROXY=http://host:port (Playwright does not read HTTPS_PROXY by itself)
-  const opts = { headless: true, ...(process.env.SITE_EXPLORER_PROXY ? { proxy: { server: process.env.SITE_EXPLORER_PROXY } } : {}), ...options };
+  // Chromium's OS sandbox stays ON. It is turned off only where it cannot run (root, e.g. in containers) or when asked for explicitly.
+  const noSandbox = process.env.SITE_EXPLORER_NO_SANDBOX === '1' || (typeof process.getuid === 'function' && process.getuid() === 0);
+  if (noSandbox && !globalThis.__sandboxWarned) { globalThis.__sandboxWarned = true; console.error('⚠️  以無沙箱模式啟動瀏覽器（root／容器環境或 SITE_EXPLORER_NO_SANDBOX=1）；請只探索你信任的網站，或改用一般使用者執行。'); }
+  const opts = { headless: true, chromiumSandbox: !noSandbox, ...(process.env.SITE_EXPLORER_PROXY ? { proxy: { server: process.env.SITE_EXPLORER_PROXY } } : {}), ...options };
   if (process.env.CHROMIUM_PATH) return chromium.launch({ ...opts, executablePath: process.env.CHROMIUM_PATH });
   const tried = [];
   const attempt = async (label, extra) => { try { return await chromium.launch({ ...opts, ...extra }); } catch (e) { tried.push(`${label}：${String(e.message).split('\n')[0].slice(0, 90)}`); return null; } };

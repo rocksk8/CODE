@@ -6,7 +6,7 @@ import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
 import { BANNER, sanitizeDoc } from './untrusted.mjs';
-import { readCapped, readCappedBuffer, mayFetch } from './util.mjs';
+import { readCapped, readCappedBuffer, mayFetch, guardInternal } from './util.mjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -263,6 +263,7 @@ async function openPage(page, url) {
 async function fetchRaw(u) {
   try {
     const r = await fetch(u, { headers: { 'user-agent': UA, accept: 'text/html' }, redirect: 'follow', signal: AbortSignal.timeout(15000) });
+    if (!mayFetch(r.url, u)) return { status: null, error: 'redirected to an internal address' };
     const html = await readCapped(r, 3_000_000);
     const bi = html.search(/<body/i); const be = html.toLowerCase().lastIndexOf('</body>'); // linear scans, no backtracking
     const body = bi >= 0 ? html.slice(bi, be > bi ? be + 7 : undefined) : html;
@@ -293,6 +294,7 @@ if (!allowed(startUrl)) {
 const browser = await launchBrowser();
 const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA });
+await guardInternal(ctx, startUrl); // a public site (or a redirect from it) cannot make the browser read localhost / the LAN
 const stripHash = (u) => { const x = new URL(u); x.hash = ''; return x.href; };
 const queue = [[stripHash(startUrl), 0]], seen = new Set([norm(startUrl)]), pages = [], headers = {};
 let consentAction = null;

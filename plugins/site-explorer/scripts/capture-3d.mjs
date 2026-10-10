@@ -2,6 +2,7 @@
 // Detect and visually capture 3D / animated elements (WebGL canvas, three.js, model-viewer,
 // CSS 3D transforms, Lottie, video): frame sequences over time, on scroll, and on mouse interaction,
 // plus a screen recording, a motion report and an HTML contact sheet.
+import { guardInternal } from './util.mjs';
 import { launchBrowser } from './launch.mjs';
 import { findUrl, intOpt, robotsBlocks } from './args.mjs';
 import { threeHookInit, summarizeThreeInPage, analyzeFramesInBrowser, describeTarget, buildFilmstrip, renderMotionMd } from './motion-ai.mjs';
@@ -46,6 +47,7 @@ const newCtx = async (video) => {
     viewport: { width: 1440, height: 900 },
     ...(video ? { recordVideo: { dir: path.join(out, 'video'), size: { width: 1280, height: 800 } } } : {}),
   });
+  await guardInternal(c, url);
   await c.addInitScript(initScript);
   await c.addInitScript(threeHookInit);
   return [c, await c.newPage()];

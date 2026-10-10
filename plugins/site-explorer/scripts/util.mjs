@@ -50,3 +50,13 @@ export function isInternalHost(host) {
 }
 /** Allowed to fetch `target` because it belongs to a page of `base` (same-site, or `base` itself is internal/local so the user chose it). */
 export const mayFetch = (target, base) => { try { const t = new URL(target); if (!/^https?:$/.test(t.protocol)) return false; return !isInternalHost(t.hostname) || isInternalHost(new URL(base).hostname); } catch { return false; } };
+
+/** Block every browser request (redirects, subresources) to loopback/private hosts when the site being explored is public. */
+export async function guardInternal(ctx, startUrl) {
+  let startInternal = false; try { startInternal = isInternalHost(new URL(startUrl).hostname); } catch {}
+  if (startInternal) return;
+  await ctx.route('**/*', (route) => {
+    let host = ''; try { host = new URL(route.request().url()).hostname; } catch {}
+    return /^(data|blob|about):/.test(route.request().url()) || !isInternalHost(host) ? route.continue() : route.abort('blockedbyclient');
+  });
+}
