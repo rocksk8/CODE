@@ -87,7 +87,20 @@ export function extractDesignerInPage() {
     else if (rep >= 3) kind = 'features';
     else if (btn >= 1 && t.length < 260 && r.height < 520 && h <= 1 && idx >= total - 3) kind = 'cta';
     const why = ({ header: '頁首標籤／頂部導覽', footer: '頁尾標籤／底部大量連結', hero: '首屏大標題＋按鈕或媒體', pricing: '價格字樣與重複方案', testimonial: '引言或客戶見證', faq: '展開式問答', form: '表單欄位', logos: '多張小圖且文字少', stats: '多個數字', gallery: '多張圖片', features: '重複 ' + rep + ' 個卡片', cta: '頁尾附近的短文＋按鈕', content: '未符合特定版型' })[kind];
-    return { kind, why, tag: el.tagName.toLowerCase(), id: el.id || undefined, class: String(cls).trim().split(/\s+/).slice(0, 3).join(' ') || undefined,
+    // what is actually inside: lets a template reuse the real content structure (not just "a features grid")
+    const content = [];
+    for (const n of el.querySelectorAll('h1,h2,h3,h4,p,a[href],button,img,blockquote,figcaption,li,b,strong')) {
+      if (content.length >= 18) break;
+      if (!visible(n)) continue;
+      const tg = n.tagName.toLowerCase();
+      if (tg === 'img') { content.push({ t: 'img', alt: n.alt || '', src: (n.currentSrc || n.src || '').slice(0, 200), w: n.naturalWidth, h: n.naturalHeight }); continue; }
+      const text = (n.innerText || '').trim().replace(/\s+/g, ' '); if (!text) continue;
+      if (tg === 'li' && n.querySelector('a,p,h1,h2,h3,h4')) continue;
+      if ((tg === 'b' || tg === 'strong') && (text.length > 40 || n.closest('h1,h2,h3,h4,a,button'))) continue;
+      if ((tg === 'a' && text.length > 60) || (tg === 'p' && n.closest('blockquote') && tg !== 'blockquote')) continue;
+      content.push({ t: tg, text: text.slice(0, tg === 'p' || tg === 'blockquote' ? 240 : 100), ...(tg === 'a' ? { href: n.href } : {}) });
+    }
+    return { kind, why, content, tag: el.tagName.toLowerCase(), id: el.id || undefined, class: String(cls).trim().split(/\s+/).slice(0, 3).join(' ') || undefined,
       y: Math.round(r.top + scrollY), h: Math.round(r.height), w: Math.round(r.width), columns: rep, headings: h, buttons: btn, media, links,
       heading: (el.querySelector('h1,h2,h3')?.innerText || '').trim().slice(0, 80), text: t.replace(/\s+/g, ' ').slice(0, 90) };
   };

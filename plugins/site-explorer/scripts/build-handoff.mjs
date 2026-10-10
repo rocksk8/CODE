@@ -1,0 +1,268 @@
+#!/usr/bin/env node
+// Build the handoff package: everything an AI needs to make design templates, and everything the next
+// developer needs to know — in plain text, structured JSON, and images an AI can actually view.
+//   build-handoff.mjs --site <crawl dir> [--motion <motion dir>] [--out ./handoff]
+//
+//   handoff/
+//     README.md        reading order + file map
+//     CLAUDE.md        instructions for AI sessions working from this folder
+//     ai-brief.md      compact context to give an AI BEFORE it designs (≈ a few thousand tokens)
+//     SPEC.md          the full specification (source of truth for humans and AI)
+//     spec.json        the same data, structured
+//     DECISIONS.md     living log: open questions, assumptions, decisions (append as you build)
+//     motion.md        3D / video / animation translated into text + numbers (if captured)
+//     health.md        SEO / indexability findings (if checked)
+//     tokens/          css, W3C, Tokens Studio, tailwind, palette.svg
+//     media/           section crops, page shots, motion filmstrips, brand assets (all viewable by AI)
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const args = process.argv.slice(2);
+const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
+const siteDir = opt('site'), motionDir = opt('motion');
+if (!siteDir || !fs.existsSync(path.join(siteDir, 'site.json'))) { console.error('Usage: build-handoff.mjs --site <crawl dir with site.json> [--motion <motion dir>] [--out ./handoff]'); process.exit(1); }
+const out = path.resolve(opt('out', './handoff'));
+const J = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
+const has = fs.existsSync;
+
+// ------------------------------------------------------------------ load
+const site = J(path.join(siteDir, 'site.json'));
+const tokPath = path.join(siteDir, 'design-bundle', 'tokens.json');
+if (!has(tokPath)) spawnSync(process.execPath, [path.join(here, 'export-design.mjs'), siteDir], { stdio: 'ignore' });
+const tok = has(tokPath) ? J(tokPath) : null;
+const comps = has(path.join(siteDir, 'design-bundle', 'components.json')) ? J(path.join(siteDir, 'design-bundle', 'components.json')) : {};
+const health = has(path.join(siteDir, 'health.json')) ? J(path.join(siteDir, 'health.json')) : null;
+const motion = motionDir && has(path.join(motionDir, 'motion.json')) ? J(path.join(motionDir, 'motion.json')) : null;
+const pages = site.pages.map((p) => { const f = path.join(siteDir, 'pages', p.slug, 'page.json'); return has(f) ? { ...p, ...J(f), slug: p.slug } : null; }).filter(Boolean);
+const origin = new URL(site.finalOrigin || site.startUrl).origin, host = new URL(origin).host;
+const live = pages.filter((p) => !p.status || p.status < 400);
+const home = live[0] || pages[0];
+const D = site.designer || {};
+
+// ------------------------------------------------------------------ rule-based descriptors (objective inputs -> plain words)
+const hexToHsl = (h) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255); const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn; const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1)); let hh = 0; if (d) hh = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return { h: Math.round((hh * 60 + 360) % 360), s, l }; };
+const hueName = (h) => (h < 15 || h >= 345 ? '紅' : h < 45 ? '橘' : h < 70 ? '黃' : h < 160 ? '綠' : h < 195 ? '青' : h < 255 ? '藍' : h < 290 ? '紫' : '粉紅／洋紅');
+const SERIF = /georgia|playfair|times|garamond|merriweather|lora|baskerville|tinos|gelasio|crimson|source serif|newsreader|fraunces|cormorant|serif(?!.*sans)|libre bask|dm serif|canela|tiempos/i;
+const MONO = /mono|code|courier|menlo|consolas|plex mono/i;
+const fam = (f) => (!f ? '未知' : MONO.test(f) ? '等寬' : SERIF.test(f) && !/sans/i.test(f) ? '襯線' : '無襯線');
+const px = (v) => parseFloat(v);
+const median = (a) => { const s = a.filter((x) => Number.isFinite(x)).sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
+
+function personality() {
+  const out = [], c = tok?.color || {};
+  if (c.brand) { const hs = hexToHsl(c.brand); out.push({ k: '主色', v: `${hueName(hs.h)}色系 ${c.brand}（${hs.h >= 70 && hs.h <= 270 ? '偏冷' : '偏暖'}，飽和度${hs.s > 0.7 ? '高' : hs.s > 0.35 ? '中' : '低'}）` }); }
+  if (c.background) { const l = hexToHsl(c.background).l; out.push({ k: '底色', v: `${l < 0.25 ? '深色底' : l > 0.9 ? '白／淺色底' : '中性底'} ${c.background}${tok?.darkMode?.supported ? '；支援 prefers-color-scheme 深色模式' : ''}` }); }
+  const heading = tok?.typography?.fontStack?.heading, body = tok?.typography?.fontStack?.body;
+  if (heading) out.push({ k: '字型氣質', v: `標題${fam(heading)}（${heading}），內文${fam(body)}（${body}）${tok.typography.scale?.h1 && px(tok.typography.scale.h1.size) >= 56 ? '；超大標題（' + tok.typography.scale.h1.size + '）' : ''}` });
+  const r = (tok?.radius || []).map(px).filter(Number.isFinite), rm = median(r);
+  out.push({ k: '形狀', v: !r.length ? '直角、俐落' : rm >= 100 ? '膠囊／全圓角' : rm >= 16 ? '大圓角、柔和' : rm >= 6 ? '中等圓角' : '微圓角' });
+  out.push({ k: '深度', v: tok?.shadow?.length ? `使用陰影（${tok.shadow.length} 種）` : '平面、無陰影' });
+  const hs = median(live.flatMap((p) => (p.designer?.blocks || []).filter((b) => !['header', 'footer'].includes(b.kind)).map((b) => b.h)));
+  if (hs) out.push({ k: '節奏／密度', v: `內容區塊高度中位數 ${hs}px，${hs > 520 ? '留白寬鬆' : hs < 300 ? '緊湊' : '適中'}；間距基準 ${tok?.spacing?.baseUnit}px` });
+  const nTrans = (D.motion?.transitions || []).length, has3d = (motion?.targets || []).some((t) => ['webgl', 'css-3d', 'model-viewer', 'webgpu', 'spline-viewer'].includes(t.kind));
+  out.push({ k: '動態', v: has3d ? '沉浸式（含 3D）' : motion?.targets?.length || nTrans > 3 ? '有互動與動畫' : nTrans ? '細緻的過渡效果' : '幾乎靜態' });
+  return out;
+}
+
+function voice() {
+  const heads = [], ctas = [], paras = [];
+  for (const p of live) for (const b of p.designer?.blocks || []) for (const it of b.content || []) {
+    if (/^h[1-3]$/.test(it.t)) heads.push(it.text); else if (it.t === 'button' || (it.t === 'a' && it.text.length < 28 && b.kind !== 'footer' && b.kind !== 'header')) ctas.push(it.text); else if (it.t === 'p') paras.push(it.text);
+  }
+  const cjk = (s) => (s.match(/[㐀-鿿぀-ヿ가-힯]/g) || []).length > s.length * 0.3;
+  const words = (s) => (cjk(s) ? s.replace(/\s/g, '').length : s.split(/\s+/).filter(Boolean).length);
+  const latin = heads.filter((h) => !cjk(h));
+  let caseStyle = '—';
+  if (latin.length) { const caps = latin.map((h) => { const w = h.split(/\s+/).slice(1).filter((x) => /[A-Za-z]/.test(x)); return w.length ? w.filter((x) => /^[A-Z]/.test(x)).length / w.length : null; }).filter((x) => x != null); const m = caps.length ? caps.reduce((a, b) => a + b, 0) / caps.length : 0; caseStyle = latin.every((h) => h === h.toUpperCase()) ? '全大寫' : m > 0.6 ? 'Title Case（每字首大寫）' : 'Sentence case（僅句首大寫）'; }
+  const all = paras.join(' ');
+  const we = (all.match(/\b(we|our|us)\b|我們|本公司/gi) || []).length, you = (all.match(/\b(you|your)\b|你|您/gi) || []).length;
+  const cnt = {}; for (const c of ctas) cnt[c] = (cnt[c] || 0) + 1;
+  return {
+    language: home?.lang || null, headlineCount: heads.length, avgHeadlineLength: heads.length ? +(heads.reduce((a, h) => a + words(h), 0) / heads.length).toFixed(1) : null, unit: heads.some(cjk) ? '字' : '字詞', headlineCase: caseStyle,
+    endsWithPeriod: heads.length ? +(heads.filter((h) => /[.。]$/.test(h)).length / heads.length).toFixed(2) : null, avgParagraphLength: paras.length ? Math.round(paras.reduce((a, p) => a + words(p), 0) / paras.length) : null,
+    perspective: we + you === 0 ? '未明顯' : we > you * 1.5 ? '以「我們」為主（品牌自述）' : you > we * 1.5 ? '以「你」為主（對讀者說話）' : '「我們」與「你」並用',
+    topCtas: Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([text, count]) => ({ text, count })), avgCtaLength: ctas.length ? +(ctas.reduce((a, c) => a + words(c), 0) / ctas.length).toFixed(1) : null,
+    sampleHeadlines: heads.slice(0, 8),
+  };
+}
+
+const KIND = { header: '頁首', hero: '主視覺 Hero', features: '功能／特色格', pricing: '價格方案', testimonial: '客戶見證', faq: 'FAQ', form: '表單', logos: 'Logo 牆', stats: '數據亮點', gallery: '圖庫', cta: '行動呼籲 CTA', footer: '頁尾', content: '內容區' };
+const PURPOSE = { header: '品牌識別與主導覽', hero: '一句話說明價值並引導第一個行動', features: '並列介紹能力／優勢（重複的卡片）', pricing: '方案與價格比較', testimonial: '用客戶的話建立信任', faq: '消除疑慮', form: '收集資料／聯絡', logos: '以知名客戶建立信任', stats: '用數字證明規模', gallery: '展示作品／畫面', cta: '收尾並再次引導行動', footer: '次要導覽、法律與社群連結', content: '一般內容' };
+function pageType(p) {
+  const k = (p.designer?.blocks || []).map((b) => b.kind), path_ = new URL(p.url).pathname;
+  if (path_ === '/' || path_ === '') return k.includes('hero') ? '首頁／行銷著陸頁' : '首頁';
+  if (k.includes('pricing')) return '價格頁'; if (k.includes('form') && (p.seo?.words || 0) < 400) return '表單／聯絡頁';
+  if (/blog|news|article|post|文章/i.test(path_) || ((p.seo?.words || 0) > 700 && !k.includes('features'))) return '文章／長內容頁';
+  if (/about|team|company|關於/i.test(path_)) return '關於頁'; if (k.includes('features') && k.includes('hero')) return '產品／服務介紹頁';
+  return '一般內容頁';
+}
+
+// ------------------------------------------------------------------ media (copy so the handoff folder stands alone)
+fs.rmSync(out, { recursive: true, force: true });
+for (const d of ['tokens', 'media/sections', 'media/pages', 'media/motion', 'media/assets']) fs.mkdirSync(path.join(out, d), { recursive: true });
+const copy = (src, dst) => { if (has(src)) { fs.mkdirSync(path.dirname(dst), { recursive: true }); fs.copyFileSync(src, dst); return true; } return false; };
+const rel = (p) => p.split(path.sep).join('/');
+for (const f of ['tokens.css', 'tokens.json', 'tokens.w3c.json', 'tokens.studio.json', 'tailwind.config.js', 'palette.svg', 'components.json']) copy(path.join(siteDir, 'design-bundle', f), path.join(out, 'tokens', f));
+for (const a of site.assets || []) copy(path.join(siteDir, a.file), path.join(out, 'media', 'assets', path.basename(a.file)));
+const media = { sections: {}, pages: {}, motion: [], assets: (site.assets || []).map((a) => `media/assets/${path.basename(a.file)}`) };
+for (const p of pages) {
+  media.sections[p.slug] = [];
+  for (const b of p.designer?.blocks || []) if (b.image && copy(path.join(siteDir, 'pages', p.slug, b.image), path.join(out, 'media', 'sections', p.slug, path.basename(b.image)))) { b.image = `media/sections/${p.slug}/${path.basename(b.image)}`; media.sections[p.slug].push(b.image); } else delete b.image;
+  media.pages[p.slug] = {};
+  for (const v of ['desktop', 'tablet', 'mobile']) if (copy(path.join(siteDir, 'pages', p.slug, v + '.png'), path.join(out, 'media', 'pages', `${p.slug}-${v}.png`))) media.pages[p.slug][v] = `media/pages/${p.slug}-${v}.png`;
+}
+if (motion) {
+  for (const t of motion.targets) if (t.filmstrip && copy(path.join(motionDir, t.filmstrip), path.join(out, 'media', 'motion', `${t.id}-filmstrip.png`))) { t.filmstrip = `media/motion/${t.id}-filmstrip.png`; media.motion.push(t.filmstrip); } else delete t.filmstrip;
+  if (motion.scrollFilmstrip && copy(path.join(motionDir, motion.scrollFilmstrip), path.join(out, 'media', 'motion', 'scroll-filmstrip.png'))) { motion.scrollFilmstrip = 'media/motion/scroll-filmstrip.png'; media.motion.push(motion.scrollFilmstrip); }
+  // keep motion.md paths valid inside the handoff folder
+  if (has(path.join(motionDir, 'motion.md'))) {
+    let md = fs.readFileSync(path.join(motionDir, 'motion.md'), 'utf8');
+    for (const t of motion.targets) md = md.replaceAll(`frames/${t.id}/filmstrip.png`, `media/motion/${t.id}-filmstrip.png`);
+    md = md.replaceAll('frames/scroll/filmstrip.png', 'media/motion/scroll-filmstrip.png');
+    fs.writeFileSync(path.join(out, 'motion.md'), md); fs.writeFileSync(path.join(out, 'motion.json'), JSON.stringify(motion, null, 2));
+  }
+}
+if (health) { copy(path.join(siteDir, 'health.md'), path.join(out, 'health.md')); copy(path.join(siteDir, 'health.json'), path.join(out, 'health.json')); }
+
+// ------------------------------------------------------------------ unknowns: be explicit about what this capture cannot tell you
+function unknowns() {
+  const u = [];
+  const blocks = live.flatMap((p) => p.designer?.blocks || []);
+  const generic = blocks.filter((b) => b.kind === 'content').length;
+  u.push(`區塊版型（Hero／功能格／價格…）是依 DOM 規則推測，其中 ${generic} / ${blocks.length} 個落入「內容區」預設類別；請以 media/sections/ 的截圖為準。`);
+  if (site.blockedPages?.length) u.push(`有 ${site.blockedPages.length} 個頁面被擋住（${site.blockedPages.map((b) => b.reason).join('、')}），其內容不在本規格內。`);
+  if (site.skippedByRobots?.length) u.push(`${site.skippedByRobots.length} 個頁面因 robots.txt 未被讀取。`);
+  const smN = health?.facts?.sitemap?.urlCount; if (smN && smN > live.length) u.push(`網站 sitemap 列出 ${smN} 個網址，本次只分析 ${live.length} 頁（抽樣）；其他頁面可能有不同版型。`);
+  else u.push(`本次只分析 ${live.length} 個頁面（抽樣），未涵蓋全站。`);
+  u.push('只擷取桌機寬度（1440px）的元素樣式；平板／手機僅有截圖與溢出檢查，行動版的實際 CSS 數值未記錄。');
+  u.push('元件樣式（按鈕、輸入框、卡片、導覽）取自第一個頁面；其他頁面可能有變體。hover 狀態只量測第一個按鈕。');
+  u.push('未登入、未送出表單：登入後、結帳、會員區、彈窗、點擊後才出現的內容都未被擷取。');
+  const bgImg = (D.contrast?.failing || []).filter((c) => c.uncertain).length; if (bgImg) u.push(`${bgImg} 組對比不足的文字位於背景圖片上，實際可讀性需人工確認。`);
+  const unlicensed = (tok?.typography?.sources || []).filter((s) => ['adobe', 'self-hosted', 'unknown'].includes(s.provider)); if (unlicensed.length) u.push(`字型 ${unlicensed.map((s) => s.family).join('、')} 可能需要授權，使用前請確認；替代方案見 SPEC 第 3 節。`);
+  if (!motion) u.push('未執行 3D／動畫擷取（--no-motion）：動態、3D、影片的資訊缺漏。');
+  if (health?.pages && live.some((p) => p.seo?.raw && p.seo.raw.words < p.seo.words * 0.35)) u.push('部分頁面內容依賴 JavaScript 才出現，原站的爬蟲可見性較差；重做時建議 SSR／SSG。');
+  u.push('文字內容為擷取時的快照；價格、日期、庫存等會變動的資訊請勿當作事實。');
+  u.push('圖片、影片、3D 模型僅記錄網址與尺寸，未下載（受版權保護）。');
+  return u;
+}
+const UNK = unknowns();
+
+// ------------------------------------------------------------------ assemble spec.json
+const pers = personality(), vc = voice();
+const sitemap = live.map((p) => ({ url: p.url, path: new URL(p.url).pathname || '/', title: p.title, h1: p.designer?.blocks ? (p.content?.headings || []).filter((h) => h.level === 1).map((h) => h.text) : [], type: pageType(p), words: p.seo?.words ?? null, sections: (p.designer?.blocks || []).map((b) => b.kind) }));
+const inlinks = {}; for (const p of live) for (const l of p.content?.links || []) { try { const u = new URL(l.href); if (u.host === host) inlinks[u.pathname] = (inlinks[u.pathname] || 0) + 1; } catch {} }
+const spec = {
+  schemaVersion: 1,
+  meta: { name: host, url: site.startUrl, origin, capturedAt: site.crawledAt, tool: site.tool || null, userAgent: site.userAgent || null, pagesAnalyzed: live.length, pagesRequested: site.pages.length, robotsDisallow: site.robotsDisallow || [], consentAction: site.consentAction || null, generatedAt: new Date().toISOString() },
+  personality: pers, voice: vc,
+  informationArchitecture: { pages: sitemap, navigation: D.copy?.nav || [], inlinks },
+  designSystem: { color: tok?.color || {}, palette: tok?.palette || [], darkMode: tok?.darkMode || null, typography: tok?.typography || null, spacing: tok?.spacing || null, radius: tok?.radius || [], shadow: tok?.shadow || [], breakpoints: tok?.breakpoints || [], layoutGrid: D.grid || null, motionTokens: D.motion || null, cssVariables: tok?.cssVariables || {}, contrastAudit: tok?.contrastAudit || [], contrastReal: D.contrast || null, icons: (D.icons || []).length },
+  components: { buttons: comps.buttons || [], inputs: comps.inputs || [], cards: comps.cards || [], navigation: comps.navigation || null, logo: comps.logo || null, buttonHover: comps.hover || null },
+  pages: live.map((p) => ({
+    url: p.url, path: new URL(p.url).pathname || '/', slug: p.slug, type: pageType(p),
+    meta: { title: p.seo?.title ?? p.title, description: p.seo?.description ?? null, canonical: p.seo?.canonical ?? null, lang: p.lang || p.seo?.lang || null, h1: p.seo?.h1 || [] },
+    sections: (p.designer?.blocks || []).map((b, i) => ({ index: i + 1, kind: b.kind, kindLabel: KIND[b.kind], purpose: PURPOSE[b.kind], why: b.why, y: b.y, height: b.h, columns: b.columns, headings: b.headings, buttons: b.buttons, media: b.media, image: b.image || null, content: b.content || [] })),
+    responsive: { desktopOverflow: !!p.layout?.desktopOverflow, tabletOverflow: !!p.layout?.tabletOverflow, mobileOverflow: !!p.layout?.mobileOverflow, mobile: p.seo?.mobile || null }, media: media.pages[p.slug],
+    images: (p.content?.images || []).slice(0, 40).map((i) => ({ src: i.src, alt: i.alt, w: i.w, h: i.h })), forms: p.content?.forms || [],
+  })),
+  motion: motion ? { libs: motion.libs, three: motion.three || null, assets3d: motion.assets3d, targets: motion.targets.map((t) => ({ id: t.id, kind: t.kind, selector: t.selector, size: [t.box.w, t.box.h], context: t.context, filmstrip: t.filmstrip || null, ai: t.ai })), scrollFilmstrip: motion.scrollFilmstrip || null, document: 'motion.md' } : null,
+  assets: { brand: media.assets, fonts: tok?.typography?.sources || [], fontFaces: D.fonts?.faces || [], icons: (D.icons || []).length, thirdPartyHosts: [...new Set(live.flatMap((p) => p.seo?.perf?.thirdPartyHosts || []))] },
+  technology: { platforms: site.editing?.platforms || [], server: site.server || null, libraries: motion?.libs || null, renderMode: live.some((p) => p.seo?.raw?.csrShell) ? 'CSR（客戶端渲染空殼）' : live.some((p) => p.seo?.raw && p.seo.raw.words < p.seo.words * 0.35) ? '混合／大量依賴 JS' : 'SSR／靜態（原始 HTML 含主要內容）', editing: site.editing || null, headers: live[0]?.seo?.http?.headers || null },
+  health: health ? { score: health.score, grade: health.grade, categories: Object.fromEntries(Object.entries(health.categories).map(([k, c]) => [k, c.score])), topIssues: health.issues.filter((i) => ['critical', 'high', 'medium'].includes(i.severity)).slice(0, 10).map((i) => ({ severity: i.severity, title: i.title, fix: i.fix, id: i.id })), document: 'health.md' } : null,
+  unknowns: UNK,
+};
+fs.writeFileSync(path.join(out, 'spec.json'), JSON.stringify(spec, null, 2));
+
+// ------------------------------------------------------------------ SPEC.md
+const L = [];
+const T = (head, rows) => [head.join(' | ').replace(/^/, '| ').replace(/$/, ' |'), head.map(() => '---').join(' | ').replace(/^/, '| ').replace(/$/, ' |'), ...rows.map((r) => '| ' + r.map((c) => String(c ?? '—').replace(/\|/g, '／').replace(/\n/g, ' ')).join(' | ') + ' |')];
+const ds = spec.designSystem, C = ds.color;
+L.push(`# ${host} — 設計與開發規格`, '', `> 來源：${site.startUrl}　擷取：${site.crawledAt}　工具：site-explorer ${site.tool?.version || ''}　分析頁數：${live.length}`, '> 這是對**公開頁面**的觀察結果，不是官方品牌規範；字型、圖片、文案、3D 素材仍受原權利人保護，請參考風格而非複製。', '',
+  '## 0. 怎麼讀這份規格', '- **AI**：先讀 `ai-brief.md`；需要細節再讀本檔；圖片請直接開啟 `media/` 內的 PNG（區塊裁切圖比整頁截圖清楚）；3D／影片請讀 `motion.md`（文字＋數據＋影格序列圖）。', '- **開發者**：本檔第 3–5 節是實作依據，第 10 節是建議順序，第 11 節列出**不知道的事**；做決策時記錄到 `DECISIONS.md`。', '- 結構化版本在 `spec.json`，tokens 在 `tokens/`。', '');
+L.push('## 1. 一眼看懂', ...pers.map((p) => `- **${p.k}**：${p.v}`), '');
+L.push('## 2. 資訊架構', ...T(['頁面', '類型（推測）', '標題', '區塊順序', '字數', '被連入'], sitemap.map((s) => [s.path, s.type, (s.title || '').slice(0, 50), s.sections.map((k) => KIND[k] || k).join(' → '), s.words, inlinks[s.path] ?? 0])), '', `- 主導覽：${(D.copy?.nav || []).join('、') || '—'}`, '');
+L.push('## 3. 設計系統', '', '### 3.1 色彩', ...T(['角色', '色碼', '備註'], Object.entries(C).map(([k, v]) => [k, '`' + v + '`', ({ brand: '主色（按鈕、連結、強調）', accent: '輔助色', background: '頁面底色', surface: '卡片／區塊底色', text: '內文', 'text-inverse': '深色底上的文字', 'surface-dark': '深色區塊底色', border: '邊框' })[k] || ''])), '');
+L.push('完整色盤（依使用頻率）：' + ds.palette.slice(0, 12).map((p) => `\`${p.hex}\`(${p.uses})`).join(' '), '');
+if (ds.darkMode?.supported) L.push(`深色模式：支援。底色 \`${ds.darkMode.dark.background}\`，文字 \`${ds.darkMode.dark.color}\`。`, '');
+const ty = ds.typography;
+if (ty) {
+  L.push('### 3.2 字型', ...T(['字型', '來源／授權', '字重', '建議'], (ty.sources || []).map((s) => [s.family, ({ google: 'Google Fonts（免費）', system: '系統字體', adobe: 'Adobe Fonts（需授權）', 'self-hosted': '自架（可能需授權）', unknown: '來源不明' })[s.provider], (s.weights || []).join(','), s.substitute ? `替代：${s.substitute}` : s.url ? '可直接使用' : ''])), '');
+  L.push('字級階層（量測自實際渲染）', ...T(['層級', '字級', '字重', '行高', '字距', '字型'], Object.entries(ty.scale || {}).map(([k, v]) => [k, v.size, v.weight, v.lineHeight, v.letterSpacing, v.family])), '', `級距比約 ${ty.scaleRatio ?? '—'}；出現過的字級：${(ty.sizesObserved || []).join(', ')}px`, '');
+}
+L.push('### 3.3 間距、形狀、深度', `- 間距基準：${ds.spacing?.baseUnit}px；觀察到的值：${(ds.spacing?.observed || []).join(', ')}px`, `- 圓角：${ds.radius.join(', ') || '直角'}`, `- 陰影：${ds.shadow.map((s) => '`' + s + '`').join('；') || '無'}`, `- 斷點：${ds.breakpoints.join(', ') || '未偵測到媒體查詢斷點'}`, '');
+if (ds.layoutGrid) L.push('### 3.4 版面網格', `- 內容容器寬：${(ds.layoutGrid.containerWidths || []).map((x) => x.px + 'px').join(' / ') || '—'}；欄數：${(ds.layoutGrid.columns || []).map((x) => x.columns).join(' / ') || '—'}；欄距：${(ds.layoutGrid.gaps || []).map((x) => x.value).join(' / ') || '—'}`, '');
+if (ds.motionTokens?.transitions?.length) L.push('### 3.5 動態 token', ...ds.motionTokens.transitions.map((m) => `- transition \`${m.token}\` ×${m.count}`), ...(ds.motionTokens.animations || []).map((m) => `- animation \`${m.token}\` ×${m.count}`), '');
+if (ds.contrastReal?.failing?.length) L.push('### 3.6 無障礙：對比不足（重做時請修正）', ...T(['前景', '背景', '對比', '需要', '次數', '範例'], ds.contrastReal.failing.slice(0, 8).map((c) => ['`' + c.fg + '`', '`' + c.bg + '`', c.ratio + ':1', c.need + ':1', c.count, (c.sample || '') + (c.uncertain ? '（背景有圖，需人工確認）' : '')])), '');
+L.push('### 3.7 CSS 變數（可直接使用）', '```css', fs.existsSync(path.join(out, 'tokens', 'tokens.css')) ? fs.readFileSync(path.join(out, 'tokens', 'tokens.css'), 'utf8').trim() : '/* 無 */', '```', '');
+L.push('## 4. 元件');
+const cp = spec.components;
+if (cp.navigation) L.push(`- **導覽列**：高 ${cp.navigation.height}px，${cp.navigation.position}，底色 \`${cp.navigation.backgroundColor}\`，連結：${(cp.navigation.links || []).join(' / ')}`);
+for (const b of (cp.buttons || []).slice(0, 4)) L.push(`- **按鈕「${b.text}」**：底 \`${b.backgroundColor}\`、字 \`${b.color}\`、圓角 ${b.borderRadius}、內距 ${b.padding}、${b.fontSize}/${b.fontWeight}`);
+if (cp.buttonHover) L.push(`- **按鈕 hover**：底色 \`${cp.buttonHover.before.backgroundColor}\` → \`${cp.buttonHover.after.backgroundColor}\`${cp.buttonHover.after.transform && cp.buttonHover.after.transform !== 'none' ? `，transform ${cp.buttonHover.after.transform}` : ''}`);
+for (const i of (cp.inputs || []).slice(0, 2)) L.push(`- **輸入框（${i.type}）**：高 ${i.height}、邊框 ${i.borderTopWidth} \`${i.borderTopColor}\`、圓角 ${i.borderRadius}、內距 ${i.padding}`);
+for (const c of (cp.cards || []).slice(0, 2)) L.push(`- **卡片**：底 \`${c.backgroundColor}\`、圓角 ${c.borderRadius}、陰影 ${c.boxShadow === 'none' ? '無' : '`' + c.boxShadow + '`'}、內距 ${c.padding}`);
+if (cp.logo) L.push(`- **Logo**：${cp.logo.w}×${cp.logo.h}${media.assets.length ? '（已複製至 ' + media.assets[0] + '，使用前請確認授權）' : ''}`);
+L.push('');
+L.push('## 5. 頁面規格');
+for (const p of spec.pages) {
+  L.push('', `### 5.${spec.pages.indexOf(p) + 1} \`${p.path}\` — ${p.type}`, `- title：${p.meta.title || '—'}`, `- description：${p.meta.description || '—'}`, `- canonical：${p.meta.canonical || '—'}　lang：${p.meta.lang || '—'}`, `- 響應式：桌機溢出 ${p.responsive.desktopOverflow ? '是' : '否'}／平板溢出 ${p.responsive.tabletOverflow ? '是' : '否'}／手機溢出 ${p.responsive.mobileOverflow ? '⚠️是' : '否'}`, p.media.desktop ? `- 參考截圖：\`${p.media.desktop}\`、\`${p.media.mobile || ''}\`（整頁圖很長，建議看下方區塊裁切圖）` : '', '');
+  if (p.sections.length) {
+    L.push(...T(['#', '版型', '用途', '高', '欄', '圖片'], p.sections.map((s) => [s.index, s.kindLabel, s.purpose, s.height + 'px', s.columns, s.image ? '`' + s.image + '`' : '—'])), '');
+    for (const s of p.sections) {
+      if (!s.content.length) continue;
+      L.push(`**${s.index}. ${s.kindLabel}**（推測依據：${s.why}）`, ...s.content.slice(0, 12).map((c) => c.t === 'img' ? `- 圖片 alt=「${c.alt}」${c.w}×${c.h}` : `- \`${c.t}\` ${c.text}${c.href && c.t === 'a' ? ' → ' + c.href.replace(origin, '') : ''}`), '');
+    }
+  }
+}
+L.push('', '## 6. 動態、3D 與影片', motion ? `詳見 \`motion.md\`（AI 可讀：文字＋數據＋影格序列圖）。共 ${motion.targets.length} 個元素：` : '未擷取（執行時使用了 --no-motion，或網站沒有動態元素）。', ...(motion ? motion.targets.map((t) => `- **${t.ai?.summary || t.selector}** ${t.filmstrip ? '→ `' + t.filmstrip + '`' : ''}`) : []), '');
+L.push('## 7. 媒體與素材', `- 品牌素材：${media.assets.map((a) => '`' + a + '`').join('、') || '無'}`, `- 行內圖示：${ds.icons} 個（SVG，見儀表板）`, `- 第三方網域：${spec.assets.thirdPartyHosts.join('、') || '無'}`, `- 圖片：各頁圖片清單在 \`spec.json\` → pages[].images（只記錄網址與尺寸，未下載）`, '');
+const tech = spec.technology;
+L.push('## 8. 技術與編輯方式', `- 平台：${tech.platforms.map((x) => x.platform).join('、') || '未偵測到已知平台（可能是自訂程式或靜態站）'}`, ...tech.platforms.map((x) => `  - ${x.platform}：${x.howToEdit}`), `- 渲染方式：${tech.renderMode}`, `- 伺服器：${tech.server?.server || '?'}　X-Powered-By：${tech.server?.poweredBy || '?'}　Generator：${tech.server?.generator || '?'}`, '');
+if (health) L.push('## 9. 健檢摘要（SEO／爬蟲索引）', `總分 **${health.score}/100（${health.grade}）**：${Object.values(health.categories).map((c) => `${c.label} ${c.score}`).join('　')}`, '', ...(spec.health.topIssues.length ? ['最該先處理：', ...spec.health.topIssues.slice(0, 6).map((i, n) => `${n + 1}. ${i.title} — ${i.fix}`)] : ['沒有高優先問題。']), '', '完整內容見 `health.md`。', '');
+L.push('## 10. 重現建議（實作順序）',
+  '1. **Tokens**：把 `tokens/tokens.css` 的 CSS 變數放進全域樣式（或用 `tailwind.config.js`／`tokens.w3c.json`／`tokens.studio.json`）。',
+  `2. **版面骨架**：容器寬 ${(ds.layoutGrid?.containerWidths || [])[0]?.px || '—'}px、${(ds.layoutGrid?.columns || [])[0]?.columns || 12} 欄網格；斷點 ${ds.breakpoints.join('/') || '768/1024'}。`,
+  '3. **元件**：Button（primary／hover）、Card、Nav、Input —— 依第 4 節數值，狀態（hover／focus／disabled）自行補齊。',
+  `4. **區塊**：依第 5 節順序組裝（${sitemap[0]?.sections.map((k) => KIND[k] || k).join(' → ') || '—'}），每個區塊做成可重用元件。`,
+  '5. **動態**：依第 6 節與 `motion.md`；先做靜態版，再加動態；尊重 `prefers-reduced-motion`。',
+  '6. **無障礙與 SEO 基線**：修正第 3.6 節對比；每頁獨特 title／description、單一 h1、canonical、結構化資料、alt 文字、viewport（見 `health.md`）。',
+  '7. **效能預算**：LCP ≤ 2.5s、CLS ≤ 0.1、單頁 ≤ 3MB、關鍵圖片用 WebP／AVIF 與 srcset。', '',
+  '**不要做的事**：不要複製原站的文案、圖片、Logo、3D 模型；不要把本規格的色碼當成「官方品牌色」對外宣稱；字型授權先確認。', '');
+L.push('## 11. 未知與限制（請先讀）', ...UNK.map((u) => `- ${u}`), '');
+L.push('## 12. 檔案索引', '- `ai-brief.md` AI 簡報　`SPEC.md` 本檔　`spec.json` 結構化　`DECISIONS.md` 決策紀錄　`CLAUDE.md` AI 工作指引', `- \`tokens/\`：${fs.readdirSync(path.join(out, 'tokens')).join('、')}`, `- \`media/sections/\`：${Object.values(media.sections).flat().length} 張區塊裁切圖　\`media/pages/\`：整頁截圖　\`media/motion/\`：${media.motion.length} 張影格序列圖　\`media/assets/\`：品牌素材`, `- ${motion ? '`motion.md`／`motion.json`' : '（無動態資料）'}　${health ? '`health.md`／`health.json`' : '（無健檢資料）'}`);
+fs.writeFileSync(path.join(out, 'SPEC.md'), L.join('\n') + '\n');
+
+// ------------------------------------------------------------------ ai-brief.md (compact)
+const B = [];
+const homeP = spec.pages[0];
+B.push(`# AI 設計簡報：${host}`, '', '你將根據以下**觀察到的設計系統與頁面結構**，產出設計範本（或在其風格上延伸）。這是風格參考，不是複製：請用佔位文案與自有圖片，不要照搬原站文字、圖片、Logo。', '',
+  '## 風格一句話', ...pers.map((p) => `- ${p.k}：${p.v}`), '',
+  '## Token（直接使用）', '```css', fs.readFileSync(path.join(out, 'tokens', 'tokens.css'), 'utf8').trim(), '```', '',
+  `字型：標題 **${ty?.fontStack?.heading || '?'}**、內文 **${ty?.fontStack?.body || '?'}**；${(ty?.sources || []).filter((s) => s.substitute && s.provider !== 'system').map((s) => `${s.family} 若無授權改用 ${s.substitute}`).join('；') || '皆可直接使用'}。`,
+  `字級：${Object.entries(ty?.scale || {}).filter(([k]) => /^h[1-3]$|^p$/.test(k)).map(([k, v]) => `${k} ${v.size}/${v.weight}`).join('、')}。間距基準 ${ds.spacing?.baseUnit}px，圓角 ${ds.radius.slice(0, 2).join('／') || '直角'}，容器 ${(ds.layoutGrid?.containerWidths || [])[0]?.px || '?'}px，斷點 ${ds.breakpoints.join('/') || '—'}。`, '',
+  '## 元件', ...(cp.buttons || []).slice(0, 2).map((b) => `- 按鈕「${b.text}」：底 ${b.backgroundColor}、字 ${b.color}、圓角 ${b.borderRadius}、內距 ${b.padding}`), cp.buttonHover ? `- hover：${cp.buttonHover.before.backgroundColor} → ${cp.buttonHover.after.backgroundColor}` : '', ...(cp.cards || []).slice(0, 1).map((c) => `- 卡片：圓角 ${c.borderRadius}、陰影 ${c.boxShadow === 'none' ? '無' : c.boxShadow}、內距 ${c.padding}`), '',
+  `## 首頁骨架（${homeP?.type || ''}）`, ...(homeP?.sections || []).map((s) => `${s.index}. **${s.kindLabel}**（${s.height}px${s.columns > 1 ? '，' + s.columns + ' 欄' : ''}）：${s.purpose}。內容：${s.content.filter((c) => c.t !== 'img').slice(0, 4).map((c) => c.text).join('／').slice(0, 110) || '—'}`), '',
+  '## 文案語氣', `- 標題：${vc.headlineCase}，平均 ${vc.avgHeadlineLength ?? '—'} ${vc.unit}；視角：${vc.perspective}；按鈕文案平均 ${vc.avgCtaLength ?? '—'} ${vc.unit}`, `- 常見按鈕：${vc.topCtas.map((c) => c.text).join('、') || '—'}`, `- 標題範例：${vc.sampleHeadlines.slice(0, 4).join('｜')}`, '');
+if (motion?.targets?.length) B.push('## 動態與 3D（AI 無法直接觀看，以下是翻譯）', ...motion.targets.slice(0, 4).map((t) => `- ${(t.ai?.description || []).filter((l, i) => i === 0 || i === 1 || /three\.js|相機|移動|影片規格|CSS 動畫/.test(l)).join(' ')}`.slice(0, 1500)), '詳見 `motion.md`，並檢視其中的影格序列圖。', '');
+B.push('## 一定要遵守', '- 使用佔位文案與自有／授權素材；不複製原站內容。', '- 修正無障礙：' + (ds.contrastReal?.failing?.length ? `原站有 ${ds.contrastReal.failing.length} 組對比不足（見 SPEC 3.6），你的設計所有文字需 ≥ 4.5:1（大字 ≥ 3:1）` : '所有文字需 ≥ 4.5:1（大字 ≥ 3:1）') + '。', '- 每頁：單一 h1、獨特 title／description、圖片 alt、viewport。', '- 響應式：至少桌機 1440、平板 768、手機 390 三個版本。',
+  health ? `- SEO 基線：原站健檢 ${health.score}/100，請避免重蹈其問題：${spec.health.topIssues.slice(0, 3).map((i) => i.title).join('；')}。` : '', '',
+  '## 請先檢視這些圖片', ...[...(homeP?.sections || []).filter((s) => s.image).slice(0, 5).map((s) => `- \`${s.image}\`（${s.kindLabel}）`), ...media.motion.slice(0, 2).map((m) => `- \`${m}\`（動態影格序列）`)], '',
+  '## 要更多細節時', '`SPEC.md`（完整規格，含各頁各區塊內容）、`spec.json`、`motion.md`、`health.md`、`DECISIONS.md`（做完決策請在此記錄）。', '', '## 已知限制', ...UNK.slice(0, 5).map((u) => `- ${u}`));
+fs.writeFileSync(path.join(out, 'ai-brief.md'), B.filter((x) => x !== undefined).join('\n') + '\n');
+
+// ------------------------------------------------------------------ DECISIONS.md, CLAUDE.md, README.md
+const today = new Date().toISOString().slice(0, 10);
+fs.writeFileSync(path.join(out, 'DECISIONS.md'), [`# 決策與變更紀錄（持續更新）`, '', '> 用途：讓之後接手的人（或 AI）知道「為什麼這樣做」。**每做一個設計或實作決策就在「已做決策」最上方新增一筆**，不要改寫舊紀錄。', '',
+  '## 格式', '```', '### YYYY-MM-DD　決策標題', '- 決策：做了什麼', '- 原因：為什麼（取捨、替代方案）', '- 影響：檔案／元件／頁面', '- 作者：人名或 AI（模型）', '- 依據：SPEC.md 的哪一節／哪張圖', '```', '',
+  '## 待確認問題（Open questions）', ...UNK.map((u) => `- [ ] ${u}`), '- [ ] 這份設計的目標：做新頁面、改版，還是建立設計系統？', '- [ ] 品牌是否已有官方規範？若有，以官方為準，覆蓋 SPEC 的 token。', '',
+  '## 假設（Assumptions）', `- 以 ${site.startUrl} 在 ${site.crawledAt?.slice(0, 10)} 的公開樣貌為參考。`, '- 色碼、字級等為量測值，非官方規範。', '- 文案、圖片為佔位，需替換為自有內容。', '',
+  '## 已做決策', '（尚無）', '', '## 擷取紀錄（Provenance）', ...T(['項目', '內容'], [['來源網址', site.startUrl], ['擷取時間', site.crawledAt], ['工具版本', site.tool?.version], ['User-Agent', site.userAgent], ['分析頁數', live.length], ['遵守 robots.txt', (site.robotsDisallow || []).length ? `是（${site.robotsDisallow.length} 條 Disallow）` : '是（無限制或未提供）'], ['Cookie 橫幅', site.consentAction || '無'], ['互動', '未登入、未送出表單、未繞過驗證'], ['交接包產生', today]]), ''].join('\n'));
+fs.writeFileSync(path.join(out, 'CLAUDE.md'), [`# 工作指引（給在此資料夾工作的 AI）`, '', `這是 ${host} 的設計與開發交接包。`, '', '1. **先讀 `ai-brief.md`**，再依需要讀 `SPEC.md`。', '2. 圖片請直接檢視 `media/` 內的 PNG：優先看 `media/sections/`（區塊裁切圖）與 `media/motion/`（影格序列圖）。你無法觀看影片或 3D，請以 `motion.md` 的文字與數據為準。', '3. 這是**風格參考**：不要複製原站的文案、圖片、Logo、3D 模型；用佔位內容與授權素材。', '4. 遇到 SPEC 第 11 節列出的「未知」，不要臆測成事實：標註為假設，並寫進 `DECISIONS.md` 的「待確認問題」。', '5. **每做一個設計／實作決策，就在 `DECISIONS.md` 的「已做決策」最上方新增一筆**（日期、決策、原因、影響、作者、依據）。', '6. 產出設計稿時，使用 `tokens/tokens.css` 的變數，不要硬寫色碼。', '7. 若規格與你的觀察衝突（例如截圖與表格不一致），以截圖為準並記錄差異。', ''].join('\n'));
+fs.writeFileSync(path.join(out, 'README.md'), [`# ${host} 交接包`, '', `由 site-explorer 於 ${today} 產生。來源：${site.startUrl}`, '', '## 閱讀順序', '1. `ai-brief.md` — 給 AI 的精簡簡報（先讀）', '2. `SPEC.md` — 完整規格（人與 AI 的依據）', '3. `motion.md` — 3D／影片／動畫的文字化描述', '4. `health.md` — SEO／爬蟲索引健檢', '5. `DECISIONS.md` — 決策與待確認問題（持續更新）', '', '## 檔案', '| 檔案 | 用途 |', '|---|---|', '| `spec.json` | 同 SPEC.md 的結構化資料 |', '| `tokens/` | CSS 變數、W3C Design Tokens、Tokens Studio（Figma）、Tailwind、色票 SVG |', '| `media/sections/` | 每個區塊的裁切圖（AI 與人都看得清楚） |', '| `media/pages/` | 桌機／平板／手機整頁截圖 |', '| `media/motion/` | 動態元素的影格序列圖（一張圖看完整個動畫） |', '| `media/assets/` | logo／favicon（使用前確認授權） |', '| `CLAUDE.md` | 給 AI 工作階段的指引 |', ''].join('\n'));
+
+const handoff = { schemaVersion: 1, generatedAt: new Date().toISOString(), site: host, files: fs.readdirSync(out), counts: { pages: live.length, sections: Object.values(media.sections).flat().length, motionImages: media.motion.length } };
+fs.writeFileSync(path.join(out, 'handoff.json'), JSON.stringify(handoff, null, 2));
+console.log(`Handoff package: ${out}\n  ai-brief.md (${Math.round(fs.statSync(path.join(out, 'ai-brief.md')).size / 1024)} KB)  SPEC.md (${Math.round(fs.statSync(path.join(out, 'SPEC.md')).size / 1024)} KB)  ${handoff.counts.sections} section images  ${media.motion.length} motion images`);

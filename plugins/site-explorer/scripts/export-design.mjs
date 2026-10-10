@@ -109,6 +109,8 @@ const faces = dz.fonts?.faces || [], gfam = new Set((dz.fonts?.googleFamilies ||
 const hasLink = (re) => (dz.fonts?.links || []).some((l) => re.test(l));
 const fontNames = [...new Set([fontStack.heading, fontStack.body, fontStack.mono, ...(d.fontFamilies || []).map((f) => f.value)].filter(Boolean))];
 const gUrl = (n) => 'https://fonts.google.com/specimen/' + encodeURIComponent(n).replace(/%20/g, '+');
+const SERIF_RE = /georgia|playfair|times|garamond|merriweather|lora|baskerville|tinos|gelasio|crimson|source serif|newsreader|fraunces|cormorant|libre bask|dm serif|canela|tiempos|serif(?!.*sans)/i;
+const generic = (f) => (/mono|code|courier|menlo|consolas/i.test(f) ? 'ui-monospace, monospace' : SERIF_RE.test(f) && !/sans/i.test(f) ? 'serif' : 'sans-serif');
 const fontSources = fontNames.map((family) => {
   const key = family.toLowerCase(), face = faces.find((f) => f.family.toLowerCase() === key);
   let provider = 'unknown';
@@ -177,7 +179,7 @@ fs.writeFileSync(path.join(out, 'tailwind.config.js'), tw);
 // ---- tokens.css ----
 const css = [':root {',
   ...Object.entries(colors).map(([k, v]) => `  --color-${k}: ${v};`),
-  fontStack.heading ? `  --font-heading: "${fontStack.heading}", sans-serif;` : '', fontStack.body ? `  --font-body: "${fontStack.body}", sans-serif;` : '',
+  fontStack.heading ? `  --font-heading: "${fontStack.heading}", ${generic(fontStack.heading)};` : '', fontStack.body ? `  --font-body: "${fontStack.body}", ${generic(fontStack.body)};` : '',
   ...Object.entries(typeScale).map(([k, v]) => `  --text-${k}: ${v.size};`),
   `  --space-unit: ${spacing.baseUnit}px;`, ...sp.slice(0, 8).map((n, i) => `  --space-${i + 1}: ${n}px;`),
   ...radii.slice(0, 4).map((r, i) => `  --radius-${i + 1}: ${r};`), ...shadows.slice(0, 3).map((s, i) => `  --shadow-${i + 1}: ${s};`),
