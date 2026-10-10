@@ -18,7 +18,7 @@ async function candidates(page, origin) {
       if (!vis(el) || el.closest('form') || el.matches('[type=submit],[type=reset]') || el.disabled) continue;
       const label = (el.innerText || el.getAttribute('aria-label') || el.title || '').trim().replace(/\s+/g, ' ').slice(0, 60);
       if (!label) continue;
-      if (el.tagName === 'A') { const h = el.getAttribute('href') || ''; if (/^(mailto:|tel:)/i.test(h)) continue; if (h && !h.startsWith('#') && !/^javascript:/i.test(h)) { try { if (new URL(h, location.href).origin !== originStr) continue; } catch { continue; } } }
+      if (el.tagName === 'A') { const h = (el.getAttribute('href') || '').trim(); if (h && !h.startsWith('#') && !/^javascript:\s*(void\(0\))?;?$/i.test(h)) continue; } // links with a real destination are the crawler's business (robots.txt, queue), never a click
       const r = el.getBoundingClientRect(); const key = label + '|' + Math.round(r.x / 20) + '|' + Math.round(r.y / 20); if (seen.has(key)) continue; seen.add(key);
       el.setAttribute('data-se-i', String(out.length));
       out.push({ i: out.length, label, tag: el.tagName.toLowerCase(), area: Math.round(r.width * r.height), cx: Math.round(r.x + r.width / 2), cy: Math.round(r.y + r.height / 2) });
@@ -39,9 +39,17 @@ async function signature(page) {
  * @returns {Promise<{states: object[], stoppedBecause: string}>}
  * Each state: { index, action, label, url, textChars, text, ariaHead, screenshot }
  */
-export async function exploreStates(page, { outDir, maxSteps = 6, settleMs = 700, budgetMs = 12000, log = () => {} } = {}) {
+export async function exploreStates(page, { outDir, maxSteps = 6, settleMs = 700, budgetMs = 12000, allowed = () => true, log = () => {} } = {}) {
   const t0 = Date.now(); // hard time budget: a page that never settles must not stall the crawl
   fs.mkdirSync(outDir, { recursive: true });
+  // a button's script may still navigate: any main-frame navigation to a robots-disallowed or foreign-origin URL is refused before the request leaves
+  const startOrigin = new URL(page.url()).origin; let blockedNav = 0;
+  const guard = (route) => { const rq = route.request(); if (rq.isNavigationRequest() && rq.frame() === page.mainFrame()) { let ok = false; try { ok = new URL(rq.url()).origin === startOrigin && allowed(rq.url()); } catch {} if (!ok) { blockedNav++; return route.abort('blockedbyclient'); } } return route.fallback(); };
+  await page.route('**/*', guard);
+  try {
+    return await run();
+  } finally { await page.unroute('**/*', guard).catch(() => {}); }
+  async function run() {
   const origin = new URL(page.url()).origin; const clicked = new Set(); const states = []; let stalls = 0; let stopped = 'maxSteps';
   let cur = await signature(page); const seenIds = new Set([cur.id]);
   const record = async (action, label, sig) => {
@@ -69,6 +77,7 @@ export async function exploreStates(page, { outDir, maxSteps = 6, settleMs = 700
     if (next.id !== cur.id && !seenIds.has(next.id)) { seenIds.add(next.id); stalls = 0; cur = next; await record(action, label, next); log(`   互動 ${states.length - 1}：${action}${label ? '「' + label + '」' : ''} → 畫面改變`); }
     else { stalls++; if (stalls > 4) { stopped = 'nothingChanges'; break; } }
   }
-  fs.writeFileSync(path.join(outDir, 'states.json'), JSON.stringify({ states, stoppedBecause: stopped }, null, 2));
-  return { states, stoppedBecause: stopped };
+  fs.writeFileSync(path.join(outDir, 'states.json'), JSON.stringify({ states, stoppedBecause: stopped, blockedNavigations: blockedNav }, null, 2));
+  return { states, stoppedBecause: stopped, blockedNavigations: blockedNav };
+  }
 }

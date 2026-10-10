@@ -84,7 +84,8 @@ test('first run installs pinned dependencies ONCE into ~/.site-explorer/deps; th
   const r = await run(fresh, [bin, 'setup', '--deps-only', '--quiet', '--background'], env);
   assert.equal(r.status, 0); assert.equal(r.out, '', 'silent: a SessionStart hook must not inject anything into the conversation'); assert.ok(r.ms < 6000, `returned immediately (${r.ms} ms)`);
   const entry = path.join(home, 'deps', 'node_modules', 'playwright-core', 'index.mjs');
-  for (let i = 0; i < 240 && !fs.existsSync(entry); i++) await new Promise((res) => setTimeout(res, 500)); // background install (needs the npm registry)
+  const lockDir = path.join(home, 'deps', '.lock');
+  for (let i = 0; i < 240 && !(fs.existsSync(entry) && !fs.existsSync(lockDir)); i++) await new Promise((res) => setTimeout(res, 250)); // background install (needs the npm registry): done = files present AND lock released
   assert.ok(fs.existsSync(entry), 'dependencies were installed in the background');
   assert.equal(J(path.join(home, 'deps', 'node_modules', 'playwright-core', 'package.json')).version, J(path.join(fresh, 'package.json')).dependencies['playwright-core'], 'the pinned version');
   assert.ok(!fs.existsSync(path.join(fresh, 'node_modules')), 'nothing was written inside the plugin directory');

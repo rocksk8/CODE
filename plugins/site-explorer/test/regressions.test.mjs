@@ -265,10 +265,11 @@ test('interaction states: "enter" buttons and scroll-driven reveals are walked t
   if (skip(t)) return;
   let buyHits = 0, submitHits = 0;
   const srv = http.createServer((q, r) => {
+    if (q.url === '/api/late.json') { r.setHeader('content-type', 'application/json'); return r.end('{"note":"Loaded only after the visitor entered the experience"}'); }
     if (q.url === '/buy') { buyHits++; r.end('bought'); return; }
     if (q.url.startsWith('/submit')) { submitHits++; r.end('submitted'); return; }
     r.setHeader('content-type', 'text/html');
-    if (q.url === '/enter') return r.end('<!doctype html><title>Gate</title><body style="margin:0"><canvas width=800 height=500 style="display:block"></canvas><div id="gate" style="position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center"><button id="go" style="font-size:28px;padding:20px 40px">Enter experience</button></div><button onclick="location.href=\'/buy\'" style="position:fixed;top:0;left:0">Buy now</button><form action="/submit"><button>Send</button></form><script>go.onclick=()=>{gate.remove();document.body.insertAdjacentHTML("beforeend","<main><h1>Welcome inside</h1><p>"+"The experience begins here with real words. ".repeat(8)+"</p></main>")}</script></body>');
+    if (q.url === '/enter') return r.end('<!doctype html><title>Gate</title><body style="margin:0"><canvas width=800 height=500 style="display:block"></canvas><div id="gate" style="position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center"><button id="go" style="font-size:28px;padding:20px 40px">Enter experience</button></div><button onclick="location.href=\'/buy\'" style="position:fixed;top:0;left:0">Buy now</button><form action="/submit"><button>Send</button></form><script>go.onclick=()=>{fetch("/api/late.json");gate.remove();document.body.insertAdjacentHTML("beforeend","<main><h1>Welcome inside</h1><p>"+"The experience begins here with real words. ".repeat(8)+"</p></main>")}</script></body>');
     if (q.url === '/wheel') return r.end('<!doctype html><title>Wheel</title><body style="margin:0;height:3000px"><canvas width=800 height=500 style="display:block"></canvas><script>let done=false;addEventListener("wheel",()=>{if(done)return;done=true;document.body.insertAdjacentHTML("beforeend","<main style=\'position:fixed;top:40px;left:40px\'><h2>Revealed by scrolling</h2><p>"+"Scroll driven content with enough words to count. ".repeat(6)+"</p></main>")})</script></body>');
     r.end('<!doctype html><title>Plain</title><body><h1>Plain</h1></body>');
   }).listen(0); await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
@@ -279,7 +280,7 @@ test('interaction states: "enter" buttons and scroll-driven reveals are walked t
       assert.ok(st && st.length >= 2, name + ': states ' + JSON.stringify(st)); assert.equal(st[1].action, action); if (label) assert.equal(st[1].label, label); assert.ok(st[1].textChars > st[0].textChars, 'content appears after the action');
       assert.ok(fs.existsSync(path.join(base, 'pages', site.pages[0].slug, 'states', st[1].screenshot)));
       assert.match(fs.readFileSync(path.join(base, 'report.md'), 'utf8'), /互動狀態/);
-      if (name === 'enter') {
+      if (name === 'enter') { assert.ok(site.pages[0].network.apis.some((a) => /api\/late\.json/.test(a.url)), 'network summary includes what the states fetched');
         const ho = path.join(tmp, 'int-ho'); const h = await run('build-handoff.mjs', ['--site', base, '--out', ho]); assert.equal(h.status, 0, h.out);
         assert.match(fs.readFileSync(path.join(ho, 'SPEC.md'), 'utf8'), /互動狀態/); assert.ok(fs.readdirSync(path.join(ho, 'media', 'states', site.pages[0].slug)).length >= 2);
         const dash = path.join(tmp, 'int-dash.html'); const b = await run('build-report.mjs', ['--site', base, '--out', dash]); assert.equal(b.status, 0, b.out);
@@ -287,5 +288,25 @@ test('interaction states: "enter" buttons and scroll-driven reveals are walked t
       }
     }
     assert.equal(buyHits, 0, 'a "Buy now" control was clicked'); assert.equal(submitHits, 0, 'a form was submitted');
+  } finally { srv.close(); }
+});
+
+
+test('interaction never reaches robots-disallowed paths (anchors and scripted navigation); hidden text does not count as content', async (t) => {
+  if (skip(t)) return;
+  let privateHits = 0;
+  const srv = http.createServer((q, r) => {
+    if (q.url === '/robots.txt') { r.setHeader('content-type', 'text/plain'); return r.end('User-agent: *\nDisallow: /private\n'); }
+    if (q.url.startsWith('/private')) { privateHits++; r.end('secret'); return; }
+    r.setHeader('content-type', 'text/html');
+    if (q.url === '/gate') return r.end('<!doctype html><title>Gate</title><body><canvas width=600 height=400></canvas><a href="/private/a">Learn more</a><button onclick="location.href=\'/private/b\'">Start the tour</button></body>');
+    if (q.url === '/hidden') return r.end('<!doctype html><title>Hidden</title><body><canvas width=600 height=400></canvas><div style="display:none">' + 'Hidden menu copy that is not on screen at all. '.repeat(10) + '</div><template><p>' + 'Template text that is never rendered. '.repeat(10) + '</p></template></body>');
+    r.end('x');
+  }).listen(0); await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  try {
+    const out = path.join(tmp, 'robots-int'); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/gate`, '--max-pages', '1', '--wait', '1000', '--no-screenshots', '--interact', '--out', out]); assert.equal(r.status, 0, r.out);
+    assert.equal(privateHits, 0, 'a robots-disallowed path was requested during interaction');
+    const out2 = path.join(tmp, 'hidden-text'); const r2 = await run('crawl.mjs', [`http://127.0.0.1:${port}/hidden`, '--max-pages', '1', '--wait', '1500', '--no-screenshots', '--no-interact', '--out', out2]); assert.equal(r2.status, 0, r2.out);
+    const site = JSON.parse(fs.readFileSync(path.join(out2, `127.0.0.1_${port}`, 'site.json'), 'utf8')); assert.equal(site.pages[0].emptyPage, true, 'only hidden text: still an empty page'); assert.ok(site.pages[0].deep.textChars < 20, JSON.stringify(site.pages[0].deep));
   } finally { srv.close(); }
 });

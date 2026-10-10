@@ -459,7 +459,9 @@ while (pages.length < maxPages) {
       if (interactedPages < interactMax && (args.includes('--interact') || canv > 0 || (data.emptyPage && (!data.deep || data.deep.textChars === 0)) || (data.deep && data.deep.textChars < 80 && data.deep.interactive >= 1))) {
         interactedPages++;
         try { await page.setViewportSize({ width: 1440, height: 900 }); await page.evaluate(() => scrollTo(0, 0)); await page.waitForTimeout(300);
-          const st = await exploreStates(page, { outDir: path.join(dir, 'states'), maxSteps: 6, log: (m) => console.log(m) });
+          const startPageUrl = page.url();
+          const st = await exploreStates(page, { outDir: path.join(dir, 'states'), maxSteps: 6, allowed, log: (m) => console.log(m) });
+          data.network = net.summary(startPageUrl); // refresh: what the clicked / scrolled states fetched (APIs, 3D assets) belongs in the picture too
           data.states = st.states; data.statesStopped = st.stoppedBecause;
           if (st.states.length > 1) console.log(`   互動探索：${st.states.length} 個畫面狀態（${st.stoppedBecause === 'maxSteps' ? '達步數上限' : st.stoppedBecause === 'timeBudget' ? '達時間上限' : '之後沒有變化'}）`);
           else console.log('   互動探索：點擊、滾動、按鍵後畫面都沒有變化');

@@ -55,15 +55,16 @@ export function attachNetworkRecorder(page) {
 /** Visible text + elements across the main document, open shadow roots and all frames. */
 export async function deepContent(page) {
   const inFrame = () => {
+    const shown = (el) => { try { return typeof el.checkVisibility === 'function' ? el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) : !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); } catch { return true; } };
     let text = 0, elements = 0, shadowHosts = 0, interactive = 0;
     const visit = (root) => {
       for (const el of root.querySelectorAll('*')) {
-        elements++; if (el.matches('a[href],button,[role=button],input,select,textarea')) interactive++;
+        elements++; if (el.matches('a[href],button,[role=button],input,select,textarea') && shown(el)) interactive++;
         if (el.shadowRoot) { shadowHosts++; visit(el.shadowRoot); }
       }
     };
     visit(document);
-    const walk = (root) => { let n = 0; const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); for (let t = w.nextNode(); t; t = w.nextNode()) { if (!/^(script|style|noscript)$/i.test(t.parentElement?.tagName || '')) n += t.textContent.trim().length; } for (const el of root.querySelectorAll('*')) if (el.shadowRoot) n += walk(el.shadowRoot); return n; };
+    const walk = (root) => { let n = 0; const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); for (let t = w.nextNode(); t; t = w.nextNode()) { const pe = t.parentElement; if (!pe || /^(script|style|noscript|template)$/i.test(pe.tagName) || !shown(pe)) continue; n += t.textContent.trim().length; } for (const el of root.querySelectorAll('*')) if (el.shadowRoot) n += walk(el.shadowRoot); return n; }; // rendered text only: hidden templates, menus and display:none subtrees do not count
     text = document.body ? walk(document.body) : 0;
     return { text, elements, shadowHosts, interactive };
   };
