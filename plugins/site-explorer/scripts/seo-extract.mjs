@@ -2,6 +2,8 @@
 // accessibility basics and lab performance signals.
 
 export async function extractSeoInPage() {
+  // SVG elements have no innerText: without this one inline <svg><a>/<g role=button> makes the whole extraction throw
+  if (typeof SVGElement !== 'undefined' && !('innerText' in SVGElement.prototype)) Object.defineProperty(SVGElement.prototype, 'innerText', { get() { return this.textContent || ''; }, configurable: true });
   const meta = (n) => { const e = document.querySelector(`meta[name="${n}" i],meta[property="${n}" i]`); return e ? (e.content || '').trim() : null; };
   const abs = (u) => { try { return new URL(u, location.href).href; } catch { return u; } };
   const strip = (h) => h.replace(/^www\./, '');

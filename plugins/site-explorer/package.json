@@ -4,17 +4,19 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "playwright-core": "^1.49.0"
+    "playwright-core": "1.64.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "test": "node --test \"test/*.test.mjs\"",
-    "doctor": "node scripts/doctor.mjs",
-    "explore": "node scripts/explore.mjs"
+    "doctor": "node bin/site-explorer.mjs doctor",
+    "explore": "node bin/site-explorer.mjs explore",
+    "setup": "node bin/site-explorer.mjs setup",
+    "test:full": "npm install --no-save three@0.170.0 && npm test"
   },
-  "devDependencies": {
-    "three": "^0.170.0"
+  "bin": {
+    "site-explorer": "bin/site-explorer.mjs"
   }
 }

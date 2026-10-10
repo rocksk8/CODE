@@ -2,7 +2,26 @@
 // Collects what a designer needs: inspectable elements, page blocks with pattern kinds,
 // real-background contrast issues, motion tokens, layout grid, font sources, inline icons.
 export function extractDesignerInPage() {
-  const cs = (e) => getComputedStyle(e);
+  // SVG elements have no innerText: without this one inline <svg><a>/<g role=button> makes the whole extraction throw
+  if (typeof SVGElement !== 'undefined' && !('innerText' in SVGElement.prototype)) Object.defineProperty(SVGElement.prototype, 'innerText', { get() { return this.textContent || ''; }, configurable: true });
+  // Modern CSS returns oklch()/lab()/color(...) verbatim from getComputedStyle. Normalise to sRGB via a canvas so
+  // contrast, palette and token logic (which parse rgb()) see the real colours instead of falling back to black/white.
+  const _cv = document.createElement('canvas'); _cv.width = 1; _cv.height = 1;
+  const _cx = _cv.getContext('2d', { willReadFrequently: true }), _cache = new Map();
+  const rgbOf = (v) => {
+    if (!v || /^rgba?\(/.test(v)) return v;
+    if (v === 'transparent') return 'rgba(0, 0, 0, 0)';
+    if (_cache.has(v)) return _cache.get(v);
+    let out = v;
+    try { // paint one pixel and read the bytes back: works for oklch(), lab(), color-mix(), display-p3, named colours…
+      _cx.clearRect(0, 0, 1, 1); _cx.fillStyle = '#000'; _cx.fillStyle = v; _cx.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = _cx.getImageData(0, 0, 1, 1).data;
+      out = a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${+(a / 255).toFixed(3)})`;
+    } catch {}
+    _cache.set(v, out); return out;
+  };
+  const COLOR_PROPS = new Set(['color', 'backgroundColor', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor', 'outlineColor', 'caretColor', 'textDecorationColor', 'accentColor']);
+  const cs = (e) => { const s = getComputedStyle(e); return new Proxy(s, { get(t, k) { const v = t[k]; return typeof v === 'function' ? v.bind(t) : COLOR_PROPS.has(k) ? rgbOf(v) : v; } }); };
   const vw = innerWidth, vh = innerHeight;
   const visible = (e) => { const r = e.getBoundingClientRect(); const s = cs(e); return r.width > 2 && r.height > 2 && s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0; };
   const parseC = (c) => { const m = String(c).match(/rgba?\(([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:[ ,/]+([\d.]+%?))?/); if (!m) return null; const a = m[4] === undefined ? 1 : m[4].endsWith('%') ? parseFloat(m[4]) / 100 : +m[4]; return [+m[1], +m[2], +m[3], a]; };

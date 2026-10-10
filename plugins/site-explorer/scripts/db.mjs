@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMain } from './util.mjs';
 
 export const DB_PATH = process.env.SITE_EXPLORER_DB || path.join(os.homedir(), '.site-explorer', 'explorations.db');
 const SCHEMA_VERSION = 2;
@@ -79,6 +80,8 @@ export function ingest(db, { siteDir, motionDir }) {
   return id;
 }
 
+/** "#00e", "0000ee", "#0000EE" -> "#0000ee"; anything else -> null */
+export const normalizeHex = (c) => { const m = String(c ?? '').trim().replace(/^#/, '').toLowerCase(); if (/^[0-9a-f]{3}$/.test(m)) return '#' + [...m].map((x) => x + x).join(''); return /^[0-9a-f]{6}$/.test(m) ? '#' + m : null; };
 // --- color distance (RGB euclid) ---
 const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const dist = (a, b) => Math.hypot(...rgb(a).map((v, i) => v - rgb(b)[i]));
@@ -129,7 +132,7 @@ export function search(db, f) {
 }
 
 // ---------------- CLI ----------------
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const [cmd, ...rest] = process.argv.slice(2);
   const opt = (n) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : undefined; };
   const db = await openDb();
@@ -139,7 +142,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     case 'ingest': { const id = ingest(db, { siteDir: opt('site'), motionDir: opt('motion') }); console.log(`已存入資料庫 run #${id}  (${DB_PATH})`); break; }
     case 'list': { const rows = db.prepare('SELECT * FROM runs ORDER BY id DESC').all(); console.log(rows.length ? rows.map(fmt).join('\n') : '（資料庫是空的）'); break; }
     case 'search': {
-      const rows = search(db, { lib: opt('lib'), platform: opt('platform'), font: opt('font'), color: opt('color'), has3d: rest.includes('--has-3d'), healthBelow: opt('health-below') != null ? Number(opt('health-below')) : undefined });
+      let color = opt('color'); if (color !== undefined) { color = normalizeHex(color); if (!color) { console.error('--color 需要像 #e4572e、e4572e 或 #f60 這樣的色碼'); process.exit(1); } }
+      const rows = search(db, { lib: opt('lib'), platform: opt('platform'), font: opt('font'), color, has3d: rest.includes('--has-3d'), healthBelow: opt('health-below') != null ? Number(opt('health-below')) : undefined });
       console.log(rows.length ? rows.map(fmt).join('\n') : '沒有符合的網站'); break;
     }
     case 'history': {
@@ -155,6 +159,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const dump = Object.fromEntries(['runs', 'colors', 'pages', 'platforms', 'libs', 'motion'].map((t) => [t, db.prepare(`SELECT * FROM ${t}`).all()]));
       const out = opt('out'); if (out) { fs.writeFileSync(out, JSON.stringify(dump, null, 2)); console.log('已匯出', out); } else console.log(JSON.stringify(dump, null, 2)); break;
     }
-    default: console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 9).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+    default: console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1).filter((l) => l.startsWith('//')).slice(0, 8).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
   }
 }

@@ -4,7 +4,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
-      matrix: { node: [22] }
+      matrix: { node: [20, 22] }
     defaults:
       run:
         working-directory: plugins/site-explorer
@@ -13,5 +13,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '${{ matrix.node }}', cache: npm, cache-dependency-path: plugins/site-explorer/package-lock.json }
       - run: npm ci
+      - run: npm install --no-save three@0.170.0   # only the 3D tests need it
       - run: npx playwright-core install --with-deps chromium
       - run: npm test

@@ -9,15 +9,25 @@ import { fileURLToPath } from 'node:url';
 import { runChecks, printChecks } from './doctor.mjs';
 import { openDb, ingest, DB_PATH } from './db.mjs';
 import { findUrl, intOpt } from './args.mjs';
+import { isInside } from './safe-out.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const url = findUrl(args);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
-if (!url || args.includes('--help')) { console.log('Usage: explore.mjs <url> [--max-pages 6] [--out ./explore-out] [--no-motion] [--no-db] [--wait 4000]\n  <url> 可省略 https://，例如：explore.mjs example.com'); process.exit(url ? 0 : 1); }
+const USAGE = `用法：site-explorer explore <網址> [選項]    （網址可省略 https://）
+  --max-pages 6        最多爬幾頁
+  --out ./explore-out  輸出資料夾（預設：目前資料夾下的 explore-out）
+  --no-motion          不擷取 3D／動畫          --no-health   不做 SEO／索引健檢
+  --no-link-check      健檢時不檢查連結狀態      --no-handoff  不產生交接包
+  --no-db              不存入歷史資料庫          --wait 4000   3D 擷取前等待毫秒
+  --open | --no-open   完成後是否自動開啟儀表板  --no-standalone  儀表板不內嵌圖片`;
+if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
+if (!url) { console.error(USAGE); process.exit(1); }
 const maxPages = intOpt(args, 'max-pages', 6, { min: 1, max: 500 }), waitMs = intOpt(args, 'wait', 4000, { min: 0, max: 60000 });
 
 const out = path.resolve(opt('out', './explore-out'));
+if (isInside(out, path.resolve(here, '..'))) { console.error(`輸出資料夾不能放在外掛目錄內（${out}）：外掛更新或重新安裝時會被清掉。請改用你專案裡的資料夾，例如 --out ./explore-out`); process.exit(1); }
 const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
 const siteDir = path.join(siteRoot, host), motionDir = path.join(motionRoot, host);
@@ -54,7 +64,7 @@ if (!args.includes('--no-db')) {
   try {
     const db = await openDb();
     if (!db) console.log('   ⚠️ Node < 22.13，略過資料庫（升級後即可累積歷史）');
-    else { const id = ingest(db, { siteDir: crawlOk ? siteDir : null, motionDir: motionOk ? motionDir : null }); console.log(`   ✔ run #${id} → ${DB_PATH}`); }
+    else { const id = ingest(db, { siteDir: crawlOk ? siteDir : null, motionDir: motionOk ? motionDir : null }); console.log(`   ✔ run #${id} → ${DB_PATH}`); steps.push({ label: '存入資料庫', ok: true, s: '0' }); }
   } catch (e) { console.log('   ⚠️ 略過：' + e.message); }
 }
 
@@ -71,7 +81,7 @@ try { const hj = path.join(siteDir, 'health.json'); if (fs.existsSync(hj)) { con
 if (handoffOk) console.log(`交接包：${handoffDir}\n  先讀 ai-brief.md（給 AI）；完整規格 SPEC.md；決策紀錄 DECISIONS.md`);
 if (fs.existsSync(dash)) {
   const mb = (fs.statSync(dash).size / 1048576).toFixed(1);
-  console.log(`儀表板：${dash}（${mb} MB${args.includes('--no-standalone') ? '，需連同資料夾一起搬移' : '，單一檔案，可直接寄送或丟進聊天室'}）\n  Mac 開啟：open "${dash}"`);
+  console.log(`儀表板：${dash}（${mb} MB${args.includes('--no-standalone') ? '，需連同資料夾一起搬移' : '，單一檔案，可直接寄送或丟進聊天室'}）\n  開啟：${process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start ""' : 'xdg-open'} "${dash}"`);
   // open it for humans at a terminal; never when driven by another program (e.g. Claude Code)
   if (args.includes('--open') || (process.stdout.isTTY && !args.includes('--no-open'))) {
     const [cmd, a] = process.platform === 'darwin' ? ['open', [dash]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', dash]] : ['xdg-open', [dash]];

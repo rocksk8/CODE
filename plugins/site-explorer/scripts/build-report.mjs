@@ -89,7 +89,7 @@ try {
 // UI lives in plain files (report/report.css, report/report-client.js) so it is editable without template-literal escaping.
 const read = (f) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'report', f), 'utf8');
 const html = `<!doctype html>
-<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file: 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; media-src file: 'self' data:"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Site Explorer 報告</title>
 <style>
 ${read('report.css')}

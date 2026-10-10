@@ -11,7 +11,7 @@ export const HANDOFF_PRESERVED = ['DECISIONS.md'];
 export class UnsafeOutputError extends Error {}
 
 const samePath = (a, b) => path.resolve(a) === path.resolve(b);
-const isInside = (child, parent) => { const r = path.relative(path.resolve(parent), path.resolve(child)); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
+export const isInside = (child, parent) => { const r = path.relative(path.resolve(parent), path.resolve(child)); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
 
 /**
  * Prepare `dir` for a regenerated package. Allowed: missing, empty, or a folder we made before (marker file present).

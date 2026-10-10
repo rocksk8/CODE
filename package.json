@@ -1,0 +1,19 @@
+{
+  "name": "site-explorer",
+  "version": "0.3.0",
+  "description": "Explore a website with a real browser: design, content, layout, 3D/animation (AI-readable), SEO/indexability health, and an AI+developer handoff package. Also a Claude Code plugin.",
+  "type": "module",
+  "bin": {
+    "site-explorer": "plugins/site-explorer/bin/site-explorer.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.64.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rocksk8/code.git"
+  }
+}

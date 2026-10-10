@@ -1,6 +1,7 @@
 // Dashboard UI (runs in the browser; data comes from the JSON element with id "data").
 const D=JSON.parse(document.getElementById('data').textContent);
 const $=(s,r=document)=>r.querySelector(s),el=(h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild};
+const css=(s)=>String(s??'').replace(/[;"<>(){}\\@]/g,'');
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const T=D.tokens,S=D.site,M=D.motion;
 const toast=(m)=>{const t=$('#toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1400)};
@@ -58,7 +59,7 @@ function show(k){document.querySelectorAll('section').forEach(s=>s.classList.tog
   if(!T)return;const d=$('#s-design');const c=T.color;
   const role={brand:'品牌色',accent:'輔助色',background:'背景',surface:'表面','surface-dark':'深色表面',text:'文字',border:'邊框','text-inverse':'反白文字'};
   const sw=(hex,name,sub)=>'<button onclick="copy(\''+hex+'\')"><i style="background:'+hex+'"></i><span><b>'+esc(name)+'</b>'+hex+(sub?' · '+sub:'')+'</span></button>';
-  const type=Object.entries(T.typography.scale).map(([k,v])=>'<div class="spec"><small>'+k+' · '+v.size+'<br>'+v.weight+'</small><span style="font:'+v.weight+' '+v.size+'/'+(v.lineHeight==='normal'?'1.3':v.lineHeight)+' '+v.family+',system-ui;letter-spacing:'+v.letterSpacing+'">The quick brown fox 設計範例 123</span></div>').join('');
+  const type=Object.entries(T.typography.scale).map(([k,v])=>'<div class="spec"><small>'+k+' · '+v.size+'<br>'+v.weight+'</small><span style="font:'+v.weight+' '+v.size+'/'+(v.lineHeight==='normal'?'1.3':v.lineHeight)+' '+css(v.family)+',system-ui;letter-spacing:'+v.letterSpacing+'">The quick brown fox 設計範例 123</span></div>').join('');
   const sp=T.spacing.observed;const maxSp=Math.max(...sp,1);
   const btns=(window.__b=(S?.components?.buttons||[]).slice(0,4));
   const audit=T.contrastAudit||[];
@@ -68,7 +69,7 @@ function show(k){document.querySelectorAll('section').forEach(s=>s.classList.tog
    '<div class="card"><h3>間距（基準 '+T.spacing.baseUnit+'px）</h3><div class="bars">'+sp.map(n=>'<div><span style="width:46px">'+n+'px</span><i style="width:'+(n/maxSp*100)+'%"></i></div>').join('')+'</div>'+
    '<h3 style="margin-top:18px">圓角</h3><div class="shapes">'+(T.radius.length?T.radius.map(r=>'<div style="border-radius:'+r+'">'+r+'</div>').join(''):'<span class="hint">直角設計</span>')+'</div>'+
    '<h3 style="margin-top:18px">陰影</h3><div class="shapes shadows">'+(T.shadow.length?T.shadow.map(s=>'<div style="box-shadow:'+s+'">陰影</div>').join(''):'<span class="hint">平面設計</span>')+'</div></div></div>'+
-   '<div class="grid g2" style="margin-top:14px"><div class="card"><h3>按鈕（滑過看 hover）</h3>'+(btns.length?btns.map(b=>'<button style="margin:4px;cursor:pointer;background:'+b.backgroundColor+';color:'+b.color+';border:'+(parseFloat(b.borderTopWidth)?b.borderTopWidth+' solid '+b.borderTopColor:'0')+';border-radius:'+b.borderRadius+';padding:'+b.padding+';font:'+b.fontWeight+' '+b.fontSize+' '+b.fontFamily+';transition:filter .15s" onmouseover="this.style.filter=\'brightness(.88)\'" onmouseout="this.style.filter=\'\'">'+esc(b.text||'按鈕')+'</button>').join(''):'<span class="hint">未找到按鈕</span>')+
+   '<div class="grid g2" style="margin-top:14px"><div class="card"><h3>按鈕（滑過看 hover）</h3>'+(btns.length?btns.map(b=>'<button style="margin:4px;cursor:pointer;background:'+css(b.backgroundColor)+';color:'+css(b.color)+';border:'+(parseFloat(b.borderTopWidth)?b.borderTopWidth+' solid '+b.borderTopColor:'0')+';border-radius:'+css(b.borderRadius)+';padding:'+css(b.padding)+';font:'+css(b.fontWeight)+' '+css(b.fontSize)+' '+css(b.fontFamily)+';transition:filter .15s" onmouseover="this.style.filter=\'brightness(.88)\'" onmouseout="this.style.filter=\'\'">'+esc(b.text||'按鈕')+'</button>').join(''):'<span class="hint">未找到按鈕</span>')+
    (T.buttonHover?'<p class="hint">實測 hover：'+T.buttonHover.before.backgroundColor+' → '+T.buttonHover.after.backgroundColor+'</p>':'')+'</div>'+
    '<div class="card"><h3>無障礙對比</h3>'+(audit.length?audit.map(a=>'<div class="spec"><small><span class="chip '+(a.pass?'ok':'warn')+'">'+a.ratio+':1</span></small><span style="background:'+a.bg+';color:'+a.fg+';padding:4px 12px;border-radius:6px">'+esc(a.name)+'</span></div>').join(''):'<span class="hint">無資料</span>')+
    '<h3 style="margin-top:18px">斷點</h3><div style="display:flex;gap:6px;flex-wrap:wrap">'+(T.breakpoints.length?T.breakpoints.map(b=>'<span class="chip">'+b+'px</span>').join(''):'<span class="hint">未偵測</span>')+'</div>'+
@@ -188,7 +189,7 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
 // ---------- motion ----------
 (function(){
   if(!M)return;const m=$('#s-motion');
-  const libs=Object.entries(M.libs).filter(([,v])=>v).map(([k,v])=>'<span class="chip">'+k+(typeof v==='string'?' '+v:'')+'</span>').join('');
+  const libs=Object.entries(M.libs).filter(([,v])=>v).map(([k,v])=>'<span class="chip">'+esc(k)+(typeof v==='string'?' '+esc(v):'')+'</span>').join('');
   m.innerHTML='<div class="card"><h3>技術</h3>'+(libs||'<span class="hint">未偵測到已知 3D 函式庫</span>')+'<span class="chip">WebGL ×'+M.webglContexts.length+'</span>'+
    (M.assets3d.length?'<h3 style="margin-top:12px">3D 素材</h3>'+M.assets3d.map(a=>'<div class="hint">'+esc(a)+'</div>').join(''):'')+
    (M.video?'<h3 style="margin-top:12px">錄影</h3><video src="'+M.video+'" controls style="max-width:100%;border-radius:8px"></video>':'')+'</div><div id="targets"></div>';

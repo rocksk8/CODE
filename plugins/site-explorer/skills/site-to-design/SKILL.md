@@ -1,6 +1,6 @@
 ---
 name: site-to-design
-description: 把網站探索結果變成「AI 能據以做設計範本、後續開發能接手」的交接包，並串接 Claude Design（Design System → 設計稿）。當使用者想以某網站為基礎做設計系統、改版、延伸頁面、競品風格參考，或要把網站規格交給開發時使用。
+description: 把網站探索結果變成「AI 能據以做設計範本、後續開發能接手」的交接包，並串接 Claude Design（Design System → 設計稿）。當使用者想以某網站為基礎做設計系統、改版、延伸頁面、競品風格參考，或要把網站規格交給開發時使用。 Use to turn a live website into an AI-ready design brief and developer handoff package, a Claude Design system, or a redesign starting point.
 ---
 
 # 從網站到設計範本與交接包
@@ -9,8 +9,7 @@ description: 把網站探索結果變成「AI 能據以做設計範本、後續�
 
 ## 1. 產生交接包
 ```bash
-cd "${CLAUDE_PLUGIN_ROOT}" && npm install --silent        # 僅首次（會自動安裝）
-node scripts/explore.mjs <url> --max-pages 8 --out ./explore-out
+node "${CLAUDE_PLUGIN_ROOT}/bin/site-explorer.mjs" explore <url> --max-pages 8 --out ./explore-out
 ```
 輸出 `explore-out/handoff/`（可整包丟進專案、交給開發或 AI）：
 

@@ -1,6 +1,6 @@
 ---
 name: capture-motion
-description: 視覺化擷取網站的 3D 與動畫（WebGL/three.js/Spline/model-viewer/CSS 3D/Lottie/影片/捲動動畫）：連續畫格、捲動序列、滑鼠互動畫格、錄影，並分析技術與素材。當網站含 3D 或動態效果、要理解或重現其動畫時使用。
+description: 視覺化擷取網站的 3D 與動畫（WebGL/three.js/Spline/model-viewer/CSS 3D/Lottie/影片/捲動動畫）：連續畫格、捲動序列、滑鼠互動畫格、錄影，並分析技術與素材。當網站含 3D 或動態效果、要理解或重現其動畫時使用。 Use when a site has WebGL / three.js / video / scroll animations that need to be captured and described for an AI that cannot watch video.
 ---
 
 # 3D／動畫視覺擷取
@@ -9,8 +9,7 @@ description: 視覺化擷取網站的 3D 與動畫（WebGL/three.js/Spline/model
 
 ## 一鍵擷取
 ```bash
-cd "${CLAUDE_PLUGIN_ROOT}" && npm install --silent
-node scripts/capture-3d.mjs <url> --out ./motion-report [--frames 12] [--interval 250] [--max-targets 6] [--wait 2500]
+node "${CLAUDE_PLUGIN_ROOT}/bin/site-explorer.mjs" motion <url> --out ./motion-report [--frames 12] [--interval 250] [--max-targets 6] [--wait 2500]
 ```
 輸出 `<out>/<host>/`：
 - `motion.json`：偵測到的目標（webgl／css-3d／model-viewer／video…）、是否自己動、是否回應滑鼠、使用的函式庫（three、gsap、Spline…）、載入的 3D 素材網址（.glb/.hdr/.ktx2…）、shader 原始碼片段、CSS keyframes、捲動前後畫面是否變化

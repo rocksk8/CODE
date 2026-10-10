@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { cleanDeep, BANNER } from './untrusted.mjs';
+import { cleanDeep, BANNER, sanitizeDoc } from './untrusted.mjs';
 import { claimOutputDir, UnsafeOutputError } from './safe-out.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -40,6 +40,7 @@ const tok = has(tokPath) ? sanitize(J(tokPath), 'tokens') : null;
 const comps = has(path.join(siteDir, 'design-bundle', 'components.json')) ? sanitize(J(path.join(siteDir, 'design-bundle', 'components.json')), 'components') : {};
 const health = has(path.join(siteDir, 'health.json')) ? sanitize(J(path.join(siteDir, 'health.json')), 'health', { max: 400 }) : null;
 const motion = motionDir && has(path.join(motionDir, 'motion.json')) ? sanitize(J(path.join(motionDir, 'motion.json')), 'motion', { max: 800 }) : null;
+if (motion && !Array.isArray(motion.targets)) motion.targets = []; // tolerate a partial motion.json
 const pages = site.pages.map((p) => { const f = path.join(siteDir, 'pages', p.slug, 'page.json'); return has(f) ? { ...p, ...sanitize(J(f), `page[${p.slug}]`), slug: p.slug } : null; }).filter(Boolean);
 // the same sentence shows up under many JSON paths (title, h1, block text, element list…): report each distinct text once
 const uniqueSuspects = [...suspects.reduce((m, x) => m.set(x.text, m.has(x.text) ? { ...m.get(x.text), count: m.get(x.text).count + 1 } : { ...x, count: 1 }), new Map()).values()];
@@ -111,7 +112,7 @@ let previous;
 try { previous = claimOutputDir(out, 'handoff.json'); } // never delete files that are not ours; keep the user's DECISIONS.md
 catch (e) { if (e instanceof UnsafeOutputError) { console.error(e.message); process.exit(1); } throw e; }
 for (const d of ['tokens', 'media/sections', 'media/pages', 'media/motion', 'media/assets']) fs.mkdirSync(path.join(out, d), { recursive: true });
-const copy = (src, dst) => { if (has(src)) { fs.mkdirSync(path.dirname(dst), { recursive: true }); fs.copyFileSync(src, dst); return true; } return false; };
+const copy = (src, dst) => { if (has(src)) { fs.mkdirSync(path.dirname(dst), { recursive: true }); if (/\.(css|md|js)$/i.test(src)) fs.writeFileSync(dst, sanitizeDoc(fs.readFileSync(src, 'utf8'))); else fs.copyFileSync(src, dst); return true; } return false; };
 const rel = (p) => p.split(path.sep).join('/');
 for (const f of ['tokens.css', 'tokens.json', 'tokens.w3c.json', 'tokens.studio.json', 'tailwind.config.js', 'palette.svg', 'components.json']) copy(path.join(siteDir, 'design-bundle', f), path.join(out, 'tokens', f));
 for (const a of site.assets || []) copy(path.join(siteDir, a.file), path.join(out, 'media', 'assets', path.basename(a.file)));
@@ -130,7 +131,7 @@ if (motion) {
     let md = fs.readFileSync(path.join(motionDir, 'motion.md'), 'utf8');
     for (const t of motion.targets) md = md.replaceAll(`frames/${t.id}/filmstrip.png`, `media/motion/${t.id}-filmstrip.png`);
     md = md.replaceAll('frames/scroll/filmstrip.png', 'media/motion/scroll-filmstrip.png');
-    fs.writeFileSync(path.join(out, 'motion.md'), md); fs.writeFileSync(path.join(out, 'motion.json'), JSON.stringify(motion, null, 2));
+    fs.writeFileSync(path.join(out, 'motion.md'), BANNER + '\n\n' + sanitizeDoc(md)); fs.writeFileSync(path.join(out, 'motion.json'), JSON.stringify(motion, null, 2));
   }
 }
 if (health) { copy(path.join(siteDir, 'health.md'), path.join(out, 'health.md')); copy(path.join(siteDir, 'health.json'), path.join(out, 'health.json')); }
@@ -225,7 +226,7 @@ for (const p of spec.pages) {
     L.push(...T(['#', '版型', '用途', '高', '欄', '圖片'], p.sections.map((s) => [s.index, s.kindLabel, s.purpose, s.height + 'px', s.columns, s.image ? '`' + s.image + '`' : '—'])), '');
     for (const s of p.sections) {
       if (!s.content.length) continue;
-      L.push(`**${s.index}. ${s.kindLabel}**（推測依據：${s.why}）`, ...s.content.slice(0, 12).map((c) => c.t === 'img' ? `- 圖片 alt=「${c.alt}」${c.w}×${c.h}` : `- \`${c.t}\` ${c.text}${c.href && c.t === 'a' ? ' → ' + c.href.replace(origin, '') : ''}`), '');
+      L.push(`**${s.index}. ${s.kindLabel}**（推測依據：${s.why}）`, ...s.content.slice(0, 12).map((c) => c.t === 'img' ? `- 圖片 alt=「${c.alt}」${c.w}×${c.h}` : `- \`${c.t}\` ${c.text}${c.href && c.t === 'a' ? ' → ' + String(c.href).replace(origin, '') : ''}`), '');
     }
   }
 }

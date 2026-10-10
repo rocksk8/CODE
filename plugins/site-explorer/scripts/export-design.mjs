@@ -2,6 +2,7 @@
 // Convert a crawl result (site.json) into a design-system bundle that Claude Design can ingest:
 //   tokens.json (colors by role, type scale, spacing scale, radius, shadow, breakpoints),
 //   tokens.css, components.json, README.md (brand brief), assets/
+import { BANNER, sanitizeDoc } from './untrusted.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -186,7 +187,7 @@ const css = [':root {',
   ...radii.slice(0, 4).map((r, i) => `  --radius-${i + 1}: ${r};`), ...shadows.slice(0, 3).map((s, i) => `  --shadow-${i + 1}: ${s};`),
   '}', ...(d.darkMode?.supported ? ['@media (prefers-color-scheme: dark) {', `  :root { --color-background: ${d.darkMode.dark.background}; --color-text: ${d.darkMode.dark.color}; }`, '}'] : []),
 ].filter(Boolean).join('\n');
-fs.writeFileSync(path.join(out, 'tokens.css'), css + '\n');
+fs.writeFileSync(path.join(out, 'tokens.css'), sanitizeDoc(css) + '\n');
 
 // ---- components ----
 fs.writeFileSync(path.join(out, 'components.json'), JSON.stringify({ buttons: c.buttons, inputs: c.inputs, cards: c.cards, navigation: c.navigation, logo: c.logo, hover: d.buttonHover }, null, 2));
@@ -219,6 +220,6 @@ const readme = [
   '## Page structure', ...site.pages.slice(0, 8).map((p) => `- ${p.title || p.url} — ${p.url}`), '',
   '## Files', '- `tokens.json` / `tokens.css` / `tokens.w3c.json` / `tailwind.config.js` — machine-readable tokens (CSS, W3C Design Tokens, Tailwind)', '- `tokens.studio.json` — import with the Tokens Studio plugin in Figma', '- `palette.svg` — drag into Figma / Illustrator / Keynote', '- `components.json` — component styles', '- `assets/` — logo, favicon, og image', '- `reference/` — desktop and mobile screenshots',
 ].filter((l) => l !== undefined && l !== null).join('\n');
-fs.writeFileSync(path.join(out, 'README.md'), readme + '\n');
+fs.writeFileSync(path.join(out, 'README.md'), BANNER + '\n\n' + sanitizeDoc(readme) + '\n');
 console.log('Design bundle written to', out);
 console.log(`brand ${colors.brand || '?'} · fonts ${fontStack.heading || '?'} / ${fontStack.body || '?'} · base unit ${spacing.baseUnit}px · ${audit.filter((a) => !a.pass).length} contrast issue(s)`);

@@ -108,18 +108,3 @@ test('hostile page content cannot inject script into the dashboard (path with sp
   await b.close();
 });
 
-test('first run without node_modules installs dependencies instead of crashing', async (t) => {
-  if (!haveBrowser) return t.skip('no browser');
-  const copy = path.join(tmp, 'fresh install'); // what a GitHub install looks like: no node_modules
-  fs.cpSync(path.join(root, 'scripts'), path.join(copy, 'scripts'), { recursive: true });
-  for (const f of ['package.json', 'package-lock.json']) fs.copyFileSync(path.join(root, f), path.join(copy, f));
-  const r = await new Promise((resolve) => {
-    const p = spawn(process.execPath, [path.join(copy, 'scripts', 'doctor.mjs')], { env: { ...process.env, SITE_EXPLORER_DB: path.join(tmp, 'fi.db') } });
-    let out = ''; p.stdout.on('data', (d) => (out += d)); p.stderr.on('data', (d) => (out += d)); p.on('close', (status) => resolve({ status, out }));
-  });
-  if (/安裝失敗/.test(r.out)) return t.skip('npm registry unreachable');
-  assert.match(r.out, /第一次執行/);
-  assert.doesNotMatch(r.out, /ERR_MODULE_NOT_FOUND/);
-  assert.ok(fs.existsSync(path.join(copy, 'node_modules', 'playwright-core')));
-  assert.equal(r.status, 0, r.out);
-});

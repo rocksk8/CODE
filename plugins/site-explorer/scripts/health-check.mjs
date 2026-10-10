@@ -6,10 +6,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import tls from 'node:tls';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { isMain, readCappedBuffer, mayFetch } from './util.mjs';
 import { fetchRobots, isAllowed, groupFor, AI_BOTS, SEARCH_BOTS } from './robots.mjs';
 import { intOpt } from './args.mjs';
-import { cleanDeep, clean, BANNER } from './untrusted.mjs';
+import { cleanDeep, clean, safe, BANNER, sanitizeDoc } from './untrusted.mjs';
 
 const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
 const SEV = { critical: 40, high: 20, medium: 8, low: 3, info: 0 };
@@ -18,7 +20,7 @@ export const CATEGORIES = { indexability: ['索引與爬取', 25], onpage: ['頁
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const strip = (h) => h.replace(/^www\./, '');
-const isLocal = (host) => /^(localhost|127\.|10\.|192\.168\.|\[::1\])/.test(host) || !host.includes('.');
+const isLocal = (host) => /^(localhost|127(\.\d{1,3}){3}|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}|\[?::1\]?)$/i.test(host) || !host.includes('.') || /\.(local|localhost|internal|test)$/i.test(host);
 const norm = (u) => { try { const x = new URL(u); x.hash = ''; return x.href.replace(/\/$/, ''); } catch { return u; } };
 const textLen = (s) => [...String(s || '')].reduce((n, ch) => n + (/[㐀-鿿぀-ヿ가-힯]/.test(ch) ? 2 : 1), 0); // CJK glyphs are ~2x wide in SERPs
 
@@ -31,9 +33,9 @@ async function http(url, { method = 'HEAD', redirect = 'manual', timeout = 10000
 }
 async function pool(items, n, fn) { const out = []; let i = 0; await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) { const k = i++; out[k] = await fn(items[k], k); await sleep(60); } })); return out; }
 
-function tlsInfo(host) {
+function tlsInfo(host, port = 443) {
   return new Promise((resolve) => {
-    const s = tls.connect({ host, port: 443, servername: host, timeout: 8000 }, () => {
+    const s = tls.connect({ host, port, servername: host, timeout: 8000 }, () => {
       const c = s.getPeerCertificate(); const proto = s.getProtocol(); const idErr = tls.checkServerIdentity(host, c);
       const to = c && c.valid_to ? new Date(c.valid_to) : null;
       resolve({ ok: true, protocol: proto, validTo: to && to.toISOString(), daysLeft: to ? Math.floor((to - Date.now()) / 86400000) : null, issuer: c.issuer && (c.issuer.O || c.issuer.CN), hostnameMatches: !idErr, authorized: s.authorized });
@@ -43,20 +45,38 @@ function tlsInfo(host) {
   });
 }
 
-function parseSitemap(xml) {
-  const locs = (tag) => [...xml.matchAll(new RegExp(`<${tag}>\\s*<loc>\\s*([^<\\s]+)\\s*</loc>([\\s\\S]*?)</${tag}>`, 'gi'))].map((m) => ({ loc: m[1].replace(/&amp;/g, '&'), lastmod: (m[2].match(/<lastmod>\s*([^<\s]+)/i) || [])[1] || null }));
-  return { sitemaps: locs('sitemap'), urls: locs('url') };
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+const decodeEntities = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (m, e) => (e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)) : ENTITIES[e.toLowerCase()]));
+// tolerant of namespace prefixes, attributes, CDATA, any child order (<lastmod> or <image:image> before <loc>)
+export function parseSitemap(xml) {
+  const blocks = (tag) => { // linear scan: an unclosed tag stops the loop instead of backtracking
+    const open = new RegExp(`<(?:[\\w-]+:)?${tag}(?:\\s[^>]*)?>`, 'gi'), close = new RegExp(`</(?:[\\w-]+:)?${tag}>`, 'gi'); const out = [];
+    for (let m; out.length < 100000 && (m = open.exec(xml));) { close.lastIndex = open.lastIndex; const c = close.exec(xml); if (!c) break; out.push(xml.slice(open.lastIndex, c.index)); open.lastIndex = close.lastIndex; }
+    return out;
+  };
+  const field = (b, name) => { const m = b.match(new RegExp(`<(?!image:|video:|news:|xhtml:)(?:[\\w-]+:)?${name}(?:\\s[^>]*)?>\\s*(?:<!\\[CDATA\\[)?\\s*([\\s\\S]*?)\\s*(?:\\]\\]>)?\\s*</(?:[\\w-]+:)?${name}>`, 'i')); return m ? decodeEntities(m[1].trim()) : null; };
+  const rows = (tag) => blocks(tag).map((b) => ({ loc: field(b, 'loc'), lastmod: field(b, 'lastmod') })).filter((r) => r.loc);
+  return { sitemaps: rows('sitemap'), urls: rows('url') };
+}
+// gzip (.xml.gz or Content-Encoding-less gz bodies); output is capped so a zip bomb cannot eat memory
+async function fetchSitemapText(url, timeout = 15000) {
+  const r = await fetch(url, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(timeout), redirect: 'follow' });
+  if (!r.ok) return { status: r.status };
+  let buf = await readCappedBuffer(r, 25_000_000); if (!buf) return { status: r.status, error: 'sitemap 超過 25 MB' };
+  if (buf.length > 25_000_000) return { status: r.status, error: 'sitemap 超過 25 MB' };
+  if (buf[0] === 0x1f && buf[1] === 0x8b) { try { buf = zlib.gunzipSync(buf, { maxOutputLength: 50_000_000 }); } catch { return { status: r.status, error: 'gzip 解壓失敗或超過 50 MB' }; } }
+  return { status: r.status, xml: buf.toString('utf8') };
 }
 
 export async function runHealth(siteDir, opts = {}) {
   const site = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8'));
   const injection = []; // site text that looks like instructions aimed at an AI
-  const pages = site.pages.map((p) => { const f = path.join(siteDir, 'pages', p.slug, 'page.json'); if (!fs.existsSync(f)) return null; const j = JSON.parse(fs.readFileSync(f, 'utf8')); return { slug: p.slug, url: p.url, status: p.status, blocked: p.blocked, /* perf = numbers + resource URLs; URLs only reach the report via add(), which sanitises */ seo: { ...cleanDeep({ ...j.seo, perf: undefined }, `page[${p.slug}].seo`, injection, { max: 400 }), perf: j.seo?.perf }, links: cleanDeep(j.content?.links || [], `page[${p.slug}].links`, injection), title: clean(j.title) }; }).filter((p) => p && p.seo);
+  const pages = site.pages.map((p) => { const f = path.join(siteDir, 'pages', p.slug, 'page.json'); if (!fs.existsSync(f)) return null; const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (!j.seo) return null; return { slug: p.slug, url: p.url, status: p.status, blocked: p.blocked, /* perf = numbers + resource URLs; URLs only reach the report via add(), which sanitises */ seo: { ...cleanDeep({ ...j.seo, perf: undefined }, `page[${p.slug}].seo`, injection, { max: 400, quarantine: false }), perf: j.seo?.perf }, links: cleanDeep(j.content?.links || [], `page[${p.slug}].links`, injection, { quarantine: false }), title: clean(j.title) }; }).filter((p) => p && p.seo);
   const origin = new URL(site.finalOrigin || site.startUrl).origin, host = new URL(origin).hostname, https = origin.startsWith('https:');
   const live = pages.filter((p) => !p.status || p.status < 400); // error pages are reported once (status-errors), not scored as content
   const total = live.length || 1;
   const issues = [], passed = [], facts = {};
-  const add = (category, severity, id, title, { detail = '', affected = 1, examples = [], impact = '', fix = '', scope = 'site' } = {}) => issues.push({ id, category, severity, title, detail: clean(detail, 300), affected, total: scope === 'site' ? 1 : total, scope, examples: examples.slice(0, 6).map((e) => clean(e, 300)), impact, fix }); // examples / detail echo site data: sanitise
+  const add = (category, severity, id, title, { detail = '', affected = 1, examples = [], impact = '', fix = '', scope = 'site', total: totalOverride } = {}) => issues.push({ id, category, severity, title, detail: safe(detail, 300), affected, total: scope === 'site' ? 1 : (totalOverride ?? total), scope, examples: examples.slice(0, 6).map((e) => safe(e, 300)), impact, fix }); // examples / detail echo site data: sanitise
   const ok = (category, title) => passed.push({ category, title });
   const perPage = (pred) => live.filter(pred);
   const urls = (arr) => arr.map((p) => p.url);
@@ -87,21 +107,28 @@ export async function runHealth(siteDir, opts = {}) {
   // ---------------------------------------------------------------- sitemap
   const candidates = [...new Set([...(rp?.sitemaps || []), origin + '/sitemap.xml', origin + '/sitemap_index.xml'])].slice(0, 6);
   const sm = { found: [], urls: [], children: [], errors: [] };
+  const MAX_CHILDREN = 20;
   for (const c of candidates) {
+    if (!mayFetch(c, origin)) continue;
     try {
-      const r = await fetch(c, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(15000), redirect: 'follow' });
-      if (!r.ok) { sm.errors.push(`${c} → ${r.status}`); continue; }
-      const xml = (await r.text()).slice(0, 10_000_000);
-      if (!/<(urlset|sitemapindex)/i.test(xml)) { sm.errors.push(`${c} 不是有效的 sitemap XML`); continue; }
+      const got = await fetchSitemapText(c);
+      if (got.error) { sm.errors.push(`${c}：${got.error}`); continue; }
+      if (!got.xml) { sm.errors.push(`${c} → ${got.status}`); continue; }
+      if (!/<(?:[\w-]+:)?(urlset|sitemapindex)/i.test(got.xml)) { sm.errors.push(`${c} 不是有效的 sitemap XML`); continue; }
       sm.found.push(c);
-      const parsed = parseSitemap(xml); sm.urls.push(...parsed.urls);
-      for (const child of parsed.sitemaps.slice(0, 5)) { try { const cr = await fetch(child.loc, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(15000) }); if (cr.ok) { sm.children.push(child.loc); sm.urls.push(...parseSitemap((await cr.text()).slice(0, 10_000_000)).urls); } else sm.errors.push(`${child.loc} → ${cr.status}`); } catch (e) { sm.errors.push(`${child.loc} 無法取得`); } }
+      const parsed = parseSitemap(got.xml); sm.urls.push(...parsed.urls);
+      sm.childrenTotal = (sm.childrenTotal || 0) + parsed.sitemaps.length;
+      for (const child of parsed.sitemaps.slice(0, MAX_CHILDREN)) {
+        try { if (!mayFetch(child.loc, origin)) continue; const cg = await fetchSitemapText(child.loc); if (cg.xml) { sm.children.push(child.loc); sm.urls.push(...parseSitemap(cg.xml).urls); } else sm.errors.push(`${child.loc} → ${cg.error || cg.status}`); } catch { sm.errors.push(`${child.loc} 無法取得`); }
+      }
+      if (parsed.sitemaps.length > MAX_CHILDREN) sm.errors.push(`sitemap index 有 ${parsed.sitemaps.length} 個子 sitemap，只讀了前 ${MAX_CHILDREN} 個（網址數與「不在 sitemap」的判斷僅供參考）`);
       if (sm.urls.length) break;
     } catch (e) { sm.errors.push(`${c} 無法連線`); }
   }
   const smUrls = [...new Map(sm.urls.map((u) => [norm(u.loc), u])).values()].slice(0, 5000);
-  facts.sitemap = { found: sm.found, children: sm.children, urlCount: smUrls.length, withLastmod: smUrls.filter((u) => u.lastmod).length, errors: sm.errors };
+  facts.sitemap = { found: sm.found, children: sm.children, childrenTotal: sm.childrenTotal || 0, urlCount: smUrls.length, withLastmod: smUrls.filter((u) => u.lastmod).length, errors: sm.errors };
   if (!sm.found.length) add('indexability', 'medium', 'sitemap-missing', '找不到 sitemap.xml', { examples: sm.errors, impact: '搜尋引擎較難發現深層或新頁面，收錄速度變慢。', fix: '產生 sitemap.xml，並在 robots.txt 加上 `Sitemap:` 行，同時提交到 Google Search Console 與 Bing Webmaster。' });
+  else if (!smUrls.length) add('indexability', 'medium', 'sitemap-empty', 'sitemap 存在，但解析不到任何網址', { examples: [...sm.found, ...sm.errors], impact: '搜尋引擎拿不到你想被收錄的網址清單。', fix: '確認 sitemap 格式（<urlset><url><loc>…）；若是壓縮檔或 index，確認子 sitemap 可存取且內容不是空的。' });
   else {
     ok('indexability', `sitemap 存在（${smUrls.length} 筆網址）`);
     if (rp && !rp.sitemaps.length) add('indexability', 'low', 'sitemap-not-in-robots', 'robots.txt 沒有宣告 Sitemap', { impact: '少了一個讓所有爬蟲都能發現 sitemap 的管道。', fix: '在 robots.txt 加入 `Sitemap: ' + sm.found[0] + '`。' });
@@ -127,7 +154,8 @@ export async function runHealth(siteDir, opts = {}) {
 
   // ---------------------------------------------------------------- per-page indexability
   const nonOk = pages.filter((p) => p.status && p.status >= 400);
-  if (nonOk.length) add('indexability', 'high', 'status-errors', `${nonOk.length} 個頁面回應 4xx／5xx`, { affected: nonOk.length, scope: 'page', examples: nonOk.map((p) => `${p.status} ${p.url}`), fix: '修復頁面或移除指向它的連結／sitemap 項目。' });
+  if (nonOk.length) add('indexability', 'high', 'status-errors', `${nonOk.length} 個頁面回應 4xx／5xx`, { affected: nonOk.length, total: pages.length, scope: 'page', examples: nonOk.map((p) => `${p.status} ${p.url}`), fix: '修復頁面或移除指向它的連結／sitemap 項目。' });
+  if (!live.length && pages.length) add('indexability', 'critical', 'no-live-pages', '爬到的頁面全部是錯誤頁（4xx／5xx），沒有任何可索引內容', { affected: pages.length, total: pages.length, scope: 'page', examples: pages.map((p) => `${p.status} ${p.url}`), impact: '搜尋引擎與使用者看到的是一個壞掉的網站；其他檢查沒有可分析的內容。', fix: '先讓起始網址回應 200。' });
   const noindexed = perPage((p) => /noindex/i.test(p.seo.robotsMeta || '') || /noindex/i.test(p.seo.http?.headers?.['x-robots-tag'] || ''));
   if (noindexed.length) add('indexability', noindexed.length === total ? 'critical' : 'medium', 'noindex', `${noindexed.length} 個頁面標示 noindex（不會被收錄）`, { affected: noindexed.length, scope: 'page', examples: noindexed.map((p) => `${p.url}（${p.seo.robotsMeta || p.seo.http.headers['x-robots-tag']}）`), impact: noindexed.length === total ? '全站不會出現在搜尋結果。' : '這些頁面不會出現在搜尋結果。', fix: '若非刻意，移除 meta robots／X-Robots-Tag 中的 noindex。' });
   const nofollow = perPage((p) => /nofollow/i.test(p.seo.robotsMeta || ''));
@@ -183,7 +211,8 @@ export async function runHealth(siteDir, opts = {}) {
   const skips = perPage((p) => p.seo.headingSkips > 0); if (skips.length) add('onpage', 'low', 'heading-skips', `${skips.length} 個頁面標題層級跳級（如 h2 直接到 h4）`, { affected: skips.length, scope: 'page', examples: urls(skips), fix: '標題依序遞進，不要為了樣式而跳級。' });
   const thin = perPage((p) => p.status === 200 && p.seo.words < 150 && !/(login|signin|cart|checkout|404)/i.test(p.url)); if (thin.length) add('onpage', 'medium', 'thin-content', `${thin.length} 個頁面文字內容偏少（< 150 字）`, { affected: thin.length, scope: 'page', examples: thin.map((p) => `${p.seo.words} 字：${p.url}`), impact: '內容稀薄的頁面較難排名，大量出現會拉低整站品質評價。', fix: '補充實質內容，或合併、noindex 價值低的頁面。' });
   const noLang = perPage((p) => !p.seo.lang); if (noLang.length) add('onpage', 'medium', 'lang-missing', `${noLang.length} 個頁面的 <html> 沒有 lang`, { affected: noLang.length, scope: 'page', examples: urls(noLang), impact: '影響語言判斷、翻譯提示與螢幕閱讀器發音。', fix: '例如 <html lang="zh-Hant-TW">。' });
-  const badUrl = perPage((p) => { const u = new URL(p.url); return p.url.length > 115 || /[A-Z]/.test(u.pathname) || /_/.test(u.pathname) || [...u.searchParams].length > 3; }); if (badUrl.length) add('onpage', 'low', 'url-hygiene', `${badUrl.length} 個網址不夠乾淨（過長、含大寫、底線或過多參數）`, { affected: badUrl.length, scope: 'page', examples: urls(badUrl), fix: '使用小寫、連字號、簡短且有意義的路徑。' });
+  const dec = (t) => { try { return decodeURIComponent(t); } catch { return t; } };
+  const badUrl = perPage((p) => { const u = new URL(p.url), path_ = dec(u.pathname); return dec(p.url).length > 115 || /[A-Z]/.test(path_) || /_/.test(path_) || [...u.searchParams].length > 3; }); // judge the decoded path: %E7%94%A2 is not "uppercase" if (badUrl.length) add('onpage', 'low', 'url-hygiene', `${badUrl.length} 個網址不夠乾淨（過長、含大寫、底線或過多參數）`, { affected: badUrl.length, scope: 'page', examples: urls(badUrl), fix: '使用小寫、連字號、簡短且有意義的路徑。' });
   const missAlt = live.reduce((n, p) => n + p.seo.images.missingAlt, 0), imgTotal = live.reduce((n, p) => n + p.seo.images.total, 0);
   if (missAlt) add('onpage', missAlt / Math.max(1, imgTotal) > 0.3 ? 'medium' : 'low', 'img-alt', `${missAlt} / ${imgTotal} 張圖片缺少 alt 屬性`, { affected: perPage((p) => p.seo.images.missingAlt).length, scope: 'page', examples: live.flatMap((p) => p.seo.images.sampleMissingAlt), impact: '影響圖片搜尋與無障礙；缺 alt 的圖片螢幕閱讀器會朗讀檔名。', fix: '為有意義的圖片寫描述性 alt；純裝飾圖片用 alt=""。' });
   else if (imgTotal) ok('onpage', '所有圖片都有 alt 屬性');
@@ -213,7 +242,7 @@ export async function runHealth(siteDir, opts = {}) {
     const crawledBroken = [...allInternal.values()].filter((e) => (crawledStatus.get(norm(e.url)) || 0) >= 400).map((e) => ({ ...e, status: crawledStatus.get(norm(e.url)) }));
     const broken = [...crawledBroken, ...checked.filter((c) => c.status && c.status >= 400)], redirs = checked.filter((c) => c.status >= 300 && c.status < 400), unreachable = checked.filter((c) => !c.status);
     const ext = [...new Map(pages.flatMap((p) => p.links).filter((l) => { try { const u = new URL(l.href); return /^https?:/.test(u.protocol) && strip(u.hostname) !== strip(host); } catch { return false; } }).map((l) => [new URL(l.href).origin + new URL(l.href).pathname, l.href])).values()].slice(0, 30);
-    const extChecked = await pool(ext, 3, async (u) => ({ url: u, ...(await http(u, { timeout: 8000 })) }));
+    const extChecked = await pool(ext.filter((u) => mayFetch(u, origin)), 3, async (u) => ({ url: u, ...(await http(u, { timeout: 8000 })) }));
     const extBroken = extChecked.filter((c) => [404, 410].includes(c.status) || (c.status >= 500 && c.status < 600));
     linkChecks = { internalChecked: checked.length, externalChecked: extChecked.length, broken: broken.map((b) => ({ url: b.url, status: b.status, from: b.from })), redirects: redirs.length, externalBroken: extBroken.map((b) => ({ url: b.url, status: b.status })), unreachable: unreachable.length };
     if (broken.length) add('links', 'high', 'broken-internal', `${broken.length} 個內部連結壞掉（4xx／5xx）`, { affected: broken.length, examples: broken.map((b) => `${b.status} ${b.url}（來自 ${b.from[0]}）`), impact: '使用者與爬蟲都會碰壁，浪費抓取預算並傳遞負面訊號。', fix: '修正連結目標，或為搬移的頁面設定 301。' });
@@ -254,7 +283,7 @@ export async function runHealth(siteDir, opts = {}) {
     if (!https) add('security', 'critical', 'no-https', '網站沒有使用 HTTPS', { impact: '瀏覽器標示「不安全」，Google 以 HTTPS 為排名訊號，資料可被竊聽竄改。', fix: '安裝憑證（可用 Let\'s Encrypt 免費取得）並將所有 http 導向 https。' });
     else {
       ok('security', '使用 HTTPS');
-      const cert = await tlsInfo(host); facts.security.certificate = cert;
+      const cert = await tlsInfo(host, Number(new URL(origin).port) || 443); facts.security.certificate = cert;
       if (cert.ok) { if (cert.daysLeft != null && cert.daysLeft < 0) add('security', 'critical', 'cert-expired', 'SSL 憑證已過期', { detail: cert.validTo, fix: '立即更新憑證並設定自動續期。' }); else if (cert.daysLeft != null && cert.daysLeft < 14) add('security', 'high', 'cert-expiring', `SSL 憑證將在 ${cert.daysLeft} 天內到期`, { detail: cert.validTo, fix: '更新憑證並設定自動續期。' }); else if (cert.daysLeft != null && cert.daysLeft < 30) add('security', 'low', 'cert-soon', `SSL 憑證 ${cert.daysLeft} 天後到期`, { fix: '確認自動續期正常運作。' }); else ok('security', `憑證有效（剩 ${cert.daysLeft} 天）`); if (cert.hostnameMatches === false) add('security', 'critical', 'cert-mismatch', '憑證網域與網站不符', { fix: '核發涵蓋此網域的憑證。' }); if (cert.protocol && /TLSv1(\.0|\.1)?$/.test(cert.protocol)) add('security', 'high', 'tls-old', `使用過時的 ${cert.protocol}`, { fix: '停用 TLS 1.0／1.1，啟用 1.2／1.3。' }); }
       if (!H['strict-transport-security']) add('security', 'medium', 'hsts', '沒有 HSTS（Strict-Transport-Security）', { impact: '使用者首次以 http 造訪仍可能被降級攻擊。', fix: '加入 `Strict-Transport-Security: max-age=31536000; includeSubDomains`。' });
       const mixed = perPage((p) => (p.seo.http?.mixedContentCount || 0) > 0); if (mixed.length) add('security', 'high', 'mixed-content', `${mixed.length} 個頁面載入 http:// 資源（混合內容）`, { affected: mixed.length, scope: 'page', examples: mixed.flatMap((p) => p.seo.http.mixedContent.slice(0, 2)), impact: '瀏覽器會封鎖或警告，頁面可能壞掉。', fix: '所有資源改用 https。' });
@@ -300,6 +329,7 @@ export async function runHealth(siteDir, opts = {}) {
   let overall = Math.round(Object.values(cats).reduce((n, c) => n + c.score * c.weight, 0) / wsum);
   const criticals = issues.filter((i) => i.severity === 'critical');
   if (criticals.length) overall = Math.min(overall, 55); // a catastrophe (site blocked, no HTTPS, expired cert) cannot be averaged away
+  if (!live.length) overall = Math.min(overall, 30);     // nothing indexable was served at all: error pages cannot earn a good grade
   const grade = overall >= 90 ? 'A' : overall >= 80 ? 'B' : overall >= 65 ? 'C' : overall >= 50 ? 'D' : 'F';
   issues.sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || (b.affected / b.total) - (a.affected / a.total));
   const sevCount = Object.fromEntries(Object.keys(SEV).map((s) => [s, issues.filter((i) => i.severity === s).length]));
@@ -307,7 +337,7 @@ export async function runHealth(siteDir, opts = {}) {
   const pageRows = pages.map((p) => ({ url: p.url, status: p.status, title: p.seo.title, titleLen: textLen(p.seo.title), descLen: textLen(p.seo.description), h1: p.seo.h1Count, words: p.seo.words, rawWords: p.seo.raw?.words ?? null, canonical: p.seo.canonical, indexable: !(/noindex/i.test(p.seo.robotsMeta || '') || /noindex/i.test(p.seo.http?.headers?.['x-robots-tag'] || '')) && (p.status || 200) < 400, ttfbMs: p.seo.http?.ttfbMs ?? null, lcpMs: p.seo.perf?.lcpMs ?? null, cls: p.seo.perf?.cls ?? null, bytes: p.seo.perf?.totalBytes ?? null, inlinks: incoming.get(norm(p.url)) ?? 0 }));
   const health = { schemaVersion: 1, checkedAt: new Date().toISOString(), origin, pagesAnalyzed: pages.length, score: overall, grade, categories: cats, severity: sevCount, issues, passed, facts, links: linkChecks, pages: pageRows, notes: [...(criticals.length ? [`有 ${criticals.length} 個嚴重問題，總分上限為 55，直到修復為止。`] : []), '僅分析本次爬取的頁面（抽樣），不代表全站；請以 Google Search Console 的涵蓋範圍與 Core Web Vitals 真實數據為準。', '效能為實驗室數據（無頭瀏覽器、無節流）。', '檢查只做讀取：未登入、未送出表單；額外請求僅限 robots.txt、sitemap、連結狀態（HEAD）與一次 404 探測，並限制併發。'] };
   fs.writeFileSync(path.join(siteDir, 'health.json'), JSON.stringify(health, null, 2));
-  fs.writeFileSync(path.join(siteDir, 'health.md'), renderHealthMd(health));
+  fs.writeFileSync(path.join(siteDir, 'health.md'), sanitizeDoc(renderHealthMd(health)));
   site.health = { score: overall, grade, categories: Object.fromEntries(Object.entries(cats).map(([k, c]) => [k, c.score])), severity: sevCount, checkedAt: health.checkedAt };
   fs.writeFileSync(path.join(siteDir, 'site.json'), JSON.stringify(site, null, 2));
   return health;
@@ -333,7 +363,7 @@ export function renderHealthMd(h) {
   return L.join('\n');
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const a = process.argv.slice(2), i = a.indexOf('--site');
   if (i < 0 || !a[i + 1] || !fs.existsSync(path.join(a[i + 1], 'site.json'))) { console.error('Usage: health-check.mjs --site <crawl dir with site.json> [--no-link-check] [--max-links 120]'); process.exit(1); }
   const h = await runHealth(a[i + 1], { noLinkCheck: a.includes('--no-link-check'), maxLinks: intOpt(a, 'max-links', 120, { min: 0, max: 1000 }) });

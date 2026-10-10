@@ -1,3 +1,4 @@
+import { readCapped } from './util.mjs';
 // robots.txt parsing with Google-style semantics: UA groups, Allow/Disallow, * and $ wildcards, longest match wins (Allow wins ties).
 
 export function parseRobots(text) {
@@ -12,7 +13,7 @@ export function parseRobots(text) {
     const key = t.slice(0, idx).trim().toLowerCase(), val = t.slice(idx + 1).trim();
     if (!KNOWN.has(key)) { out.issues.push({ line: i + 1, msg: `未知指令：${key}` }); return; }
     if (key === 'sitemap') { out.sitemaps.push(val); return; }
-    if (key === 'user-agent') { if (!cur || !lastWasAgent) { cur = { agents: [], rules: [], crawlDelay: null }; out.groups.push(cur); } cur.agents.push(val.toLowerCase()); lastWasAgent = true; return; }
+    if (key === 'user-agent') { if (!cur || !lastWasAgent) { cur = { agents: [], rules: [], crawlDelay: null }; out.groups.push(cur); } if (val) cur.agents.push(val.toLowerCase()); else out.issues.push({ line: i + 1, msg: 'User-agent 沒有值（已忽略，不會套用到任何爬蟲）' }); lastWasAgent = true; return; }
     lastWasAgent = false;
     if (!cur) { out.issues.push({ line: i + 1, msg: `規則出現在任何 User-agent 之前：${t.slice(0, 60)}` }); return; }
     if (key === 'allow' || key === 'disallow') cur.rules.push({ type: key, path: val });
@@ -23,14 +24,16 @@ export function parseRobots(text) {
   return out;
 }
 
-const toRegex = (pat) => new RegExp('^' + pat.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\\\$$/, '$'));
+const encodeNonAscii = (s) => s.replace(/[^\x00-\x7F]/g, (ch) => encodeURIComponent(ch));
+const toRegex = (pat) => new RegExp('^' + encodeNonAscii(pat).replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\\\$$/, '$'));
 
-/** The group that applies to this user-agent token: most specific match wins, else "*". */
+/** The rules that apply to this crawler: every group naming exactly this product token (merged, as Google does), else every "*" group. */
 export function groupFor(parsed, ua) {
-  const u = String(ua).toLowerCase();
-  let best = null, bestLen = -1;
-  for (const g of parsed.groups) for (const a of g.agents) { if (a !== '*' && u.includes(a) && a.length > bestLen) { best = g; bestLen = a.length; } }
-  return best || parsed.groups.find((g) => g.agents.includes('*')) || null;
+  const token = String(ua).toLowerCase().split('/')[0].trim();
+  const named = parsed.groups.filter((g) => token && g.agents.includes(token));
+  const matching = named.length ? named : parsed.groups.filter((g) => g.agents.includes('*'));
+  if (!matching.length) return null;
+  return { agents: [...new Set(matching.flatMap((g) => g.agents))], rules: matching.flatMap((g) => g.rules), crawlDelay: matching.find((g) => g.crawlDelay)?.crawlDelay ?? null };
 }
 
 export function isAllowed(parsed, ua, pathAndQuery) {
@@ -39,7 +42,7 @@ export function isAllowed(parsed, ua, pathAndQuery) {
   let best = null;
   for (const r of g.rules) {
     if (r.path === '') continue; // "Disallow:" (empty) allows everything
-    if (!toRegex(r.path).test(pathAndQuery)) continue;
+    if (!toRegex(r.path).test(encodeNonAscii(pathAndQuery))) continue;
     if (!best || r.path.length > best.path.length || (r.path.length === best.path.length && r.type === 'allow')) best = r;
   }
   return best ? { allowed: best.type === 'allow', rule: `${best.type === 'allow' ? 'Allow' : 'Disallow'}: ${best.path}` } : { allowed: true, rule: null };
@@ -48,8 +51,9 @@ export function isAllowed(parsed, ua, pathAndQuery) {
 export async function fetchRobots(origin, ua = 'site-explorer-claude-plugin') {
   try {
     const r = await fetch(origin + '/robots.txt', { headers: { 'user-agent': ua }, signal: AbortSignal.timeout(10000), redirect: 'follow' });
-    const text = r.ok ? await r.text() : '';
-    return { status: r.status, finalUrl: r.url, contentType: r.headers.get('content-type') || '', text, parsed: r.ok ? parseRobots(text) : null };
+    const text = r.ok ? await readCapped(r, 1_000_000) : '';
+    // 4xx = no robots.txt (everything allowed); 5xx = cannot be verified, which crawlers must treat as "do not crawl"
+    return { status: r.status, finalUrl: r.url, contentType: r.headers.get('content-type') || '', text, parsed: r.ok ? parseRobots(text) : null, serverError: r.status >= 500 };
   } catch (e) { return { status: null, error: String(e.message).slice(0, 100), text: '', parsed: null }; }
 }
 

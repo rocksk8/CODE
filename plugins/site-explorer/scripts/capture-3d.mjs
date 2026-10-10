@@ -208,10 +208,10 @@ fs.writeFileSync(path.join(out, 'motion.json'), JSON.stringify(report, null, 2))
 fs.writeFileSync(path.join(out, 'motion.md'), renderMotionMd(report));
 
 const imgs = (d) => (fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.png')).sort() : []);
-const html = `<!doctype html><meta charset=utf-8><title>Motion capture — ${host}</title><style>body{font:14px system-ui;background:#111;color:#eee;margin:24px}h2{margin-top:32px}.row{display:flex;gap:6px;overflow-x:auto;padding:6px 0}.row img{height:160px;border:1px solid #333;border-radius:4px}code{color:#9cf}</style>
+const html = `<!doctype html><meta charset=utf-8><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file: 'self'; style-src 'unsafe-inline'"><title>Motion capture — ${host}</title><style>body{font:14px system-ui;background:#111;color:#eee;margin:24px}h2{margin-top:32px}.row{display:flex;gap:6px;overflow-x:auto;padding:6px 0}.row img{height:160px;border:1px solid #333;border-radius:4px}code{color:#9cf}</style>
 <h1>Motion capture — ${url}</h1><p>libs: <code>${Object.entries(detected.libs).filter(([, v]) => v).map(([k]) => k).join(', ') || 'none detected'}</code> · WebGL contexts: ${detected.contexts.length} · 3D assets: ${assets3d.size}</p>
 ${videoFile ? '<video src="recording.webm" controls width=640></video>' : ''}
-${targets.map((t) => `<h2>${t.kind} <code>${t.selector}</code> ${t.animatesOnItsOwn ? '· animates by itself' : '· static at rest'} ${t.reactsToMouse ? '· reacts to mouse' : ''}</h2>
+${targets.map((t) => `<h2>${t.kind} <code>${String(t.selector).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])}</code> ${t.animatesOnItsOwn ? '· animates by itself' : '· static at rest'} ${t.reactsToMouse ? '· reacts to mouse' : ''}</h2>
 <div class=row>${imgs(path.join(out, 'frames', t.id)).map((f) => `<img title="${f}" src="frames/${t.id}/${f}">`).join('')}</div>`).join('\n')}
 <h2>Scroll sequence</h2><div class=row>${imgs(scrollDir).map((f) => `<img src="frames/scroll/${f}">`).join('')}</div>`;
 fs.writeFileSync(path.join(out, 'contact-sheet.html'), html);

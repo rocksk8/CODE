@@ -5,23 +5,28 @@ export function normalizeUrl(input) {
   if (!input) return null;
   let v = String(input).trim();
   if (!v || v.startsWith('--')) return null;
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) {
+  const hadScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(v);
+  if (!hadScheme) {
     const bare = v.replace(/^\/\//, '');
     // local servers and raw IPs rarely speak TLS; everything else defaults to https
     v = (/^(localhost|\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:]+\])(:|\/|$)/i.test(bare) ? 'http://' : 'https://') + bare;
   }
   try {
     const u = new URL(v);
+    // a file name or path is not a site: './out', 'index.html', 'report.md' would otherwise parse as hosts
+    if (u.hostname.startsWith('.') || (!hadScheme && /\.(html?|json|md|txt|png|jpe?g|gif|svg|css|m?js|xml|pdf|zip|csv|ya?ml|log|webp|mp4|db)$/i.test(u.hostname))) return null;
     if (!/^https?:$/.test(u.protocol) || !u.hostname.includes('.') && u.hostname !== 'localhost' && !/^[\d.]+$|^\[/.test(u.hostname)) return null;
     return u.href;
   } catch { return null; }
 }
 
 /** First CLI argument that looks like a URL (with or without scheme). */
+// options that take a value (so the value is never mistaken for a URL); boolean flags such as --open must not swallow the URL after them
+const VALUE_FLAGS = new Set(['--max-pages', '--depth', '--out', '--wait', '--frames', '--interval', '--max-targets', '--max-links', '--site', '--motion', '--embed-mb', '--a', '--b', '--lib', '--platform', '--font', '--color', '--health-below']);
 export function findUrl(args) {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a.startsWith('--')) { if (!a.startsWith('--no-') && args[i + 1] && !args[i + 1].startsWith('--')) i++; continue; }
+    if (a.startsWith('--')) { if (VALUE_FLAGS.has(a) && args[i + 1] !== undefined) i++; continue; }
     const u = normalizeUrl(a); if (u) return u;
   }
   return null;

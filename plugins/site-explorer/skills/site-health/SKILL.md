@@ -1,16 +1,15 @@
 ---
 name: site-health
-description: 網站健檢：SEO、爬蟲索引（robots、sitemap、canonical、noindex、soft 404、重新導向）、頁面 SEO、連結、效能、行動版、安全、結構化資料，以及 AI 爬蟲友善度。當使用者要檢查網站 SEO、為什麼沒被收錄、做網站健檢或優先順序修復清單時使用。
+description: 網站健檢：SEO、爬蟲索引（robots、sitemap、canonical、noindex、soft 404、重新導向）、頁面 SEO、連結、效能、行動版、安全、結構化資料，以及 AI 爬蟲友善度。當使用者要檢查網站 SEO、為什麼沒被收錄、做網站健檢或優先順序修復清單時使用。 Use for SEO audits, "why is my site not indexed", robots.txt / sitemap / canonical / noindex checks, broken links, Core Web Vitals-style lab checks, AI-crawler (GPTBot/ClaudeBot) access.
 ---
 
 # 網站健檢（SEO／爬蟲索引）
 
 ## 執行
 ```bash
-cd "${CLAUDE_PLUGIN_ROOT}" && npm install --silent
-node scripts/explore.mjs <url> --max-pages 12 --no-motion --out ./explore-out     # 爬取 + 健檢 + 儀表板 + 交接包
+node "${CLAUDE_PLUGIN_ROOT}/bin/site-explorer.mjs" explore <url> --max-pages 12 --no-motion --out ./explore-out     # 爬取 + 健檢 + 儀表板 + 交接包
 # 只重跑健檢（已有爬取結果）：
-node scripts/health-check.mjs --site ./explore-out/site/<host> [--no-link-check] [--max-links 120]
+node "${CLAUDE_PLUGIN_ROOT}/bin/site-explorer.mjs" health --site ./explore-out/site/<host> [--no-link-check] [--max-links 120]
 ```
 輸出：`<site>/health.md`（AI 可讀）、`health.json`、儀表板「健檢」分頁。
 

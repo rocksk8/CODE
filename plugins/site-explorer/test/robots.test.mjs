@@ -39,3 +39,18 @@ test('reports syntax problems and collects sitemaps', () => {
   assert.deepEqual(p.sitemaps, ['https://a.com/s.xml']);
   assert.equal(p.groups[0].crawlDelay, 5);
 });
+
+test('Google semantics: groups naming the same agent are merged', () => {
+  assert.equal(isAllowed(R('User-agent: *\nDisallow: /a\n\nUser-agent: *\nDisallow: /b'), 'x', '/b').allowed, false);
+  assert.equal(isAllowed(R('User-agent: Googlebot\nDisallow: /a\n\nUser-agent: Googlebot\nDisallow: /b'), 'Googlebot', '/b').allowed, false);
+});
+test('non-ASCII rules match the percent-encoded request path', () => {
+  assert.equal(isAllowed(R('User-agent: *\nDisallow: /產品'), 'x', '/%E7%94%A2%E5%93%81/x').allowed, false);
+  assert.equal(isAllowed(R('User-agent: *\nDisallow: /產品'), 'x', '/other').allowed, true);
+});
+test('agent names match as whole product tokens, and an empty User-agent applies to nobody', () => {
+  assert.equal(isAllowed(R('User-agent:\nDisallow: /'), 'Googlebot', '/x').allowed, true);
+  assert.equal(isAllowed(R('User-agent: bot\nDisallow: /'), 'Googlebot', '/x').allowed, true, '"bot" is not Googlebot');
+  assert.equal(isAllowed(R('User-agent: Claude\nDisallow: /'), 'ClaudeBot', '/x').allowed, true, '"Claude" is not ClaudeBot');
+  assert.equal(isAllowed(R('User-agent: ClaudeBot\nDisallow: /'), 'claudebot/1.0', '/x').allowed, false);
+});

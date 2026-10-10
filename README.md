@@ -9,22 +9,27 @@
 - 📦 **交接包**：`ai-brief.md`＋`SPEC.md`＋`spec.json`＋`DECISIONS.md`＋圖片，讓 AI 做設計範本、讓後續開發知道所有該知道的事
 - 🗄️ **本機資料庫**：累積每次探索，搜尋、比較、追蹤改版與健檢分數變化
 
-## 30 秒上手（Mac／Windows／Linux）
+## 安裝（一次搞定）
 
-需要 Node 18+ 與 Google Chrome（資料庫需要 Node 22.13+）。
+需要 Node 20+（歷史資料庫功能需 22.13+）。瀏覽器：Chrome／Edge／Chromium 任一個即可；都沒有時 `setup` 會在你同意後下載 Chromium。
 
-```bash
-cd plugins/site-explorer && npm install --omit=dev      # 使用者；要跑測試的貢獻者用 npm install
-node scripts/doctor.mjs https://example.com        # 先檢查環境，每個問題都附修復指令
-node scripts/explore.mjs example.com               # 一鍵：爬取→設計包→健檢→3D→資料庫→儀表板→交接包（可省略 https://）
-open explore-out/dashboard.html                    # Mac；單一檔案，可直接寄送或丟進聊天室
-```
-
-在 Claude Code 裡安裝（會在第一次執行時自動安裝相依套件）：
+**在 Claude Code 裡（建議）**
 ```
 /plugin marketplace add rocksk8/code
 /plugin install site-explorer@rocksk8-code
 ```
+安裝後每次開啟工作階段，hook 會在背景把相依套件裝到 `~/.site-explorer/deps`（只裝一次、不卡住啟動、外掛更新後仍保留）。之後直接說「幫我分析 https://example.com」，或用 `/site-explorer:explore`。第一次可執行 `/site-explorer:setup` 確認環境。
+
+**在終端機**
+```bash
+npm i -g github:rocksk8/code      # 尚未合併到預設分支時加上 #claude/quirky-pascal-cpo896
+site-explorer setup               # 檢查 Node → 安裝相依 → 找瀏覽器 → 冒煙測試
+site-explorer example.com         # 一鍵：爬取→設計包→健檢→3D→資料庫→儀表板→交接包
+site-explorer doctor              # 出問題時，每項都附修復指令
+```
+免安裝：`npx github:rocksk8/code example.com`。
+
+貢獻者：`cd plugins/site-explorer && npm run test:full`。
 
 ## 指令
 
