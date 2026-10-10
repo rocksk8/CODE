@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Crawl a site with a real browser and capture design, content, layout and editing signals.
-import { chromium } from 'playwright-core';
+import { launchBrowser } from './launch.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -205,7 +205,7 @@ async function detect(pages, headers, fetchStatus) {
 // ---- main ----
 const robots = await loadRobots();
 const allowed = (u) => !robots.some((r) => new URL(u).pathname.startsWith(r));
-const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || undefined });
+const browser = await launchBrowser();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)' });
 const queue = [[norm(startUrl), 0]], seen = new Set([norm(startUrl)]), pages = [], headers = {};
 const t0 = Date.now();

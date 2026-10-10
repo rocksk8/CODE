@@ -2,7 +2,7 @@
 // Detect and visually capture 3D / animated elements (WebGL canvas, three.js, model-viewer,
 // CSS 3D transforms, Lottie, video): frame sequences over time, on scroll, and on mouse interaction,
 // plus a screen recording, a motion report and an HTML contact sheet.
-import { chromium } from 'playwright-core';
+import { launchBrowser } from './launch.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -33,8 +33,7 @@ const initScript = () => {
   window.requestAnimationFrame = (cb) => { W.rafCount++; return raf.call(window, cb); };
 };
 
-const browser = await chromium.launch({
-  headless: true, executablePath: process.env.CHROMIUM_PATH || undefined,
+const browser = await launchBrowser({
   args: ['--use-angle=swiftshader', '--use-gl=angle', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'],
 });
 let wantVideo = !args.includes('--no-video');
