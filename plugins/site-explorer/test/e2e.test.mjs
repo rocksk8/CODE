@@ -63,7 +63,7 @@ test('explore pipeline produces all artifacts', async (t) => {
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const host = new URL(base).host.replace(/[^a-z0-9.-]/gi, '_');
   const site = JSON.parse(fs.readFileSync(path.join(out, 'site', host, 'site.json'), 'utf8'));
-  assert.equal(site.schemaVersion, 2);
+  assert.equal(site.schemaVersion, 3);
   assert.ok(site.editing.platforms.some((p) => p.platform === 'WordPress'), 'detects WordPress via generator meta');
   assert.ok(site.blockedPages.some((b) => /403|驗證/.test(b.reason)), 'flags the blocked page');
   assert.ok(!site.pages.some((p) => p.url.includes('/private')), 'respects robots');

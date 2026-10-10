@@ -65,3 +65,10 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/crawl.mjs" <url> --max-pages 10 --out ./site
 
 ## 被擋住時
 `site.json` 的 `blockedPages` 與儀表板會標示被擋原因（403、驗證碼、防機器人頁）。不要硬闖或繞過；降低頻率、確認授權，或改用 Playwright MCP 以真實瀏覽器互動。
+
+## 設計師常見需求（儀表板已內建）
+- 看某元素的字型／色碼／間距：儀表板「排版」→「截圖／檢視元素」，游標指上去；`page.json` 的 `designer.elements` 有原始資料
+- 頁面由哪些區塊組成：`designer.blocks`（kind：header／hero／features／pricing／testimonial／faq／form／logos／stats／gallery／cta／footer）
+- 字型能否商用與替代：設計包 `tokens.json` 的 `typography.sources`
+- 競品並排：`scripts/compare-report.mjs --a <site dir> --b <site dir>`
+- 帶進 Figma：設計包的 `palette.svg`、`tokens.studio.json`

@@ -35,9 +35,10 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
       images: full.content.images.slice(0, 24), linkCount: full.content.links.length, forms: full.content.forms,
       sections: full.layout.sections, landmarks: full.layout.landmarks, shots: { desktop: shot('desktop'), tablet: shot('tablet'), mobile: shot('mobile') },
       mobileOverflow: full.layout.mobileOverflow,
+      blocks: full.designer?.blocks || [], elements: full.designer?.elements || [],
     });
   }
-  for (const f of ['tokens.css', 'tailwind.config.js', 'tokens.w3c.json', 'tokens.json', 'README.md']) {
+  for (const f of ['palette.svg', 'tokens.studio.json', 'tokens.css', 'tailwind.config.js', 'tokens.w3c.json', 'tokens.json', 'README.md']) {
     const fp = path.join(siteDir, 'design-bundle', f);
     if (exists(fp)) data.files.push({ name: f, href: rel(fp) });
   }
@@ -105,7 +106,17 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 .imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}.imgs img{width:100%;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
 pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:12px;max-height:200px}details summary{cursor:pointer;color:var(--acc)}
 .empty{color:var(--mute);padding:30px;text-align:center}.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:99px;opacity:0;transition:.2s;pointer-events:none}.toast.on{opacity:1}
-@media(max-width:700px){.shot{flex-direction:column}.map{display:none}}
+
+.ov{position:absolute;inset:0}.ib{position:absolute;outline:1px solid transparent;cursor:crosshair}.ib:hover,.ib.pin{outline:2px solid var(--acc);background:color-mix(in srgb,var(--acc) 14%,transparent);z-index:3}
+.wrapimg{position:relative;display:block;margin:auto}.insp{position:sticky;top:60px;width:270px;flex:none;font-size:12px}.insp .row{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px dashed var(--line)}.insp .row span:first-child{color:var(--mute)}
+.dot{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid #0003;vertical-align:-2px;margin-right:4px}
+.kind{display:inline-block;color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:600}
+.slice{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:12px;background:var(--card)}.slice .top{display:flex;gap:10px;align-items:center;padding:8px 12px;flex-wrap:wrap}.slice .crop{background-repeat:no-repeat;background-color:#888}
+.skel{width:380px;max-width:100%}.skel .b{border-radius:8px;margin-bottom:6px;padding:6px 10px;color:#fff;font-size:12px;display:flex;flex-direction:column;gap:6px;overflow:hidden}.skel .cols{display:flex;gap:6px;flex:1}.skel .cols i{flex:1;background:#ffffff40;border-radius:4px;min-height:14px}.skel .ln{height:6px;background:#ffffff50;border-radius:3px}
+.side{display:flex;gap:14px;overflow-x:auto;align-items:flex-start;padding-bottom:8px}.side .dev{flex:none}.side .dev .scr{overflow:auto;border:1px solid var(--line);border-radius:8px;background:#888}.side .dev h4{margin:0 0 6px;font-size:12px;color:var(--mute)}
+.icons{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px}.icons div{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;display:grid;place-items:center;height:64px}.icons img{max-width:36px;max-height:36px}
+.fnt{display:grid;grid-template-columns:1.2fr .8fr 1.4fr;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);align-items:center}
+@media(max-width:700px){.shot{flex-direction:column}.map{display:none}.insp{display:none}}
 </style></head><body>
 <header><h1>🔍 網站探索報告</h1><div class="sub" id="sub"></div></header>
 <nav><div class="in" id="tabs"></div></nav>
@@ -178,17 +189,98 @@ function show(k){document.querySelectorAll('section').forEach(s=>s.classList.tog
    (T.darkMode?.supported?'<h3 style="margin-top:18px">深色模式</h3><div style="display:flex;gap:8px"><div style="flex:1;padding:10px;border-radius:8px;background:'+T.darkMode.light.background+';color:'+T.darkMode.light.color+'">淺色</div><div style="flex:1;padding:10px;border-radius:8px;background:'+T.darkMode.dark.background+';color:'+T.darkMode.dark.color+'">深色</div></div>':'')+'</div></div>';
 })();
 
-// ---------- layout ----------
+// ---------- design: designer extras ----------
 (function(){
-  if(!D.pages.length)return;const l=$('#s-layout');let pi=0,vp='desktop';
-  function draw(){const p=D.pages[pi];const total=Math.max(p.docHeight,1);
+  const d=$('#s-design');const dz=S?.designer;if(!d||!S)return;
+  const PROV={google:['Google Fonts','ok','可免費商用'],system:['系統字體','','各平台外觀不同'],adobe:['Adobe Fonts','warn','需訂閱授權'],'self-hosted':['自架字型檔','warn','可能需授權'],unknown:['來源不明','warn','需自行確認']};
+  const src=T?.typography?.sources||[];
+  let h='';
+  if(src.length)h+='<div class="card" style="margin-top:14px"><h3>字型來源與替代建議</h3>'+src.map(f=>{const pv=PROV[f.provider]||PROV.unknown;
+    return '<div class="fnt"><div><b>'+esc(f.family)+'</b><div class="hint">'+(f.weights.length?'字重 '+f.weights.map(esc).join(', '):'')+'</div></div><div><span class="chip '+pv[1]+'">'+pv[0]+'</span><div class="hint">'+pv[2]+'</div></div><div>'+(f.url?'<a href="'+esc(f.url)+'" target="_blank" rel="noopener">在 Google Fonts 開啟 ↗</a>':f.substitute?'替代：<a href="'+esc(f.substituteUrl)+'" target="_blank" rel="noopener"><b>'+esc(f.substitute)+'</b> ↗</a>':'<span class="hint">—</span>')+'</div></div>'}).join('')+'</div>';
+  h+='<div class="grid g2" style="margin-top:14px">';
+  const g=dz.grid||{},m=dz.motion||{};
+  h+='<div class="card"><h3>版面網格</h3><p class="say">容器寬 <b>'+((g.containerWidths||[]).map(x=>x.px+'px').join(' / ')||'?')+'</b>　欄數 <b>'+((g.columns||[]).map(x=>x.columns).join(' / ')||'?')+'</b>　間距 <b>'+((g.gaps||[]).map(x=>x.value).join(' / ')||'?')+'</b></p><div style="display:flex;gap:6px;height:46px;max-width:420px">'+Array.from({length:(g.columns&&g.columns[0]?g.columns[0].columns:12)},()=>'<i style="flex:1;background:color-mix(in srgb,var(--acc) 30%,transparent);border-radius:3px"></i>').join('')+'</div><p class="hint">依實際 grid／置中容器推算，可直接當作 Figma layout grid 參考。</p></div>';
+  h+='<div class="card"><h3>動態節奏（transition／animation）</h3>'+((m.transitions||[]).map(x=>'<div class="spec"><small>×'+x.count+'</small><code>'+esc(x.token)+'</code></div>').join('')||'<span class="hint">沒有 transition</span>')+((m.animations||[]).map(x=>'<div class="spec"><small>動畫 ×'+x.count+'</small><code>'+esc(x.token)+'</code></div>').join(''))+'</div></div>';
+  const cf=(dz.contrast&&dz.contrast.failing)||[];
+  h+='<div class="card" style="margin-top:14px"><h3>真實背景上的對比檢查（掃描 '+(dz.contrast?dz.contrast.checked:0)+' 個文字元素）</h3>'+(cf.length?cf.map(c=>'<div class="spec"><small><span class="chip warn">'+c.ratio+':1</span><div class="hint">需 '+c.need+'</div></small><span style="background:'+c.bg+';color:'+c.fg+';padding:6px 14px;border-radius:8px;font-size:'+(c.large?'22px':'15px')+'">'+esc(c.sample||'Aa 範例文字')+'</span><span class="hint">'+c.fg+' on '+c.bg+' · 出現 '+c.count+' 次'+(c.uncertain?' · 背景有圖片，請人工確認':'')+'</span></div>').join(''):'<p>✅ 沒有發現對比不足的文字。</p>')+'</div>';
+  if(dz.icons&&dz.icons.length)h+='<div class="card" style="margin-top:14px"><h3>行內圖示（'+dz.icons.length+'）</h3><div class="icons">'+dz.icons.map(i=>'<div><img alt="" src="data:image/svg+xml;charset=utf-8,'+encodeURIComponent(i.svg)+'"></div>').join('')+'</div><p class="hint">以圖片方式顯示（不執行腳本）。圖示受版權或授權保護，僅供參考。</p></div>';
+  const ex=D.files.filter(f=>/palette\.svg|tokens\.studio|tailwind|tokens\.css|w3c/.test(f.name));
+  if(ex.length)h+='<div class="card" style="margin-top:14px"><h3>帶走（Figma／開發）</h3>'+ex.map(f=>'<a href="'+f.href+'" target="_blank" style="margin-right:14px">'+esc(f.name)+'</a>').join('')+'<p class="hint">palette.svg 拖進 Figma 即成色票；tokens.studio.json 用 Tokens Studio 外掛匯入。</p></div>';
+  d.insertAdjacentHTML('beforeend',h);
+})();
+
+// ---------- layout ----------
+const KIND={header:'頁首',hero:'主視覺 Hero',features:'功能／特色格',pricing:'價格方案',testimonial:'客戶見證',faq:'FAQ',form:'表單',logos:'Logo 牆',stats:'數據亮點',gallery:'圖庫',cta:'行動呼籲 CTA',footer:'頁尾',content:'內容區'};
+const KCOL={header:'#64748b',hero:'#7c3aed',features:'#2563eb',pricing:'#059669',testimonial:'#d97706',faq:'#0891b2',form:'#db2777',logos:'#475569',stats:'#ca8a04',gallery:'#9333ea',cta:'#dc2626',footer:'#475569',content:'#94a3b8'};
+const kchip=(k)=>'<span class="kind" style="background:'+(KCOL[k]||'#94a3b8')+'">'+esc(KIND[k]||k)+'</span>';
+const lumOf=(h)=>{const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255).map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));return .2126*c[0]+.7152*c[1]+.0722*c[2]};
+const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(Math.min(x,y)+.05))};
+(function(){
+  if(!D.pages.length)return;const l=$('#s-layout');let pi=0,mode='shot',vp='desktop',inspect=true;
+  const MODES=[['shot','截圖／檢視元素'],['slices','區塊切片'],['skeleton','頁面骨架'],['side','響應式並排']];
+  function draw(){
+    const p=D.pages[pi];
     l.innerHTML='<div class="card"><select id="pg">'+D.pages.map((q,i)=>'<option value="'+i+'"'+(i===pi?' selected':'')+'>'+esc(q.title||q.url)+'</option>').join('')+'</select> '+
-    '<div class="seg" style="margin-left:8px">'+['desktop','tablet','mobile'].map(v=>'<button aria-pressed="'+(v===vp)+'" data-v="'+v+'">'+({desktop:'桌機 1440',tablet:'平板 768',mobile:'手機 390'})[v]+'</button>').join('')+'</div>'+
-    (p.mobileOverflow?'<span class="chip warn">手機版橫向溢出</span>':'')+
-    '<div class="shot"><div class="frame">'+(p.shots[vp]?'<img src="'+p.shots[vp]+'" loading="lazy">':'<div class="empty">沒有截圖（使用了 --no-screenshots？）</div>')+'</div>'+
-    '<div class="map"><h3>區塊地圖</h3>'+(p.sections.length?p.sections.map(s=>'<div style="height:'+Math.max(14,s.height/total*420)+'px" title="'+esc(s.class)+'">&lt;'+s.tag+'&gt; '+esc(s.heading||'')+'<br>'+s.height+'px</div>').join(''):'<span class="hint">無 main 區塊</span>')+'</div></div>'+
-    '<p class="hint">Landmarks：'+Object.entries(p.landmarks).map(([k,v])=>k+' ×'+v).join('・')+'</p></div>';
-    $('#pg').onchange=(e)=>{pi=+e.target.value;draw()};l.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{vp=b.dataset.v;draw()})}
+      '<div class="seg" style="margin-left:8px">'+MODES.map(m=>'<button data-mode="'+m[0]+'" aria-pressed="'+(m[0]===mode)+'">'+m[1]+'</button>').join('')+'</div>'+
+      (p.mobileOverflow?'<span class="chip warn">手機版橫向溢出</span>':'')+
+      (p.blocks.length?'<div style="margin:4px 0 10px">'+p.blocks.map(b=>kchip(b.kind)).join(' <span class="hint">→</span> ')+'</div>':'')+
+      '<div id="lbody"></div></div>';
+    $('#pg').onchange=(e)=>{pi=+e.target.value;draw()};
+    l.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;draw()});
+    const body=$('#lbody',l);
+    ({shot:shotView,slices:slicesView,skeleton:skelView,side:sideView})[mode](p,body);
+  }
+  function shotView(p,body){
+    body.innerHTML='<div class="seg">'+['desktop','tablet','mobile'].map(v=>'<button data-v="'+v+'" aria-pressed="'+(v===vp)+'">'+({desktop:'桌機 1440',tablet:'平板 768',mobile:'手機 390'})[v]+'</button>').join('')+'</div>'+
+      (vp==='desktop'&&p.elements.length?'<div class="seg"><button id="tgI" aria-pressed="'+inspect+'">🔍 檢視元素：'+(inspect?'開':'關')+'</button></div><span class="hint">游標移到畫面上的元素，右側顯示字型、色碼、間距；點擊釘選並複製 CSS</span>':'')+
+      '<div class="shot"><div class="frame">'+(p.shots[vp]?'<span class="wrapimg" id="wi"><img src="'+p.shots[vp]+'" id="shotimg"><div class="ov" id="ov"></div></span>':'<div class="empty">沒有截圖（使用了 --no-screenshots？）</div>')+'</div>'+
+      (vp==='desktop'&&p.elements.length&&inspect?'<div class="insp card" id="insp"><h3>元素資訊</h3><div class="hint">把游標移到左側畫面</div></div>':'<div class="map"><h3>區塊地圖</h3>'+mapHtml(p)+'</div>')+'</div>';
+    body.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{vp=b.dataset.v;draw()});
+    const tg=$('#tgI',body);if(tg)tg.onclick=()=>{inspect=!inspect;draw()};
+    const img=$('#shotimg',body);
+    if(img&&vp==='desktop'&&inspect&&p.elements.length){
+      const build=()=>{const NW=img.naturalWidth,NH=img.naturalHeight,ov=$('#ov',body);ov.innerHTML='';
+        p.elements.slice().sort((a,b)=>b.w*b.h-a.w*a.h).forEach((e)=>{const d=document.createElement('div');d.className='ib';d.style.cssText='left:'+(e.x/NW*100)+'%;top:'+(e.y/NH*100)+'%;width:'+(e.w/NW*100)+'%;height:'+(e.h/NH*100)+'%';
+          d.onmouseenter=()=>info(e,false);d.onclick=()=>{ov.querySelectorAll('.pin').forEach(x=>x.classList.remove('pin'));d.classList.add('pin');info(e,true);copy(cssOf(e))};ov.append(d)})};
+      img.complete&&img.naturalWidth?build():img.onload=build;
+    }
+  }
+  const cssOf=(e)=>['font-family: "'+e.font+'";','font-size: '+e.size+';','font-weight: '+e.weight+';','line-height: '+e.lh+';',e.ls!=='normal'?'letter-spacing: '+e.ls+';':'','color: '+e.color+';','background: '+e.bg+';',e.pad&&e.pad!=='0px'?'padding: '+e.pad+';':'',e.radius&&e.radius!=='0px'?'border-radius: '+e.radius+';':'',e.shadow?'box-shadow: '+e.shadow+';':'',e.border?'border: '+e.border+';':''].filter(Boolean).join('\\n');
+  function info(e,pinned){
+    const el=$('#insp');if(!el)return;const r=ratioOf(e.color,e.bg);
+    const row=(k,v)=>v?'<div class="row"><span>'+k+'</span><span>'+v+'</span></div>':'';
+    const sw=(c)=>'<i class="dot" style="background:'+c+'"></i>'+c;
+    el.innerHTML='<h3>'+esc(e.role)+' · &lt;'+esc(e.tag)+'&gt;'+(pinned?' 📌':'')+'</h3>'+(e.text?'<div style="margin-bottom:6px"><b>'+esc(e.text)+'</b></div>':'')+
+      row('尺寸',e.w+' × '+e.h)+row('字型',esc(e.font))+row('字級／字重',esc(e.size)+' / '+esc(e.weight))+row('行高',esc(e.lh))+row('字距',e.ls!=='normal'?esc(e.ls):'')+
+      row('文字色',sw(e.color))+row('背景色',sw(e.bg))+row('對比','<span class="chip '+(r>=4.5?'ok':'warn')+'">'+r.toFixed(2)+':1</span>')+
+      row('內距',e.pad!=='0px'?esc(e.pad):'')+row('外距',e.margin!=='0px'?esc(e.margin):'')+row('圓角',e.radius!=='0px'?esc(e.radius):'')+row('陰影',e.shadow?esc(e.shadow):'')+row('邊框',e.border?esc(e.border):'')+row('版型',esc(e.display)+(e.gap?' gap '+esc(e.gap):''))+
+      '<div class="hint" style="margin-top:8px">'+(pinned?'已複製 CSS':'點擊釘選並複製 CSS')+'</div>';
+  }
+  function mapHtml(p){const total=Math.max(p.docHeight,1);
+    if(p.blocks.length)return p.blocks.map(b=>'<div style="height:'+Math.max(16,b.h/total*420)+'px;background:'+(KCOL[b.kind]||'#94a3b8')+';color:#fff;border-color:transparent" title="'+esc(b.text)+'">'+esc(KIND[b.kind]||b.kind)+'<br>'+b.h+'px</div>').join('');
+    return p.sections.length?p.sections.map(s=>'<div style="height:'+Math.max(14,s.height/total*420)+'px" title="'+esc(s.class)+'">&lt;'+s.tag+'&gt; '+esc(s.heading||'')+'<br>'+s.height+'px</div>').join(''):'<span class="hint">無法辨識區塊</span>';}
+  function slicesView(p,body){
+    if(!p.shots.desktop||!p.blocks.length){body.innerHTML='<div class="empty">需要桌機截圖與區塊資料（請勿使用 --no-screenshots）</div>';return}
+    const W=Math.min(body.clientWidth||l.clientWidth-60,1100)||800,sc=W/1440;
+    body.innerHTML='<p class="hint">自動把頁面切成區塊並辨識版型。每一段都是原截圖的裁切，可逐段研究。</p>'+p.blocks.map((b,i)=>{const H=Math.min(b.h*sc,520);
+      return '<div class="slice"><div class="top">'+kchip(b.kind)+'<b>'+esc(b.heading||b.text.slice(0,50)||'（無文字）')+'</b><span class="hint">'+b.w+'×'+b.h+'px · 欄數 '+b.columns+' · 標題 '+b.headings+' · 按鈕 '+b.buttons+' · 媒體 '+b.media+'</span></div>'+
+        '<div class="crop" data-bg="'+p.shots.desktop+'" style="width:'+W+'px;max-width:100%;height:'+H+'px;background-size:'+W+'px auto;background-position:0 -'+(b.y*sc)+'px"></div>'+(b.h*sc>520?'<div class="hint" style="padding:4px 12px">（區塊較高，僅顯示上半部）</div>':'')+'</div>'}).join('');
+    body.querySelectorAll('.crop').forEach(c=>{c.style.backgroundImage='url("'+c.dataset.bg+'")'});
+  }
+  function skelView(p,body){
+    if(!p.blocks.length){body.innerHTML='<div class="empty">沒有區塊資料</div>';return}
+    const seq=p.blocks.map(b=>KIND[b.kind]||b.kind).join(' → ');
+    body.innerHTML='<p class="say">頁面骨架：<b>'+esc(seq)+'</b></p><div class="skel">'+p.blocks.map(b=>{const h=Math.max(34,Math.min(b.h*.14,150));const cols=Math.min(b.columns,6);
+      return '<div class="b" style="background:'+(KCOL[b.kind]||'#94a3b8')+';height:'+h+'px"><b>'+esc(KIND[b.kind]||b.kind)+' · '+b.h+'px'+(b.columns>1?' · '+b.columns+' 欄':'')+'</b>'+(cols>1?'<div class="cols">'+Array.from({length:cols},()=>'<i></i>').join('')+'</div>':'<div class="ln" style="width:70%"></div><div class="ln" style="width:45%"></div>')+'</div>'}).join('')+'</div>'+
+      '<p class="hint">想做同類型頁面時，直接依這個順序規劃區塊；也可交給 Claude Design 照骨架產出線框。</p>';
+  }
+  function sideView(p,body){
+    const devs=[['desktop','桌機 1440',.3],['tablet','平板 768',.3],['mobile','手機 390',.3]].filter(d=>p.shots[d[0]]);
+    if(!devs.length){body.innerHTML='<div class="empty">沒有截圖</div>';return}
+    body.innerHTML='<p class="hint">三種尺寸等比例並排，捲動會同步，直接看版面如何重排。</p><div class="side">'+devs.map(d=>{const w={desktop:1440,tablet:768,mobile:390}[d[0]]*d[2];return '<div class="dev"><h4>'+d[1]+'</h4><div class="scr" data-s style="width:'+w+'px;height:680px"><img src="'+p.shots[d[0]]+'" style="width:'+w+'px;display:block"></div></div>'}).join('')+'</div>';
+    const sc=[...body.querySelectorAll('[data-s]')];let lock=false;
+    sc.forEach(a=>a.addEventListener('scroll',()=>{if(lock)return;lock=true;const r=a.scrollTop/Math.max(1,a.scrollHeight-a.clientHeight);sc.forEach(b=>{if(b!==a)b.scrollTop=r*(b.scrollHeight-b.clientHeight)});requestAnimationFrame(()=>lock=false)}));
+  }
   draw();
 })();
 
@@ -200,6 +292,9 @@ function show(k){document.querySelectorAll('section').forEach(s=>s.classList.tog
     '<div class="grid g2" style="margin-top:14px"><div class="card"><h3>標題大綱</h3>'+(p.headings.map(h=>'<div class="h" style="--l:'+(h.level-1)+'"><em>H'+h.level+'</em>'+esc(h.text)+'</div>').join('')||'<span class="hint">無標題</span>')+'</div>'+
     '<div class="card"><h3>主要文案</h3>'+(p.paragraphs.map(t=>'<p>'+esc(t.slice(0,220))+'</p>').join('')||'<span class="hint">無</span>')+(p.forms.length?'<h3>表單</h3>'+p.forms.map(f=>'<div class="hint">'+f.method.toUpperCase()+' '+esc(f.action)+' — '+f.fields.map(x=>esc(x.name)).join(', ')+'</div>').join(''):'')+'</div></div>'+
     '<div class="card" style="margin-top:14px"><h3>圖片（'+p.images.length+'）</h3><div class="imgs">'+p.images.map(i=>'<img loading="lazy" src="'+esc(i.src)+'" title="'+esc(i.alt)+'" onerror="this.style.display=\\'none\\'">').join('')+'</div></div>';
+
+    const dzc=S&&S.designer&&S.designer.copy;
+    if(dzc&&(dzc.ctas.length||dzc.nav.length))c.insertAdjacentHTML('beforeend','<div class="card" style="margin-top:14px"><h3>文案盤點</h3><p><b>按鈕文案：</b>'+(dzc.ctas.map(x=>'<span class="chip">'+esc(x.text)+(x.count>1?' ×'+x.count:'')+'</span>').join('')||'—')+'</p><p><b>導覽項目：</b>'+(dzc.nav.map(x=>'<span class="chip">'+esc(x)+'</span>').join('')||'—')+'</p></div>');
     c.querySelectorAll('tr[data-i]').forEach(r=>r.onclick=()=>{pi=+r.dataset.i;draw()})}
   draw();
 })();

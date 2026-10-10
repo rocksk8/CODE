@@ -2,6 +2,7 @@
 // Crawl a site with a real browser and capture design, content, layout and editing signals.
 import { launchBrowser } from './launch.mjs';
 import { findUrl, intOpt, sameSite } from './args.mjs';
+import { extractDesignerInPage } from './designer-extract.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -266,6 +267,7 @@ while (queue.length && pages.length < maxPages) {
     await page.evaluate(async () => { const t0 = Date.now(); for (let y = 0, n = 0; y < document.body.scrollHeight && n < 40 && Date.now() - t0 < 4000; y += 600, n++) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 80)); } scrollTo(0, 0); });
     await page.waitForTimeout(400);
     const data = await page.evaluate(extractInPage);
+    data.designer = await page.evaluate(extractDesignerInPage).catch((e) => { console.log('   (designer data skipped:', e.message.split('\n')[0] + ')'); return null; });
     data.status = resp?.status();
     data.blocked = await detectBlock(page, data.status);
     if (pages.length === 0) {
@@ -348,13 +350,25 @@ const merge = (key, n = 10) => {
   for (const p of pages) for (const { value, count } of p.design[key]) m[value] = (m[value] || 0) + count;
   return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n).map(([value, count]) => ({ value, count }));
 };
+
+// designer-oriented aggregates across pages
+const sumBy = (key, getList, n) => { const m = new Map(); for (const p of pages) for (const it of getList(p.designer) || []) { const k = key(it); const e = m.get(k) || { ...it, count: 0 }; e.count += it.count || 1; m.set(k, e); } return [...m.values()].sort((a, b) => b.count - a.count).slice(0, n); };
+const designer = {
+  fonts: { faces: pages.flatMap((p) => p.designer?.fonts.faces || []).filter((f, i, a) => a.findIndex((g) => g.family === f.family && g.weight === f.weight && g.style === f.style) === i).slice(0, 80), links: [...new Set(pages.flatMap((p) => p.designer?.fonts.links || []))], googleFamilies: [...new Set(pages.flatMap((p) => p.designer?.fonts.googleFamilies || []))] },
+  motion: { transitions: sumBy((x) => x.token, (d) => d?.motion.transitions, 8), animations: sumBy((x) => x.token, (d) => d?.motion.animations, 6) },
+  grid: { containerWidths: sumBy((x) => x.px, (d) => d?.grid.containerWidths, 4), columns: sumBy((x) => x.columns, (d) => d?.grid.columns, 5), gaps: sumBy((x) => x.value, (d) => d?.grid.gaps, 5) },
+  contrast: { checked: pages.reduce((n, p) => n + (p.designer?.contrast.checked || 0), 0), failing: sumBy((x) => x.fg + x.bg + x.large, (d) => d?.contrast.failing, 20) },
+  icons: [...new Map(pages.flatMap((p) => p.designer?.icons || []).map((i) => [i.svg, i])).values()].slice(0, 60),
+  copy: { ctas: sumBy((x) => x.text, (d) => d?.copy.ctas, 12), nav: [...new Set(pages.flatMap((p) => p.designer?.copy.nav || []))].slice(0, 20) },
+  patterns: pages.map((p) => ({ slug: p.slug, kinds: (p.designer?.blocks || []).map((b) => b.kind) })),
+};
 const site = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   startUrl, crawledAt: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), robotsDisallow: robots, consentAction, blockedPages: pages.filter((p) => p.blocked).map((p) => ({ url: p.url, reason: p.blocked })), skippedByRobots,
   server: { server: headers.main?.server, poweredBy: headers.main?.['x-powered-by'], generator: pages[0]?.meta.generator },
   editing: { platforms, contenteditablePages: pages.filter((p) => p.editing.contenteditable).map((p) => p.url), loginOrAdminLinks: [...new Map(pages.flatMap((p) => p.editing.editLinks).map((l) => [l.href, l])).values()].slice(0, 15) },
   design: { textColors: merge('textColors'), backgrounds: merge('backgrounds'), fontFamilies: merge('fontFamilies', 6), fontSizes: merge('fontSizes'), radii: merge('radii', 6), shadows: merge('shadows', 5), spacing: merge('spacing'), cssVars: pages[0]?.design.cssVars || {}, webFonts: [...new Set(pages.flatMap((p) => p.design.webFonts))], typography: pages[0]?.design.typography, breakpoints: (() => { const m = {}; for (const p of pages) for (const b of p.breakpoints) m[b.px] = (m[b.px] || 0) + b.uses; return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([px, uses]) => ({ px: Number(px), uses })); })(), darkMode: pages[0]?.darkMode, buttonHover: pages[0]?.buttonHover },
-  components: pages[0]?.components, assets,
+  components: pages[0]?.components, assets, designer,
   pages: pages.map((p) => ({ slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
 };
 fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));

@@ -1,0 +1,31 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Acme Studio</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Playfair+Display:wght@700&display=swap">
+<style>
+@font-face{font-family:"Acme Sans";src:url(/fonts/acme.woff2) format("woff2");font-weight:500;font-display:swap}
+:root{--brand:#5b4bff;--ink:#14141f}
+*{box-sizing:border-box}body{margin:0;font:16px/1.6 "Acme Sans",Inter,Helvetica,sans-serif;color:var(--ink);background:#fff}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+header{position:sticky;top:0;background:#fff;border-bottom:1px solid #eee}header .wrap{display:flex;gap:24px;align-items:center;height:64px}header a{color:var(--ink);text-decoration:none;transition:color .2s cubic-bezier(.4,0,.2,1)}header a:hover{color:var(--brand)}
+.btn{display:inline-block;background:var(--brand);color:#fff;padding:12px 24px;border-radius:999px;font-weight:600;text-decoration:none;border:0;transition:transform .25s cubic-bezier(.4,0,.2,1),background .2s ease}.btn:hover{transform:translateY(-2px);background:#4637d9}
+.hero{background:linear-gradient(135deg,#f3f1ff,#fff);padding:120px 0;min-height:620px}.hero h1{font:700 64px/1.05 "Playfair Display",serif;margin:0 0 16px;max-width:760px}.hero p{font-size:20px;max-width:560px}
+.features{padding:96px 0}.features h2{font-size:40px;margin:0 0 40px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:32px}.card{border:1px solid #e6e6ef;border-radius:16px;padding:28px;box-shadow:0 8px 24px rgba(20,20,31,.06)}.card h3{margin:12px 0 8px}.card p{color:#9a9aa8;margin:0}
+.pricing{background:#14141f;color:#fff;padding:96px 0}.pricing h2{font-size:40px;margin:0 0 40px}.plan{background:#1f1f2e;border-radius:16px;padding:28px}.plan b{font-size:40px}.plan span{color:#6c6c80}
+.quote{padding:96px 0;background:#faf9ff}blockquote{font:italic 28px/1.4 "Playfair Display",serif;margin:0;max-width:800px}
+.cta{padding:80px 0;text-align:center;background:var(--brand);color:#fff}.cta h2{margin:0 0 24px;font-size:36px}.cta .btn{background:#fff;color:var(--brand)}
+footer{background:#0c0c14;color:#bbb;padding:48px 0}footer .wrap{display:flex;gap:48px}footer a{color:#bbb;display:block;margin:6px 0;text-decoration:none}
+svg{fill:none;stroke:currentColor;stroke-width:2}
+</style></head><body>
+<header><div class="wrap"><strong>Acme</strong><a href="/a">Work</a><a href="/b">Pricing</a><a href="/c">About</a><a class="btn" href="#">Get started</a></div></header>
+<main>
+<section class="hero"><div class="wrap"><h1>Design that moves people</h1><p>We craft brands and products with care.</p><a class="btn" href="#">Start a project</a> <a href="#">See our work →</a></div></section>
+<section class="features"><div class="wrap"><h2>What we do</h2><div class="grid3">
+<div class="card"><svg width="32" height="32" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg><h3>Brand</h3><p>Identity systems that scale across every touchpoint.</p></div>
+<div class="card"><svg width="32" height="32" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/></svg><h3>Product</h3><p>Interfaces that feel obvious and look great.</p></div>
+<div class="card"><svg width="32" height="32" viewBox="0 0 24 24"><path d="M4 20 L12 4 L20 20 Z"/></svg><h3>Motion</h3><p>Animation that explains rather than decorates.</p></div></div></div></section>
+<section class="pricing"><div class="wrap"><h2>Pricing</h2><div class="grid3">
+<div class="plan"><b>$29</b><span> /month</span><p>Starter plan</p></div><div class="plan"><b>$79</b><span> /month</span><p>Team plan</p></div><div class="plan"><b>$199</b><span> /month</span><p>Studio plan</p></div></div></div></section>
+<section class="quote"><div class="wrap"><blockquote>“They understood our product better than we did.”</blockquote></div></section>
+<section class="cta"><div class="wrap"><h2>Ready to build something great?</h2><a class="btn" href="#">Talk to us</a></div></section>
+</main>
+<footer><div class="wrap"><div><a href="#">Work</a><a href="#">About</a><a href="#">Careers</a></div><div><a href="#">Twitter</a><a href="#">LinkedIn</a><a href="#">Dribbble</a></div><div><a href="#">Privacy</a><a href="#">Terms</a></div></div></footer>
+</body></html>

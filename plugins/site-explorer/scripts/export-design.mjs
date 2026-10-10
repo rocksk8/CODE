@@ -52,17 +52,20 @@ const saturated = all.filter((e) => !neutral(e) && e.l > 0.12 && e.l < 0.92);
 const neutrals = all.filter(neutral);
 
 // roles
-const text = all.find((e) => e.tags.has('text') && neutral(e)) || all.find((e) => e.tags.has('text'));
+// body text colour = what real paragraphs use (frequency alone is fooled by white text on dark sections)
+const t0 = d.typography || {};
+const pc = [t0.p?.color, t0.li?.color, t0.h2?.color, t0.h1?.color].map(parse).find((x) => x && x.a > 0.5);
+const text = pc ? { hex: hex(pc), rgb: pc } : all.find((e) => e.tags.has('text') && neutral(e)) || all.find((e) => e.tags.has('text'));
 const lightBg = neutrals.filter((e) => e.l > 0.85 && e.tags.has('bg')).sort((a, b) => b.count - a.count)[0];
 const background = lightBg || neutrals.find((e) => e.hex === '#ffffff') || { hex: '#ffffff', rgb: { r: 255, g: 255, b: 255 } };
 const btnPrimary = (c.buttons || []).map((b) => parse(b.backgroundColor)).find((p) => p && p.a > 0.5 && hsl(p).s > 0.14);
 const brand = btnPrimary ? { hex: hex(btnPrimary), rgb: btnPrimary } : saturated[0];
 const accent = saturated.find((e) => brand && e.hex !== brand.hex && Math.abs(e.h - hsl(brand.rgb).h) > 25);
-const dark = neutrals.filter((e) => e.l < 0.2).sort((a, b) => b.count - a.count)[0];
+const dark = all.filter((e) => e.tags.has('bg') && e.l < 0.2).sort((a, b) => b.count - a.count)[0];
 const colors = {
   brand: brand && brand.hex, accent: accent && accent.hex,
   background: background.hex, surface: neutrals.find((e) => e.l > 0.9 && e.hex !== background.hex)?.hex,
-  text: text?.hex, 'text-inverse': dark ? undefined : '#ffffff', 'surface-dark': dark?.hex,
+  text: text?.hex, 'text-inverse': dark ? '#ffffff' : undefined, 'surface-dark': dark?.hex,
   border: neutrals.find((e) => e.tags.has('border'))?.hex,
 };
 for (const k of Object.keys(colors)) if (!colors[k]) delete colors[k];
@@ -97,7 +100,52 @@ const tokens = {
   spacing, radius: radii, shadow: shadows, breakpoints,
   cssVariables: d.cssVars, darkMode: d.darkMode, buttonHover: d.buttonHover, contrastAudit: audit,
 };
+
+// ---- fonts: where they come from, and what to use if you cannot license them ----
+const SYSTEM = /^(arial|helvetica|georgia|times|times new roman|verdana|tahoma|trebuchet ms|courier new|courier|system-ui|-apple-system|blinkmacsystemfont|segoe ui|menlo|monaco|consolas|sans-serif|serif|monospace|ui-[a-z-]+|sf pro[a-z ]*|san francisco|apple color emoji|noto sans|lucida grande)$/i;
+const SUBSTITUTES = { 'helvetica neue': 'Inter', helvetica: 'Inter', arial: 'Arimo', 'sf pro': 'Inter', 'proxima nova': 'Montserrat', gotham: 'Montserrat', avenir: 'Nunito Sans', 'avenir next': 'Nunito Sans', futura: 'Jost', 'circular': 'DM Sans', 'circular std': 'DM Sans', din: 'Barlow', 'din next': 'Barlow', garamond: 'EB Garamond', 'adobe garamond': 'EB Garamond', baskerville: 'Libre Baskerville', 'minion pro': 'Crimson Pro', 'freight text': 'Source Serif 4', georgia: 'Gelasio', 'times new roman': 'Tinos', gill: 'Lato', 'gill sans': 'Lato', 'trade gothic': 'Archivo', 'akzidenz-grotesk': 'Inter', 'neue haas grotesk': 'Inter', 'graphik': 'Inter', 'söhne': 'Inter', 'sohne': 'Inter', 'gt walsheim': 'Poppins', 'brandon grotesque': 'Montserrat', 'museo': 'Zilla Slab', 'franklin gothic': 'Libre Franklin', 'univers': 'Inter', 'frutiger': 'Open Sans', 'myriad pro': 'Source Sans 3', 'calibre': 'Inter', 'sharp sans': 'Plus Jakarta Sans', 'apercu': 'DM Sans', 'canela': 'Fraunces', 'tiempos': 'Newsreader', 'ivar': 'Fraunces' };
+const dz = site.designer || {};
+const faces = dz.fonts?.faces || [], gfam = new Set((dz.fonts?.googleFamilies || []).map((f) => f.toLowerCase()));
+const hasLink = (re) => (dz.fonts?.links || []).some((l) => re.test(l));
+const fontNames = [...new Set([fontStack.heading, fontStack.body, fontStack.mono, ...(d.fontFamilies || []).map((f) => f.value)].filter(Boolean))];
+const gUrl = (n) => 'https://fonts.google.com/specimen/' + encodeURIComponent(n).replace(/%20/g, '+');
+const fontSources = fontNames.map((family) => {
+  const key = family.toLowerCase(), face = faces.find((f) => f.family.toLowerCase() === key);
+  let provider = 'unknown';
+  if (gfam.has(key) || (face && /fonts\.gstatic\.com/.test(face.src))) provider = 'google';
+  else if (SYSTEM.test(family)) provider = 'system';
+  else if (face) provider = /typekit|adobe/.test(face.src) ? 'adobe' : 'self-hosted';
+  else if (hasLink(/typekit|fonts\.adobe/)) provider = 'adobe';
+  const out = { family, provider, weights: [...new Set(faces.filter((f) => f.family.toLowerCase() === key).map((f) => f.weight))] };
+  if (provider === 'google') out.url = gUrl(family);
+  if (provider !== 'google' && provider !== 'system') { const sub = SUBSTITUTES[key] || SUBSTITUTES[key.replace(/\s*(pro|std|next|display|text|ui)$/i, '')]; if (sub) { out.substitute = sub; out.substituteUrl = gUrl(sub); } }
+  if (provider === 'system') { const sub = SUBSTITUTES[key]; if (sub) { out.substitute = sub; out.substituteUrl = gUrl(sub); out.note = '系統字體，各平台外觀不同；要跨平台一致可改用此替代'; } }
+  return out;
+});
+tokens.typography.sources = fontSources;
+tokens.motion = dz.motion; tokens.layoutGrid = dz.grid; tokens.copy = dz.copy;
+tokens.contrastReal = dz.contrast;
 fs.writeFileSync(path.join(out, 'tokens.json'), JSON.stringify(tokens, null, 2));
+
+// ---- Tokens Studio (Figma plugin) ----
+const ts = { global: { color: {}, fontFamilies: {}, fontSizes: {}, fontWeights: {}, spacing: {}, borderRadius: {}, boxShadow: {} }, $themes: [], $metadata: { tokenSetOrder: ['global'] } };
+for (const [k, v] of Object.entries(colors)) ts.global.color[k] = { value: v, type: 'color' };
+if (fontStack.heading) ts.global.fontFamilies.heading = { value: fontStack.heading, type: 'fontFamilies' };
+if (fontStack.body) ts.global.fontFamilies.body = { value: fontStack.body, type: 'fontFamilies' };
+for (const [k, v] of Object.entries(typeScale)) { ts.global.fontSizes[k] = { value: String(px(v.size)), type: 'fontSizes' }; ts.global.fontWeights[k] = { value: String(v.weight), type: 'fontWeights' }; }
+sp.slice(0, 10).forEach((n, i) => { ts.global.spacing[String(i + 1)] = { value: String(n), type: 'spacing' }; });
+radii.slice(0, 5).forEach((r, i) => { ts.global.borderRadius[String(i + 1)] = { value: String(px(r) || r), type: 'borderRadius' }; });
+shadows.slice(0, 4).forEach((x, i) => { ts.global.boxShadow[String(i + 1)] = { value: x, type: 'boxShadow' }; });
+fs.writeFileSync(path.join(out, 'tokens.studio.json'), JSON.stringify(ts, null, 2));
+
+// ---- palette.svg: drag into Figma / Illustrator / Keynote ----
+{
+  const sw = [...Object.entries(colors).map(([k, v]) => ({ name: k, hex: v })), ...palette.filter((p) => !Object.values(colors).includes(p.hex)).slice(0, 12).map((p) => ({ name: p.kind, hex: p.hex }))];
+  const W = 160, H = 130, cols = 6, rows = Math.ceil(sw.length / cols), esc2 = (t) => String(t).replace(/[&<>]/g, '');
+  const ink = (h) => (lum(parse(`rgb(${parseInt(h.slice(1, 3), 16)},${parseInt(h.slice(3, 5), 16)},${parseInt(h.slice(5, 7), 16)})`)) > 0.4 ? '#14141f' : '#ffffff');
+  const cells = sw.map((c, i) => `<g transform="translate(${(i % cols) * (W + 8) + 8},${Math.floor(i / cols) * (H + 8) + 8})"><rect width="${W}" height="${H}" rx="10" fill="${c.hex}" stroke="#00000022"/><text x="12" y="${H - 34}" font-family="Inter,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="${ink(c.hex)}">${esc2(c.name)}</text><text x="12" y="${H - 14}" font-family="ui-monospace,Menlo,monospace" font-size="12" fill="${ink(c.hex)}">${c.hex}</text></g>`).join('');
+  fs.writeFileSync(path.join(out, 'palette.svg'), `<svg xmlns="http://www.w3.org/2000/svg" width="${cols * (W + 8) + 8}" height="${rows * (H + 8) + 8}" viewBox="0 0 ${cols * (W + 8) + 8} ${rows * (H + 8) + 8}">${cells}</svg>\n`);
+}
 
 
 // ---- developer formats: W3C Design Tokens + Tailwind snippet ----
@@ -161,9 +209,12 @@ const readme = [
   '## Components', c.navigation ? `- Nav: ${c.navigation.height}px, ${c.navigation.position}, bg ${c.navigation.backgroundColor}, links: ${c.navigation.links.join(' / ')}` : '',
   ...(c.buttons || []).slice(0, 3).map((b) => `- Button "${b.text}": bg ${b.backgroundColor}, text ${b.color}, radius ${b.borderRadius}, padding ${b.padding}`),
   d.buttonHover ? `- Button hover: ${d.buttonHover.before.backgroundColor} → ${d.buttonHover.after.backgroundColor}` : '', '',
+  '## Font sources', ...fontSources.map((f) => `- ${f.family} — ${({ google: 'Google Fonts（可免費使用）', system: '系統字體', adobe: 'Adobe Fonts（需授權）', 'self-hosted': '自架字型檔（可能需授權）', unknown: '來源不明' })[f.provider]}${f.substitute ? `；替代建議：${f.substitute}` : ''}`), '',
+  '## Layout grid & motion', dz.grid ? `- Container: ${(dz.grid.containerWidths || []).map((x) => x.px + 'px').join(', ') || '?'} · columns: ${(dz.grid.columns || []).map((x) => x.columns).join(', ') || '?'} · gutter: ${(dz.grid.gaps || []).map((x) => x.value).join(', ') || '?'}` : '', ...((dz.motion?.transitions || []).slice(0, 4).map((m) => `- Transition ${m.token} ×${m.count}`)), '',
+  ...(dz.contrast?.failing?.length ? ['## Real-background contrast issues', ...dz.contrast.failing.slice(0, 6).map((c) => `- ${c.fg} on ${c.bg} = ${c.ratio}:1 (needs ${c.need}) ×${c.count} — "${c.sample}"${c.uncertain ? ' (background image: verify manually)' : ''}`), ''] : []),
   '## Accessibility', ...audit.map((a) => `- ${a.pass ? '✅' : '⚠️'} ${a.name}: ${a.ratio}:1`), '',
   '## Page structure', ...site.pages.slice(0, 8).map((p) => `- ${p.title || p.url} — ${p.url}`), '',
-  '## Files', '- `tokens.json` / `tokens.css` / `tokens.w3c.json` / `tailwind.config.js` — machine-readable tokens (CSS, W3C Design Tokens, Tailwind)', '- `components.json` — component styles', '- `assets/` — logo, favicon, og image', '- `reference/` — desktop and mobile screenshots',
+  '## Files', '- `tokens.json` / `tokens.css` / `tokens.w3c.json` / `tailwind.config.js` — machine-readable tokens (CSS, W3C Design Tokens, Tailwind)', '- `tokens.studio.json` — import with the Tokens Studio plugin in Figma', '- `palette.svg` — drag into Figma / Illustrator / Keynote', '- `components.json` — component styles', '- `assets/` — logo, favicon, og image', '- `reference/` — desktop and mobile screenshots',
 ].filter((l) => l !== undefined && l !== null).join('\n');
 fs.writeFileSync(path.join(out, 'README.md'), readme + '\n');
 console.log('Design bundle written to', out);

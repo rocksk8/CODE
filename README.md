@@ -28,7 +28,21 @@ open explore-out/dashboard.html                  # Mac
 | `/site-explorer:capture-motion <url>` | 只做 3D／動畫視覺擷取 |
 | `/site-explorer:report <url>` | 分階段產生儀表板 |
 | `/site-explorer:history list｜search --lib three｜history <host>｜compare a b` | 查詢、比較以前探索過的網站 |
+| `/site-explorer:compare <網址A> <網址B>` | 並排比較兩個網站（競品／改版前後） |
 | `/site-explorer:doctor [url]` | 環境診斷 |
+
+## 設計師工作台
+
+| 你想做的事 | 儀表板裡的功能 |
+|---|---|
+| 「這個標題是什麼字型、多大、什麼色？」 | **檢視元素**：游標移到截圖上即時顯示字型、字級、色碼、對比、間距、圓角；點擊釘選並複製 CSS |
+| 「這頁是怎麼組成的？」 | **區塊切片**＋**頁面骨架**：自動辨識 Hero／功能格／價格／見證／FAQ／CTA／頁尾，逐段裁切，並畫出骨架 |
+| 「手機版怎麼重排？」 | **響應式並排**：桌機、平板、手機同比例並排、捲動同步 |
+| 「這字型我能用嗎？」 | **字型來源**：Google Fonts／Adobe／自架／系統，非免費字型附 Google 替代建議 |
+| 「哪些字在真實背景上看不清？」 | **真實背景對比檢查**：以疊合後的背景計算，列出不足組合與出現次數 |
+| 「它的版面網格與動態是什麼？」 | 容器寬、欄數、間距，以及 transition／animation 的時長與緩動 |
+| 「帶進 Figma」 | `palette.svg`（拖進 Figma 即成色票）、`tokens.studio.json`（Tokens Studio 外掛匯入） |
+| 「和競品比」 | `/site-explorer:compare`：並排比較色彩、字型、骨架、網格、動態、對比 |
 
 ## 你會得到什麼
 
@@ -48,6 +62,8 @@ open explore-out/dashboard.html                  # Mac
 | `scripts/export-design.mjs` | 設計包 |
 | `scripts/capture-3d.mjs` | 3D／動畫擷取 |
 | `scripts/db.mjs` | 資料庫：ingest／list／search／history／compare／export |
+| `scripts/designer-extract.mjs` | 頁面內擷取：可檢視元素、區塊辨識、真實背景對比、動態、網格、字型來源、圖示 |
+| `scripts/compare-report.mjs` | 兩站並排比較 |
 | `scripts/build-report.mjs` | 儀表板 |
 | `skills/`、`commands/`、`agents/` | `site-explore`、`site-to-design`、`capture-motion` 與對應指令、分析 agent |
 | `test/e2e.test.mjs` | `npm test`：本機夾具網站端到端測試（含 WebGL、CSS 3D、被擋頁面、資料庫歷史） |
