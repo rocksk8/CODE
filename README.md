@@ -20,14 +20,19 @@
 ```
 安裝後每次開啟工作階段，hook 會在背景把相依套件裝到 `~/.site-explorer/deps`（只裝一次、不卡住啟動、外掛更新後仍保留）。之後直接說「幫我分析 https://example.com」，或用 `/site-explorer:explore`。第一次可執行 `/site-explorer:setup` 確認環境。
 
-**在終端機**
+**在終端機**（請一行一行貼，不要貼「#」開頭的說明文字）
 ```bash
-npm i -g github:rocksk8/code      # 尚未合併到預設分支時加上 #claude/quirky-pascal-cpo896
-site-explorer setup               # 檢查 Node → 安裝相依 → 找瀏覽器 → 冒煙測試
-site-explorer example.com         # 一鍵：爬取→設計包→健檢→3D→資料庫→儀表板→交接包
-site-explorer doctor              # 出問題時，每項都附修復指令
+npm i -g git+https://github.com/rocksk8/CODE.git
 ```
-免安裝：`npx github:rocksk8/code example.com`。
+```bash
+site-explorer setup
+```
+```bash
+site-explorer example.com
+```
+`setup` 會檢查 Node → 安裝相依 → 找瀏覽器 → 冒煙測試；`site-explorer doctor` 在出問題時列出每項的修復指令。
+不用 `github:rocksk8/code` 的簡寫，因為 npm 會改走 SSH，沒設定 SSH 金鑰的電腦會被拒絕。
+免安裝：`npx git+https://github.com/rocksk8/CODE.git example.com`。
 
 **輸出位置**：預設在目前資料夾的 `explore-out/`。用 `--out <資料夾>` 指定，或設環境變數 `SITE_EXPLORER_OUT` 一次指定。資料夾根目錄會自動放 `ABOUT-THIS-FOLDER.md`（這是什麼、看哪裡、怎麼重跑）和 `runs.json`（做過哪些網站），日後打開就知道來歷。
 

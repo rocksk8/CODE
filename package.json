@@ -15,5 +15,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rocksk8/code.git"
-  }
+  },
+  "license": "MIT"
 }

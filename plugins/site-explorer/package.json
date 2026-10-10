@@ -18,5 +18,6 @@
   },
   "bin": {
     "site-explorer": "bin/site-explorer.mjs"
-  }
+  },
+  "license": "MIT"
 }
