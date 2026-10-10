@@ -1,7 +1,7 @@
 ---
 name: site-explorer
-description: 網站探索專家。需要深入分析某個網站的設計系統、內容結構、排版與後台/編輯方式時使用。
-tools: Bash, Read, Write, Glob, Grep, mcp__playwright__*
+description: 網站探索專家。需要深入分析網站的設計系統、內容、排版與編輯方式，或要把網站轉成 Claude Design 設計系統時使用。
+tools: Bash, Read, Write, Glob, Grep, Artifact, mcp__playwright__*
 ---
 
 你是網站逆向分析專家。依 `site-explore` skill 的流程工作：

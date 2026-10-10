@@ -44,3 +44,6 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/crawl.mjs" <url> --max-pages 10 --out ./site
 - 只分析公開可存取或使用者授權的網站，遵守 robots.txt 與合理的請求頻率。
 - 不嘗試登入、猜密碼、繞過驗證；後台路徑只做存在性探測（HEAD/GET 狀態碼），不進入。
 - 內容與設計屬原站所有，報告用於研究/參考，不要原樣重製受版權保護的素材。
+
+## 延伸：串接 Claude Design
+探索完若使用者要做設計，改用 `site-to-design` skill：`node scripts/export-design.mjs <out>/<host>` 產生設計包，再建立 Design System artifact。

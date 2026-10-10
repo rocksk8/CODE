@@ -113,6 +113,30 @@ function extractInPage() {
   const abs = (u) => { try { return new URL(u, location.href).href; } catch { return u; } };
   const meta = (n) => document.querySelector(`meta[name="${n}"],meta[property="${n}"]`)?.content;
 
+
+  // breakpoints from @media rules
+  const bp = {};
+  const walk = (rules) => { for (const r of rules || []) {
+    if (r.media) { for (const m of r.media.mediaText.matchAll(/(min|max)-width:\s*([\d.]+)(px|em|rem)/g)) { const px = Math.round(parseFloat(m[2]) * (m[3] === 'px' ? 1 : 16)); bp[px] = (bp[px] || 0) + 1; } }
+    if (r.cssRules && !r.selectorText) walk(r.cssRules);
+  } };
+  for (const sheet of document.styleSheets) { try { walk(sheet.cssRules); } catch {} }
+  const breakpoints = Object.entries(bp).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([px, uses]) => ({ px: Number(px), uses }));
+
+  // component inventory
+  const sty = (el, props) => { const s = cs(el); return Object.fromEntries(props.map((p) => [p, s[p]])); };
+  const BOX = ['backgroundColor', 'color', 'borderRadius', 'borderTopWidth', 'borderTopColor', 'boxShadow', 'padding', 'fontSize', 'fontWeight', 'fontFamily'];
+  const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && cs(el).display !== 'none'; };
+  const nav = document.querySelector('nav, header');
+  const logoEl = document.querySelector('header img, [class*=logo] img, a[href="/"] img, img[class*=logo], img[alt*=logo i]');
+  const components = {
+    buttons: [...document.querySelectorAll('button, a[class*=btn], a[class*=button], [role=button], input[type=submit]')].filter(vis).slice(0, 8).map((el, i) => ({ text: (el.innerText || el.value || '').trim().slice(0, 40), selector: el.tagName.toLowerCase() + (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/)[0] : ''), index: i, ...sty(el, BOX) })),
+    inputs: [...document.querySelectorAll('input:not([type=hidden]):not([type=submit]), textarea, select')].filter(vis).slice(0, 3).map((el) => ({ type: el.type || el.tagName.toLowerCase(), placeholder: el.placeholder, ...sty(el, BOX), height: cs(el).height })),
+    cards: [...document.querySelectorAll('[class*=card], article, li')].filter((el) => vis(el) && (cs(el).boxShadow !== 'none' || parseFloat(cs(el).borderTopWidth) > 0) && el.getBoundingClientRect().width > 120).slice(0, 3).map((el) => sty(el, BOX)),
+    navigation: nav ? { tag: nav.tagName.toLowerCase(), height: Math.round(nav.getBoundingClientRect().height), position: cs(nav).position, ...sty(nav, ['backgroundColor', 'color', 'padding', 'boxShadow']), links: [...nav.querySelectorAll('a')].filter(vis).slice(0, 8).map((a) => text(a).slice(0, 30)), linkStyle: nav.querySelector('a') ? sty(nav.querySelector('a'), ['color', 'fontSize', 'fontWeight', 'textTransform']) : null } : null,
+    logo: logoEl ? { src: logoEl.currentSrc || logoEl.src, alt: logoEl.alt, w: logoEl.naturalWidth, h: logoEl.naturalHeight } : null,
+    favicon: [...document.querySelectorAll('link[rel~=icon],link[rel=apple-touch-icon]')].map((l) => abs(l.getAttribute('href'))),
+  };
   return {
     url: location.href, title: document.title, lang: document.documentElement.lang,
     meta: { description: meta('description'), generator: meta('generator'), ogTitle: meta('og:title'), ogImage: meta('og:image'), themeColor: meta('theme-color'), viewport: meta('viewport'), canonical: document.querySelector('link[rel=canonical]')?.href },
@@ -135,6 +159,7 @@ function extractInPage() {
       sections: [...document.querySelectorAll('main > *, body > section, body > div > section')].slice(0, 30).map((el) => ({ tag: el.tagName.toLowerCase(), id: el.id || undefined, class: String(el.className).slice(0, 80), height: Math.round(el.getBoundingClientRect().height), heading: el.querySelector('h1,h2,h3')?.innerText.trim().slice(0, 80) })),
       tree: node(document.body, 0),
     },
+    breakpoints, components,
     editing: {
       contenteditable: document.querySelectorAll('[contenteditable=true]').length,
       editLinks: [...document.querySelectorAll('a[href]')].filter((a) => /edit|admin|login|wp-admin|dashboard|sign.?in/i.test(a.href + a.innerText)).map((a) => ({ text: a.innerText.trim().slice(0, 40), href: a.href })).slice(0, 10),
@@ -197,6 +222,22 @@ while (queue.length && pages.length < maxPages) {
     await page.waitForTimeout(400);
     const data = await page.evaluate(extractInPage);
     data.status = resp?.status();
+    if (pages.length === 0) {
+      try {
+        const sample = () => page.evaluate(() => { const b = getComputedStyle(document.body); return { background: b.backgroundColor, color: b.color }; });
+        const light = await sample();
+        await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(300);
+        const dark = await sample();
+        await page.emulateMedia({ colorScheme: 'light' });
+        data.darkMode = { supported: dark.background !== light.background || dark.color !== light.color, light, dark };
+        const btn = page.locator('button, a[class*=btn], a[class*=button]').first();
+        if (await btn.count()) {
+          const read = () => btn.evaluate((el) => { const s = getComputedStyle(el); return { backgroundColor: s.backgroundColor, color: s.color, boxShadow: s.boxShadow, transform: s.transform }; });
+          const before = await read(); await btn.hover({ timeout: 2000 }); await page.waitForTimeout(350);
+          data.buttonHover = { before, after: await read() };
+        }
+      } catch {}
+    }
     const dir = path.join(outDir, 'pages', slugOf(url)); fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'page.html'), await page.content());
     if (shots) {
@@ -227,6 +268,22 @@ while (queue.length && pages.length < maxPages) {
 }
 await browser.close();
 
+// download key brand assets (logo, favicon, og image)
+fs.mkdirSync(path.join(outDir, 'assets'), { recursive: true });
+const assets = [];
+const wanted = new Map();
+if (pages[0]?.components.logo?.src) wanted.set('logo', pages[0].components.logo.src);
+(pages[0]?.components.favicon || []).slice(0, 2).forEach((u, i) => wanted.set('favicon' + i, u));
+if (pages[0]?.meta.ogImage) wanted.set('og-image', new URL(pages[0].meta.ogImage, startUrl).href);
+for (const [name, u] of wanted) {
+  try {
+    const r = await fetch(u); if (!r.ok) continue;
+    const ext = (new URL(u).pathname.match(/\.(svg|png|jpe?g|webp|ico|gif)$/i) || [, 'bin'])[1].toLowerCase();
+    fs.writeFileSync(path.join(outDir, 'assets', `${name}.${ext}`), Buffer.from(await r.arrayBuffer()));
+    assets.push({ name, file: `assets/${name}.${ext}`, source: u });
+  } catch {}
+}
+
 const fetchStatus = async (u) => { try { return (await fetch(u, { method: 'HEAD', redirect: 'manual' })).status; } catch { return null; } };
 const platforms = await detect(pages, headers, fetchStatus);
 
@@ -240,7 +297,8 @@ const site = {
   startUrl, crawledAt: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), robotsDisallow: robots,
   server: { server: headers.main?.server, poweredBy: headers.main?.['x-powered-by'], generator: pages[0]?.meta.generator },
   editing: { platforms, contenteditablePages: pages.filter((p) => p.editing.contenteditable).map((p) => p.url), loginOrAdminLinks: [...new Map(pages.flatMap((p) => p.editing.editLinks).map((l) => [l.href, l])).values()].slice(0, 15) },
-  design: { textColors: merge('textColors'), backgrounds: merge('backgrounds'), fontFamilies: merge('fontFamilies', 6), fontSizes: merge('fontSizes'), radii: merge('radii', 6), shadows: merge('shadows', 5), spacing: merge('spacing'), cssVars: pages[0]?.design.cssVars || {}, webFonts: [...new Set(pages.flatMap((p) => p.design.webFonts))], typography: pages[0]?.design.typography },
+  design: { textColors: merge('textColors'), backgrounds: merge('backgrounds'), fontFamilies: merge('fontFamilies', 6), fontSizes: merge('fontSizes'), radii: merge('radii', 6), shadows: merge('shadows', 5), spacing: merge('spacing'), cssVars: pages[0]?.design.cssVars || {}, webFonts: [...new Set(pages.flatMap((p) => p.design.webFonts))], typography: pages[0]?.design.typography, breakpoints: (() => { const m = {}; for (const p of pages) for (const b of p.breakpoints) m[b.px] = (m[b.px] || 0) + b.uses; return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([px, uses]) => ({ px: Number(px), uses })); })(), darkMode: pages[0]?.darkMode, buttonHover: pages[0]?.buttonHover },
+  components: pages[0]?.components, assets,
   pages: pages.map((p) => ({ slug: p.slug, url: p.url, title: p.title, status: p.status, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
 };
 fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
