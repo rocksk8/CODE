@@ -341,3 +341,39 @@ test('a page whose scripts load but do nothing is explained: evidence line, page
     const links = site.editing.loginOrAdminLinks.map((l) => l.href); assert.ok(links.some((h) => /wp-admin/.test(h)), 'real admin link is found'); assert.ok(!links.some((h) => /conseil-d-administration|accreditation/.test(h)), 'false positives: ' + links.join(','));
   } finally { srv.close(); }
 });
+
+test('empty page: the crawl re-opens it with the browser default identity and says whether the site serves something else to the crawler; crash location is reported', async (t) => {
+  if (skip(t)) return;
+  const srv = http.createServer((q, r) => {
+    if (q.url === '/app.js') { r.setHeader('content-type', 'text/javascript'); return r.end('\n\nvar x = null; x.toLowerCase();'); }
+    r.setHeader('content-type', 'text/html');
+    if (/site-explorer/.test(q.headers['user-agent'] || '')) return r.end('<!doctype html><title>Orano</title><body><div id="root"></div><script src="/app.js"></script></body>'); // stripped shell for the crawler identity
+    r.end(`<!doctype html><html lang="en"><title>Orano</title><body><h1>Real experience</h1><p>${'Visitors see this. '.repeat(20)}</p></body></html>`);
+  }).listen(0); await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  try {
+    const out = path.join(tmp, 'ab'); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/x`, '--max-pages', '1', '--wait', '1500', '--no-screenshots', '--no-interact', '--out', out]); assert.equal(r.status, 0, r.out);
+    const base = path.join(out, `127.0.0.1_${port}`); const md = fs.readFileSync(path.join(base, 'report.md'), 'utf8'); const site = JSON.parse(fs.readFileSync(path.join(base, 'site.json'), 'utf8'));
+    assert.equal(site.pages[0].emptyDiag.alt.contentAppeared, true, JSON.stringify(site.pages[0].emptyDiag.alt));
+    assert.match(md, /用瀏覽器預設身分再開一次：\*\*內容出現了\*\*/); assert.match(md, /用瀏覽器預設身分就讀得到內容/); assert.match(md, /Cannot read properties of null[^\n]*位置：http:\/\/127\.0\.0\.1:\d+\/app\.js/);
+    assert.match(md, /伺服器給的原始 HTML：`[^`]*`，meta 標籤 \d+ 個/); assert.match(md, /載入的腳本：[^\n]*app\.js/);
+  } finally { srv.close(); }
+});
+
+test('layout is shown for pages that have one: report.md and the dashboard skip empty first pages instead of listing only them', async (t) => {
+  if (skip(t)) return;
+  const srv = http.createServer((q, r) => {
+    r.setHeader('content-type', 'text/html');
+    if (q.url === '/empty') return r.end('<!doctype html><title>Gate</title><body><div id="root"></div></body>');
+    r.end('<!doctype html><title>Real page</title><body><header><nav><a href="/">Home</a></nav></header><section style="padding:80px"><h1>Big headline</h1><p>' + 'Hero copy words. '.repeat(12) + '</p><a class="btn" href="#x" style="padding:10px;background:#36f;color:#fff">Start now</a></section><section style="padding:60px"><h2>Features</h2><div style="display:flex;gap:20px"><div><h3>One</h3><p>' + 'Text '.repeat(15) + '</p></div><div><h3>Two</h3><p>' + 'Text '.repeat(15) + '</p></div><div><h3>Three</h3><p>' + 'Text '.repeat(15) + '</p></div></div></section><footer>Footer line here</footer></body>');
+  }).listen(0); await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  try {
+    const out = path.join(tmp, 'lay'); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/empty`, `http://127.0.0.1:${port}/real`, '--max-pages', '2', '--wait', '1500', '--no-interact', '--out', out]); assert.equal(r.status, 0, r.out);
+    const base = path.join(out, `127.0.0.1_${port}`); const md = fs.readFileSync(path.join(base, 'report.md'), 'utf8'); const lay = md.slice(md.indexOf('## 排版'));
+    assert.match(lay, new RegExp(`### http://127\\.0\\.0\\.1:${port}/real`)); assert.match(lay, /版型流程：/); assert.match(lay, /沒有版面可抽取的頁面[\s\S]*\/empty/);
+    const dash = path.join(tmp, 'lay-dash.html'); const b = await run('build-report.mjs', ['--site', base, '--out', dash]); assert.equal(b.status, 0, b.out);
+    const br = await launchBrowser(); try { const pg = await br.newPage({ viewport: { width: 1280, height: 900 } }); const errs = []; pg.on('pageerror', (e) => errs.push(e.message)); await pg.goto('file://' + dash + '#layout');
+      assert.match(await pg.locator('#pg option:checked').innerText(), /Real page/, 'layout tab opens on a page that has a layout'); assert.ok(await pg.locator('#s-layout img#shotimg').count() === 1, 'screenshot shown'); assert.ok(await pg.locator('#s-layout .ib').count() > 0, 'element inspector overlay exists');
+      await pg.selectOption('#pg', { label: (await pg.locator('#pg option').allInnerTexts()).find((x) => /空白頁/.test(x)) }); assert.match(await pg.locator('#s-layout').innerText(), /幾乎是空的，沒有版面可顯示/); assert.deepEqual(errs, []);
+    } finally { await br.close(); }
+  } finally { srv.close(); }
+});

@@ -40,6 +40,7 @@ export function attachNetworkRecorder(page) {
       const bad = reqs.filter((r) => r.status >= 400);
       return {
         total: reqs.length, byType, hosts: Object.keys(hosts).length, thirdParty: thirdParty.slice(0, 15),
+        scriptUrls: reqs.filter((r) => r.type === 'script').slice(0, 8).map((r) => short(r.url)),
         assets3d: reqs.filter((r) => ASSET_3D.test(r.url)).slice(0, 20).map((r) => ({ url: short(r.url), status: r.status, size: r.size })),
         fonts: reqs.filter((r) => FONT.test(r.url)).slice(0, 12).map((r) => short(r.url)),
         media: reqs.filter((r) => /^(video|audio)\//.test(r.ct) || r.type === 'media').slice(0, 8).map((r) => ({ url: short(r.url), status: r.status, size: r.size })),
