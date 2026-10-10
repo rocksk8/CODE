@@ -345,5 +345,36 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   $('#exp-md').onclick=()=>save('design-reference.md',toMd(build()),'text/markdown');
   $('#exp-json').onclick=()=>save('design-reference.json',JSON.stringify(build(),null,2),'application/json');
 })();
+// ---------- overview: war room (everything wrong, at a glance) ----------
+(function(){
+  if(!S&&!M)return;const o=$('#s-overview');
+  const SEV={critical:['嚴重','#ff4d5e',0],high:['高','#ff8a3d',1],medium:['中','#ffd23f',2],low:['低','#5aa9ff',3],info:['資訊','#8fa0cf',4]};
+  const items=[];
+  (D.health?.issues||[]).forEach(i=>items.push({sev:i.severity,title:i.title,src:D.health.categories?.[i.category]?.label||i.category||'健檢',go:'health'}));
+  const cf=(T?.contrastAudit||[]).filter(a=>!a.pass);
+  if(cf.length)items.push({sev:'high',title:'有 '+cf.length+' 項文字／按鈕對比低於 4.5:1',src:'設計',go:'design'});
+  (S?.blockedPages||[]).forEach(b=>items.push({sev:'critical',title:'頁面被擋住，結果可能不完整：'+(b.url||b),src:'爬取',go:'overview'}));
+  const mo=D.pages.filter(p=>p.mobileOverflow);
+  if(mo.length)items.push({sev:'medium',title:mo.length+' 個頁面在手機版橫向溢出',src:'排版',go:'layout'});
+  const sk=(S?.skippedByRobots||[]).length;
+  if(sk)items.push({sev:'info',title:sk+' 個頁面因 robots.txt 略過',src:'爬取',go:'health'});
+  items.sort((a,b)=>SEV[a.sev][2]-SEV[b.sev][2]);
+  const cnt={};items.forEach(i=>cnt[i.sev]=(cnt[i.sev]||0)+1);
+  const level=cnt.critical?['需要立即處理','#ff4d5e']:cnt.high?['有重要問題','#ff8a3d']:cnt.medium?['有改善空間','#ffd23f']:['狀況良好','#34d399'];
+  const col=(v)=>v>=80?'#34d399':v>=60?'#ffd23f':'#ff4d5e';
+  const cats=Object.values(D.health?.categories||{});
+  let filt=null;
+  const w=el('<div class="war"></div>');o.prepend(w);
+  const draw=()=>{
+    const list=items.filter(i=>!filt||i.sev===filt);
+    w.innerHTML='<h2>▌ 戰情室 · '+esc(S?.startUrl||M?.url||'')+'</h2><div class="top"><div class="stat" style="--c:'+level[1]+'"><span class="led"></span>'+level[0]+(D.health?' <span style="font:700 14px ui-monospace,monospace;color:#8fa0cf">健檢 '+D.health.score+'/100 · '+D.health.grade+'</span>':'')+'</div>'+
+      '<div class="tiles">'+['critical','high','medium','low'].map(k=>'<div class="tile'+(filt&&filt!==k?' off':'')+'" data-sev="'+k+'" style="--c:'+SEV[k][1]+'"><b>'+(cnt[k]||0)+'</b><span>'+SEV[k][0]+'</span></div>').join('')+'</div></div>'+
+      '<div class="cols"><div>'+(cats.length?cats.map(c=>'<div class="gauge" style="--c:'+col(c.score)+'"><span>'+esc(c.label)+'</span><i><b style="width:'+c.score+'%"></b></i><span>'+c.score+'</span></div>').join(''):'<div class="gauge"><span style="grid-column:1/-1">未執行健檢，只顯示設計與排版問題</span></div>')+'</div>'+
+      '<div class="board">'+(list.length?list.slice(0,40).map(i=>'<button class="it" data-go="'+i.go+'" style="--c:'+SEV[i.sev][1]+'"><span class="tag">'+SEV[i.sev][0]+'</span><span>'+esc(i.title)+'</span><small>'+esc(i.src)+' ›</small></button>').join('')+(list.length>40?'<div class="hint">…還有 '+(list.length-40)+' 項，見「健檢」分頁</div>':''):'<div class="ok">✔ 沒有發現問題</div>')+'</div></div>';
+    w.querySelectorAll('[data-sev]').forEach(e=>e.onclick=()=>{filt=filt===e.dataset.sev?null:e.dataset.sev;draw()});
+    w.querySelectorAll('[data-go]').forEach(e=>e.onclick=()=>{if(tabs.some(t=>t[0]===e.dataset.go))show(e.dataset.go)});
+  };
+  draw();
+})();
 show(location.hash.slice(1)&&tabs.some(t=>t[0]===location.hash.slice(1))?location.hash.slice(1):'overview');
 

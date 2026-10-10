@@ -98,6 +98,7 @@ test('dashboard: inspector, slices, skeleton, side-by-side, designer cards', asy
   for (const needle of ['Google Fonts', '自架字型檔', '版面網格', '動態節奏', '真實背景上的對比檢查', '行內圖示', 'palette.svg']) assert.ok(txt.includes(needle), needle);
   await p.click('#tabs button[data-k=overview]');
   assert.match(await p.locator('#s-overview').innerText(), /版面組成/);
+  assert.ok(await p.locator('.war .tile').count() === 4 && await p.locator('.war .led').count() === 1, 'war room rendered');
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#exp-md')]);
   assert.equal(dl.suggestedFilename(), 'design-reference.md');
   const md = fs.readFileSync(await dl.path(), 'utf8');
