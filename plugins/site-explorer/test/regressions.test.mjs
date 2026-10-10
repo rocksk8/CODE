@@ -236,3 +236,27 @@ test('robots.txt is judged per origin: an extra URL on the origin that redirecte
     assert.ok(paths.some((p) => p === a + '/public'), '/public (allowed) is still crawled: ' + paths.join(','));
   } finally { A.close(); B.close(); }
 });
+
+test('content in shadow DOM and API responses is seen: deep text, network summary (APIs, 3D assets), accessibility tree', async (t) => {
+  if (skip(t)) return;
+  const srv = http.createServer((q, r) => {
+    if (q.url === '/api/content.json') { r.setHeader('content-type', 'application/json'); return r.end(JSON.stringify({ title: 'Nuclear innovation in the field', body: 'A long paragraph that the page puts inside a shadow root, built from the JSON API response rather than from the HTML.', cta: 'Discover how we validate every step' })); }
+    if (q.url === '/assets/model.glb') { r.setHeader('content-type', 'model/gltf-binary'); return r.end(Buffer.alloc(64)); }
+    r.setHeader('content-type', 'text/html');
+    r.end('<!doctype html><title>Shell</title><body><div id="host"></div><script>fetch("/assets/model.glb");fetch("/api/content.json").then(r=>r.json()).then(d=>{const s=document.getElementById("host").attachShadow({mode:"open"});s.innerHTML="<h1>"+d.title+"</h1><p>"+d.body+"</p><button>"+d.cta+"</button>"})</script></body>');
+  }).listen(0); await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  try {
+    const out = path.join(tmp, 'deep'); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/`, '--max-pages', '1', '--wait', '5000', '--no-screenshots', '--out', out]);
+    assert.equal(r.status, 0, r.out); const base = path.join(out, `127.0.0.1_${port}`); const site = JSON.parse(fs.readFileSync(path.join(base, 'site.json'), 'utf8')); const p = site.pages[0];
+    assert.equal(p.emptyPage, false, 'text inside a shadow root is content'); assert.ok(p.deep.textChars > 80 && p.deep.shadowHosts >= 1, JSON.stringify(p.deep));
+    assert.ok(p.network.apis.some((a) => /api\/content\.json/.test(a.url)), 'API endpoint listed'); assert.ok(p.network.assets3d.some((a) => /model\.glb/.test(a.url)), '3D asset listed');
+    assert.ok(p.network.apiTextSamples.some((s) => /Nuclear innovation/.test(s)), 'text from the API response');
+    const md = fs.readFileSync(path.join(base, 'report.md'), 'utf8'); assert.match(md, /網路與內容來源/); assert.match(md, /model\.glb/); assert.match(md, /Nuclear innovation in the field/);
+    assert.ok(p.aria && p.aria.lines > 0, 'accessibility tree captured'); assert.ok(fs.existsSync(path.join(base, 'pages', p.slug, 'aria.yml')));
+    assert.match(fs.readFileSync(path.join(base, 'pages', p.slug, 'aria.yml'), 'utf8'), /heading/);
+    const ho = path.join(tmp, 'deep-ho'); const h = await run('build-handoff.mjs', ['--site', base, '--out', ho]); assert.equal(h.status, 0, h.out);
+    const spec = fs.readFileSync(path.join(ho, 'SPEC.md'), 'utf8'); assert.match(spec, /網路與內容來源/); assert.match(spec, /model\.glb/); assert.match(spec, /Nuclear innovation in the field/); assert.match(spec, /無障礙樹/);
+    const dash = path.join(tmp, 'deep-dash.html'); const b = await run('build-report.mjs', ['--site', base, '--out', dash]); assert.equal(b.status, 0, b.out);
+    const br = await launchBrowser(); try { const pg = await br.newPage(); const errs = []; pg.on('pageerror', (e) => errs.push(e.message)); await pg.goto('file://' + dash); const txt = await pg.locator('#s-overview').innerText(); assert.match(txt, /頁面實際載入了什麼/); assert.match(txt, /model\.glb/); assert.match(txt, /Nuclear innovation/); assert.deepEqual(errs, []); } finally { await br.close(); }
+  } finally { srv.close(); }
+});

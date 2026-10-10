@@ -8,6 +8,7 @@ import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
 import { BANNER, sanitizeDoc } from './untrusted.mjs';
 import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch } from './util.mjs';
 import { parseSitemap } from './health-check.mjs';
+import { attachNetworkRecorder, deepContent, ariaTree } from './observe.mjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -264,7 +265,8 @@ async function openPage(page, url) {
 // JS-built pages (SPA, WebGL experiences, intro screens) can be empty at "load": wait until real content appears, or give up after maxMs.
 async function waitForContent(page, maxMs) {
   const t0 = Date.now();
-  const has = () => page.evaluate(() => !!document.body && (document.body.innerText.trim().length > 80 || document.querySelectorAll('h1,h2,h3,p,a[href],button,nav,main,header').length > 6)).catch(() => false);
+  const mainHas = () => page.evaluate(() => !!document.body && (document.body.innerText.trim().length > 80 || document.querySelectorAll('h1,h2,h3,p,a[href],button,nav,main,header').length > 6)).catch(() => false);
+  const has = async () => { if (await mainHas()) return true; const d = await deepContent(page).catch(() => null); return !!d && (d.textChars > 80 || d.interactive > 6); }; // text inside shadow roots / iframes counts too
   while (Date.now() - t0 < maxMs) { if (await has()) return true; await page.waitForTimeout(500); }
   return await has();
 }
@@ -347,6 +349,7 @@ while (pages.length < maxPages) {
   await ensureRobots(url).catch(() => {});
   if (!allowed(url)) { console.log('skip (robots):', url); skippedByRobots.push(url); continue; }
   const page = await ctx.newPage();
+  const net = attachNetworkRecorder(page);
   const watchdog = setTimeout(() => { console.log('timeout (120s), giving up on:', url); page.close().catch(() => {}); }, 120000);
   try {
     const mixed = new Set(); page.on('request', (r) => { if (/^https:/.test(page.url()) && /^http:/.test(r.url())) mixed.add(r.url().slice(0, 140)); });
@@ -382,6 +385,11 @@ while (pages.length < maxPages) {
     if (!contentReady) contentReady = await waitForContent(page, 0); // content inserted only by the lazy-load scroll counts
     if (!contentReady) console.log('   ⚠️ 頁面在等待後仍幾乎是空的（見報告中的診斷）（可能是 3D／WebGL 體驗頁、要先點「進入」、被擋或載入逾時）：' + url);
     const data = await page.evaluate(extractInPage);
+    data.deep = await deepContent(page).catch(() => null);
+    data.network = net.summary(page.url());
+    const aria = await ariaTree(page);
+    data.aria = aria ? { lines: aria.lines, headings: aria.headings, links: aria.links, buttons: aria.buttons, images: aria.images, landmarks: aria.landmarks, head: aria.text.split('\n').slice(0, 40).join('\n').slice(0, 3500) } : null;
+    data._ariaText = aria?.text || null; // written to aria.yml below, not kept in page.json
     data.emptyPage = !contentReady;
     if (data.emptyPage) { // say WHY, from what the page actually contains
       data.emptyDiag = await page.evaluate(() => {
@@ -439,6 +447,8 @@ while (pages.length < maxPages) {
       await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(250);
       data.seo.mobile = await page.evaluate(extractMobileInPage).catch(() => null);
     }
+    if (data._ariaText) fs.writeFileSync(path.join(dir, 'aria.yml'), sanitizeDoc(data._ariaText));
+    delete data._ariaText;
     fs.writeFileSync(path.join(dir, 'page.json'), JSON.stringify(data, null, 2));
     data.slug = slugOf(url);
     pages.push(data);
@@ -516,7 +526,7 @@ const site = {
   editing: { platforms, contenteditablePages: pages.filter((p) => p.editing.contenteditable).map((p) => p.url), loginOrAdminLinks: [...new Map(pages.flatMap((p) => p.editing.editLinks).map((l) => [l.href, l])).values()].slice(0, 15) },
   design: { textColors: merge('textColors'), backgrounds: merge('backgrounds'), fontFamilies: merge('fontFamilies', 6), fontSizes: merge('fontSizes'), radii: merge('radii', 6), shadows: merge('shadows', 5), spacing: merge('spacing'), cssVars: pages[0]?.design.cssVars || {}, webFonts: [...new Set(pages.flatMap((p) => p.design.webFonts))], typography: pages[0]?.design.typography, breakpoints: (() => { const m = {}; for (const p of pages) for (const b of p.breakpoints) m[b.px] = (m[b.px] || 0) + b.uses; return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([px, uses]) => ({ px: Number(px), uses })); })(), darkMode: pages[0]?.darkMode, buttonHover: pages[0]?.buttonHover },
   components: pages[0]?.components, assets, designer,
-  pages: pages.map((p) => ({ emptyPage: !!p.emptyPage, emptyDiag: p.emptyDiag || null, slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
+  pages: pages.map((p) => ({ network: p.network || null, aria: p.aria || null, deep: p.deep || null, emptyPage: !!p.emptyPage, emptyDiag: p.emptyDiag || null, slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
 };
 fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
 
@@ -524,7 +534,7 @@ fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
 const list = (a) => a.map((x) => `\`${x.value}\` (${x.count})`).join(', ') || '—';
 const md = [
   `# 網站探索報告：${startUrl}`, `爬取 ${pages.length} 頁，耗時 ${site.seconds}s，時間 ${site.crawledAt}`, '',
-  ...(pages.some((p) => p.emptyPage) ? ['> ⚠️ **有頁面在等待後仍幾乎是空的**（' + pages.filter((p) => p.emptyPage).map((p) => p.url).join('、') + '）：設計、文字、版面可能抓不到。請看該頁的 `desktop.png` 截圖確認畫面。', ...pages.filter((p) => p.emptyPage && p.emptyDiag).flatMap((p) => { const d = p.emptyDiag; return ['', `診斷（${p.url}）：DOM 元素 ${d.elements}、canvas ${d.canvases}、iframe ${d.iframes}、shadow root ${d.shadowHosts}、可點擊元素 ${d.buttons}、可見文字 ${d.textChars} 字、載入狀態 ${d.readyState}、標題「${d.title}」`, d.blockPage ? '→ **像是防機器人／驗證頁**：網站把自動化瀏覽器擋在外面。可試 `--headed`（顯示瀏覽器視窗）。' : d.canvases > 0 && d.textChars < 40 ? '→ **像是 WebGL／canvas 整頁體驗**：畫面由 3D 繪製，網頁上幾乎沒有文字或版面元素可抽取。請改看 3D 擷取（motion.md、影格）與截圖。' : d.iframes > 0 && d.elements < 40 ? '→ 內容可能在 iframe 裡，目前不會深入 iframe。' : d.buttons > 0 && d.textChars < 40 ? '→ 可能要先點「進入」或同意 Cookie 才會顯示內容。可試 `--headed` 親手點一下。' : '→ 原因不明；可試 `--wait 30000` 或 `--headed`。']; }), ''] : []),
+  ...(pages.some((p) => p.emptyPage) ? ['> ⚠️ **有頁面在等待後仍幾乎是空的**（' + pages.filter((p) => p.emptyPage).map((p) => p.url).join('、') + '）：設計、文字、版面可能抓不到。請看該頁的 `desktop.png` 截圖確認畫面。', ...pages.filter((p) => p.emptyPage && p.emptyDiag).flatMap((p) => { const d = p.emptyDiag; return ['', `診斷（${p.url}）：DOM 元素 ${d.elements}、canvas ${d.canvases}、iframe ${d.iframes}、shadow root ${d.shadowHosts}、可點擊元素 ${d.buttons}、可見文字 ${d.textChars} 字、載入狀態 ${d.readyState}、標題「${d.title}」`, (p.network && p.network.blockedLike > 0) ? `→ **網站對 ${p.network.blockedLike} 個請求回了 403/429**：像是被防護擋下，可試 \`--headed\`。` : d.blockPage ? '→ **像是防機器人／驗證頁**：網站把自動化瀏覽器擋在外面。可試 `--headed`（顯示瀏覽器視窗）。' : d.canvases > 0 && d.textChars < 40 ? '→ **像是 WebGL／canvas 整頁體驗**：畫面由 3D 繪製，網頁上幾乎沒有文字或版面元素可抽取。請改看 3D 擷取（motion.md、影格）與截圖。' : d.iframes > 0 && d.elements < 40 ? '→ 內容可能在 iframe 裡，目前不會深入 iframe。' : d.buttons > 0 && d.textChars < 40 ? '→ 可能要先點「進入」或同意 Cookie 才會顯示內容。可試 `--headed` 親手點一下。' : '→ 原因不明；可試 `--wait 30000` 或 `--headed`。']; }), ''] : []),
   ...(site.blockedPages.length ? ['> ⚠️ **部分頁面被擋住**（' + site.blockedPages.map((b) => b.reason).join('、') + '）。結果可能不完整；可降低頻率、改用 Playwright MCP 互動，或確認你有權存取。', ''] : []),
   ...(site.consentAction ? ['- 已自動處理 Cookie 橫幅：「' + site.consentAction + '」', ''] : []),
   '## 編輯方式',
@@ -536,6 +546,7 @@ const md = [
   `- 文字色：${list(site.design.textColors)}`, `- 背景色：${list(site.design.backgrounds)}`, `- 圓角：${list(site.design.radii)}`, `- 陰影：${list(site.design.shadows)}`, `- 間距：${list(site.design.spacing)}`,
   `- CSS 變數：${Object.keys(site.design.cssVars).length} 個（見 site.json）`, '',
   '## 頁面', ...site.pages.map((p) => `- [${p.status}] ${p.title || '(無標題)'} — ${p.url}（高 ${p.docHeight}px${p.mobileOverflow ? '，手機版橫向溢出' : ''}；${p.slug}/）`), '',
+  '## 網路與內容來源（頁面實際載入了什麼）', ...pages.slice(0, 3).flatMap((p) => { const n = p.network; if (!n) return []; return [`### ${p.url}`, `- 請求 ${n.total} 個（${Object.entries(n.byType).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${v}`).join('、')}）；第三方網域 ${n.thirdParty.length} 個${n.errorCount ? `；**錯誤回應 ${n.errorCount} 個**（403/429 共 ${n.blockedLike} 個）` : ''}${n.failedCount ? `；失敗請求 ${n.failedCount} 個` : ''}`, ...(n.assets3d.length ? [`- 3D 資源：${n.assets3d.map((a) => `${a.url}（${a.status}）`).join('、')}`] : []), ...(n.media.length ? [`- 影音：${n.media.map((a) => a.url).join('、')}`] : []), ...(n.fonts.length ? [`- 字型檔：${n.fonts.slice(0, 6).join('、')}`] : []), ...(n.apis.length ? [`- API／JSON：${n.apis.slice(0, 8).map((a) => `${a.url}（${a.status}）`).join('、')}`] : []), ...(n.errors.length ? [`- 失敗的請求：${n.errors.slice(0, 6).map((e) => `${e.status} ${e.url}`).join('、')}`] : []), ...(n.apiTextSamples.length ? ['- API 回應裡的文字（頁面上看不到時，內容常在這裡）：', ...n.apiTextSamples.slice(0, 12).map((t) => `  - ${t}`)] : []), ...(p.deep ? [`- 含 shadow DOM 與 iframe 的可見文字：${p.deep.textChars} 字（主文件 ${p.deep.mainTextChars} 字；iframe ${p.deep.frameCount} 個、shadow root ${p.deep.shadowHosts} 個）`] : []), ...(p.aria ? [`- 無障礙樹：${p.aria.lines} 行，標題 ${p.aria.headings}、連結 ${p.aria.links}、按鈕 ${p.aria.buttons}、圖片 ${p.aria.images}、地標 ${p.aria.landmarks}（完整內容見 pages/${p.slug}/aria.yml）`, '```yaml', p.aria.head, '```'] : []), '']; }),
   '## 排版', ...pages.slice(0, 3).flatMap((p) => [`### ${p.url}`, `- landmarks: ${JSON.stringify(p.layout.landmarks)}`, ...p.layout.sections.slice(0, 15).map((s) => `- <${s.tag}${s.id ? '#' + s.id : ''}> ${s.height}px ${s.heading ? '— ' + s.heading : ''}`)]),
 ].join('\n');
 fs.writeFileSync(path.join(outDir, 'report.md'), BANNER + '\n\n' + sanitizeDoc(md) + '\n');

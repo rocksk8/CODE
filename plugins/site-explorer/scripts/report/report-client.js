@@ -297,6 +297,20 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   const shot=p=>{const pg=(D.pages||[]).find(x=>x.slug===p.slug);const src=pg&&pg.shots&&pg.shots.desktop;return src?'<img src="'+esc(src)+'" style="max-width:260px;border:1px solid var(--line);border-radius:8px;margin-top:8px" alt="擷取當下的畫面">':''};
   o.insertAdjacentHTML('afterbegin','<div class="card" style="border-color:#dc2626;margin-bottom:14px"><h3 style="color:#dc2626">⚠️ 這次擷取不完整（'+bad.length+' 頁幾乎是空的）</h3>'+bad.map(p=>'<div style="margin:8px 0"><b>'+esc(p.title||p.url)+'</b><br><small>'+esc(p.url)+'</small><br>'+(p.emptyDiag?'<small>DOM 元素 '+p.emptyDiag.elements+'・canvas '+p.emptyDiag.canvases+'・iframe '+p.emptyDiag.iframes+'・可見文字 '+p.emptyDiag.textChars+' 字</small><br>':'')+why(p.emptyDiag)+'<br>'+shot(p)+'</div>').join('')+'</div>');
 })();
+// ---------- what the page actually loaded (network, shadow DOM / iframes, accessibility tree) ----------
+(function(){
+  const o=$('#s-overview');if(!o||!S)return;const p=(S.pages||[]).find(x=>x.network);if(!p)return;const n=p.network,d=p.deep,a=p.aria;
+  const li=x=>'<li>'+x+'</li>';
+  const rows=[
+    li('請求 <b>'+n.total+'</b> 個（'+Object.entries(n.byType).sort((x,y)=>y[1]-x[1]).slice(0,6).map(([k,v])=>esc(k)+' '+v).join('、')+'）；第三方網域 '+(n.thirdParty||[]).length+' 個'+(n.errorCount?'；<b style="color:#dc2626">錯誤回應 '+n.errorCount+' 個（403/429：'+n.blockedLike+'）</b>':'')),
+    n.assets3d&&n.assets3d.length?li('3D 資源：'+n.assets3d.map(x=>'<code>'+esc(x.url)+'</code> ('+x.status+')').join('、')):'',
+    n.apis&&n.apis.length?li('API／JSON：'+n.apis.slice(0,6).map(x=>'<code>'+esc(x.url)+'</code> ('+x.status+')').join('、')):'',
+    n.apiTextSamples&&n.apiTextSamples.length?li('API 回應裡的文字（頁面上看不到時，內容常在這裡）：<ul>'+n.apiTextSamples.slice(0,6).map(t=>li(esc(t))).join('')+'</ul>'):'',
+    d?li('含 shadow DOM 與 iframe 的可見文字 <b>'+d.textChars+'</b> 字（iframe '+d.frameCount+' 個、shadow root '+d.shadowHosts+' 個）'):'',
+    a?li('無障礙樹 <b>'+a.lines+'</b> 行：標題 '+a.headings+'、連結 '+a.links+'、按鈕 '+a.buttons+'、圖片 '+a.images+'、地標 '+a.landmarks+'（pages/'+esc(p.slug)+'/aria.yml）'+(a.head?'<details><summary>展開前 40 行</summary><pre style="white-space:pre-wrap;font-size:12px">'+esc(a.head)+'</pre></details>':'')):''
+  ].join('');
+  o.insertAdjacentHTML('beforeend','<div class="card" style="margin-top:14px"><h3>頁面實際載入了什麼</h3><div class="hint">'+esc(p.url)+'</div><ul>'+rows+'</ul></div>');
+})();
 // ---------- 3D / motion on every captured page ----------
 (function(){
   const P=D.motionPages;if(!P||!P.length)return;const m=$('#s-motion');if(!m)return;

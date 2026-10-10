@@ -6,6 +6,7 @@ import path from 'node:path';
 import { launchBrowser } from './launch.mjs';
 import { findUrl } from './args.mjs';
 import { guardInternal, isMain } from './util.mjs';
+import { attachNetworkRecorder, deepContent } from './observe.mjs';
 
 const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
 const args = process.argv.slice(2);
@@ -14,7 +15,7 @@ const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[
 export async function probe(browser, url, { label, userAgent, outDir, waitMs = 15000 }) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...(userAgent ? { userAgent } : {}) });
   await guardInternal(ctx, url);
-  const page = await ctx.newPage(); const errors = [], failed = [];
+  const page = await ctx.newPage(); const errors = [], failed = []; const net = attachNetworkRecorder(page);
   page.on('console', (m) => { if (m.type() === 'error' && errors.length < 3) errors.push(m.text().slice(0, 140)); });
   page.on('requestfailed', (r) => { if (failed.length < 3) failed.push(`${r.failure()?.errorText || 'failed'} ${new URL(r.url()).host}`); });
   const res = { label, userAgent: userAgent || '(瀏覽器預設)' };
@@ -32,6 +33,7 @@ export async function probe(browser, url, { label, userAgent, outDir, waitMs = 1
       let gl = null; try { const c = document.createElement('canvas'); const g = c.getContext('webgl2') || c.getContext('webgl'); if (g) { const e = g.getExtension('WEBGL_debug_renderer_info'); gl = e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : 'webgl ok'; } } catch {}
       return { title: document.title.slice(0, 80), elements: all.length, textChars: txt.length, sample: txt.slice(0, 120).replace(/\s+/g, ' '), canvases: document.querySelectorAll('canvas').length, iframes: document.querySelectorAll('iframe').length, links: document.querySelectorAll('a[href]').length, buttons: document.querySelectorAll('button,[role=button]').length, shadowHosts: all.filter((e) => e.shadowRoot).length, webgl: gl, webdriver: navigator.webdriver, blockWords: /just a moment|access denied|attention required|captcha|verify you are human|are you a robot|unusual traffic|enable javascript|forbidden/i.test(document.title + ' ' + txt.slice(0, 500)) };
     });
+    res.deep = await deepContent(page).catch(() => null); res.network = net.summary(page.url());
     res.cookies = (await ctx.cookies()).map((c) => c.name).filter((n) => /datadome|_abck|incap_ses|cf_clearance|bm_sz|ak_bmsc|__cf_bm|reese84/i.test(n));
     fs.mkdirSync(outDir, { recursive: true }); res.screenshot = path.join(outDir, `${label}.png`); await page.screenshot({ path: res.screenshot });
   } catch (e) { res.error = String(e.message).split('\n')[0].slice(0, 160); }
@@ -47,7 +49,8 @@ export function verdict(a, b) {
   if (ok(a) && !ok(b)) return '爬蟲身分讀得到，瀏覽器預設身分讀不到（少見）。';
   const x = b || a;
   if (x?.error) return '連網址都打不開：' + x.error;
-  if (x?.dom?.blockWords || x?.protection?.length || x?.cookies?.length) return '兩種身分都讀不到，且有防護跡象（防機器人服務／驗證頁）。可改試 --headed 親自開視窗，或請網站提供允許名單。';
+  if (x?.deep && x.deep.textChars > 80 && x.deep.mainTextChars < 40) return '內容在 iframe 或 shadow DOM 裡（主文件幾乎沒有文字）：新版爬取已會把這些算進去。';
+  if (x?.network?.blockedLike > 0 || x?.dom?.blockWords || x?.protection?.length || x?.cookies?.length) return '兩種身分都讀不到，且有防護跡象（防機器人服務／驗證頁）。可改試 --headed 親自開視窗，或請網站提供允許名單。';
   if (x?.dom && x.dom.canvases > 0 && x.dom.textChars < 40) return '兩種身分都沒有文字，但有 canvas：很可能是整頁 WebGL 體驗，網頁上本來就沒有可抽取的文字或版面。請改用 3D 擷取與截圖。';
   if (x?.dom && x.dom.webgl == null) return '這個瀏覽器環境沒有 WebGL，3D 頁面畫不出來。可試 --headed。';
   return '原因不明；請把完整輸出和截圖給我。';
@@ -71,6 +74,12 @@ async function main() {
     console.log(`   內容出現：${r.contentAppeared ? '是' : '否'}（等了 ${(r.waitedMs / 1000).toFixed(1)} 秒）　標題：「${r.dom.title}」`);
     console.log(`   DOM 元素 ${r.dom.elements}・可見文字 ${r.dom.textChars} 字・連結 ${r.dom.links}・按鈕 ${r.dom.buttons}・canvas ${r.dom.canvases}・iframe ${r.dom.iframes}・shadow root ${r.dom.shadowHosts}`);
     console.log(`   WebGL：${r.dom.webgl || '無'}　webdriver 旗標：${r.dom.webdriver}　疑似驗證頁字樣：${r.dom.blockWords ? '有' : '無'}`);
+    if (r.deep) console.log(`   含 shadow DOM／iframe 的可見文字：${r.deep.textChars} 字（iframe ${r.deep.frameCount} 個、shadow root ${r.deep.shadowHosts} 個）`);
+    if (r.network) { const n = r.network; console.log(`   網路：請求 ${n.total} 個（${Object.entries(n.byType).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([k, v]) => `${k} ${v}`).join('、')}）・錯誤回應 ${n.errorCount}（其中 403/429 共 ${n.blockedLike}）・失敗 ${n.failedCount}`);
+      if (n.assets3d.length) console.log(`   3D 資源：${n.assets3d.slice(0, 5).map((a) => `${a.url} (${a.status})`).join('；')}`);
+      if (n.apis.length) console.log(`   API／JSON：${n.apis.slice(0, 5).map((a) => `${a.url} (${a.status})`).join('；')}`);
+      if (n.errors.length) console.log(`   錯誤的請求：${n.errors.slice(0, 5).map((e) => `${e.status} ${e.url}`).join('；')}`);
+      if (n.apiTextSamples.length) console.log(`   API 回應裡的文字：${n.apiTextSamples.slice(0, 3).join(' | ').slice(0, 300)}`); }
     if (r.dom.sample) console.log(`   文字開頭：${r.dom.sample}`);
     if (r.consoleErrors.length) console.log(`   主控台錯誤：${r.consoleErrors.join(' | ')}`);
     if (r.failedRequests.length) console.log(`   失敗的請求：${r.failedRequests.join(' | ')}`);
