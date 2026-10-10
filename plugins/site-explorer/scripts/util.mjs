@@ -41,7 +41,12 @@ export async function readCappedBuffer(res, maxBytes = 5_000_000) {
 
 /** Loopback / private / link-local hosts: never fetched on behalf of a PUBLIC site's content (SSRF guard). */
 export function isInternalHost(host) {
-  const h = String(host).toLowerCase().replace(/^\[|\]$/g, '');
+  let h = String(host).toLowerCase().replace(/^\[|\]$/g, '');
+  // IPv4 hidden inside IPv6: ::ffff:127.0.0.1, ::ffff:7f00:1 (Node normalises to the hex form), ::127.0.0.1, 64:ff9b::a.b.c.d
+  let mm = h.match(/^(?:0{0,4}:){2,6}(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/) || h.match(/^64:ff9b::(\d+\.\d+\.\d+\.\d+)$/);
+  if (mm) h = mm[1];
+  else if ((mm = h.match(/^(?:0{0,4}:){2,6}(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/) || h.match(/^64:ff9b::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/))) { const hi = parseInt(mm[1], 16), lo = parseInt(mm[2], 16); h = `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`; }
+  if (h === '::' || h === '0:0:0:0:0:0:0:0') return true;
   if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
   if (h === '::1' || /^f[cd][0-9a-f]{2}:/.test(h) || /^fe80:/.test(h)) return true;
   const m = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/); if (!m) return false;
@@ -59,4 +64,21 @@ export async function guardInternal(ctx, startUrl) {
     let host = ''; try { host = new URL(route.request().url()).hostname; } catch {}
     return /^(data|blob|about):/.test(route.request().url()) || !isInternalHost(host) ? route.continue() : route.abort('blockedbyclient');
   });
+}
+
+/** fetch that follows redirects itself and re-checks EVERY hop (a public URL may 302 to localhost or a cloud-metadata address). */
+export async function gfetch(url, opts = {}, maxHops = 5) {
+  if (opts.redirect && opts.redirect !== 'follow') return fetch(url, opts);
+  const base = url; let cur = url;
+  for (let i = 0; i <= maxHops; i++) {
+    if (i > 0 && !mayFetch(cur, base)) throw new Error('blocked redirect to an internal address: ' + cur);
+    const r = await fetch(cur, { ...opts, redirect: 'manual' });
+    if (r.status >= 300 && r.status < 400 && r.headers.get('location')) {
+      try { await r.body?.cancel(); } catch {}
+      cur = new URL(r.headers.get('location'), cur).href; continue;
+    }
+    Object.defineProperty(r, 'url', { value: cur, configurable: true }); // a manual response has url ''; expose the final URL like follow mode
+    return r;
+  }
+  throw new Error('too many redirects');
 }

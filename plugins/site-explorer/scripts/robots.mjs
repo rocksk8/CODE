@@ -1,4 +1,4 @@
-import { readCapped } from './util.mjs';
+import { readCapped, gfetch } from './util.mjs';
 // robots.txt parsing with Google-style semantics: UA groups, Allow/Disallow, * and $ wildcards, longest match wins (Allow wins ties).
 
 export function parseRobots(text) {
@@ -50,7 +50,7 @@ export function isAllowed(parsed, ua, pathAndQuery) {
 
 export async function fetchRobots(origin, ua = 'site-explorer-claude-plugin') {
   try {
-    const r = await fetch(origin + '/robots.txt', { headers: { 'user-agent': ua }, signal: AbortSignal.timeout(10000), redirect: 'follow' });
+    const r = await gfetch(origin + '/robots.txt', { headers: { 'user-agent': ua }, signal: AbortSignal.timeout(10000) });
     const text = r.ok ? await readCapped(r, 1_000_000) : '';
     // 4xx = no robots.txt (everything allowed); 5xx = cannot be verified, which crawlers must treat as "do not crawl"
     return { status: r.status, finalUrl: r.url, contentType: r.headers.get('content-type') || '', text, parsed: r.ok ? parseRobots(text) : null, serverError: r.status >= 500 };

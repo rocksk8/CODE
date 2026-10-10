@@ -105,3 +105,21 @@ test('browser sandbox stays on unless root or explicitly disabled', async () => 
   const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/launch.mjs'), 'utf8');
   assert.match(src, /chromiumSandbox: !noSandbox/); assert.match(src, /SITE_EXPLORER_NO_SANDBOX/);
 });
+
+test('SSRF guard sees IPv4 hidden in IPv6, and redirects are re-checked per hop', async () => {
+  const { isInternalHost, gfetch } = await import('../scripts/util.mjs');
+  for (const h of ['[::ffff:127.0.0.1]', '[::ffff:7f00:1]', '[::ffff:a9fe:a9fe]', '[::ffff:c0a8:101]', '[::]', '[64:ff9b::7f00:1]']) assert.ok(isInternalHost(h), h);
+  assert.ok(!isInternalHost('[2606:4700::1111]')); assert.ok(!isInternalHost('[::ffff:808:808]'));
+  // a "public" first hop cannot be simulated offline; loopback -> loopback is allowed (user's own site), and unknown redirects still resolve
+  const srv = http.createServer((q, r) => { if (q.url === '/a') { r.writeHead(302, { location: '/b' }); r.end(); } else { r.end('ok'); } }).listen(0);
+  await new Promise((res) => srv.once('listening', res));
+  const r = await gfetch(`http://127.0.0.1:${srv.address().port}/a`); assert.equal(await r.text(), 'ok'); assert.match(r.url, /\/b$/); srv.close();
+});
+test('explore --out refuses a non-empty folder it did not create, accepts new/empty/own folders', async () => {
+  const { checkExploreOut, UnsafeOutputError } = await import('../scripts/safe-out.mjs');
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'se-out-')); fs.writeFileSync(path.join(d, 'thesis.docx'), 'x');
+  assert.throws(() => checkExploreOut(d), UnsafeOutputError);
+  assert.doesNotThrow(() => checkExploreOut(path.join(d, 'new'))); fs.mkdirSync(path.join(d, 'empty')); assert.doesNotThrow(() => checkExploreOut(path.join(d, 'empty')));
+  fs.writeFileSync(path.join(d, 'runs.json'), '[]'); assert.doesNotThrow(() => checkExploreOut(d));
+  assert.throws(() => checkExploreOut(os.homedir()), UnsafeOutputError); assert.equal(fs.readFileSync(path.join(d, 'thesis.docx'), 'utf8'), 'x');
+});

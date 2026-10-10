@@ -8,7 +8,7 @@ import path from 'node:path';
 import tls from 'node:tls';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { isMain, readCappedBuffer, mayFetch } from './util.mjs';
+import { isMain, readCappedBuffer, mayFetch, gfetch } from './util.mjs';
 import { fetchRobots, isAllowed, groupFor, AI_BOTS, SEARCH_BOTS } from './robots.mjs';
 import { intOpt } from './args.mjs';
 import { cleanDeep, clean, safe, BANNER, sanitizeDoc } from './untrusted.mjs';
@@ -26,8 +26,8 @@ const textLen = (s) => [...String(s || '')].reduce((n, ch) => n + (/[㐀-鿿぀-
 
 async function http(url, { method = 'HEAD', redirect = 'manual', timeout = 10000 } = {}) {
   try {
-    let r = await fetch(url, { method, redirect, headers: { 'user-agent': UA }, signal: AbortSignal.timeout(timeout) });
-    if (method === 'HEAD' && [403, 405, 501].includes(r.status)) r = await fetch(url, { method: 'GET', redirect, headers: { 'user-agent': UA }, signal: AbortSignal.timeout(timeout) });
+    let r = await gfetch(url, { method, redirect, headers: { 'user-agent': UA }, signal: AbortSignal.timeout(timeout) });
+    if (method === 'HEAD' && [403, 405, 501].includes(r.status)) r = await gfetch(url, { method: 'GET', redirect, headers: { 'user-agent': UA }, signal: AbortSignal.timeout(timeout) });
     return { status: r.status, location: r.headers.get('location'), headers: Object.fromEntries(r.headers.entries()), url: r.url };
   } catch (e) { return { status: null, error: String(e.cause?.code || e.message).slice(0, 80) }; }
 }
@@ -60,7 +60,7 @@ export function parseSitemap(xml) {
 }
 // gzip (.xml.gz or Content-Encoding-less gz bodies); output is capped so a zip bomb cannot eat memory
 async function fetchSitemapText(url, timeout = 15000) {
-  const r = await fetch(url, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(timeout), redirect: 'follow' });
+  const r = await gfetch(url, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(timeout) });
   if (!r.ok) return { status: r.status };
   let buf = await readCappedBuffer(r, 25_000_000); if (!buf) return { status: r.status, error: 'sitemap 超過 25 MB' };
   if (buf.length > 25_000_000) return { status: r.status, error: 'sitemap 超過 25 MB' };

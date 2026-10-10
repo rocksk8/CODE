@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { runChecks, printChecks } from './doctor.mjs';
 import { openDb, ingest, DB_PATH } from './db.mjs';
 import { findUrl, intOpt } from './args.mjs';
-import { isInside } from './safe-out.mjs';
+import { isInside, checkExploreOut, UnsafeOutputError } from './safe-out.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -28,6 +28,8 @@ const maxPages = intOpt(args, 'max-pages', 6, { min: 1, max: 500 }), waitMs = in
 
 const out = path.resolve(opt('out', process.env.SITE_EXPLORER_OUT || './explore-out'));
 if (isInside(out, path.resolve(here, '..'))) { console.error(`輸出資料夾不能放在外掛目錄內（${out}）：外掛更新或重新安裝時會被清掉。請改用你專案裡的資料夾，例如 --out ./explore-out`); process.exit(1); }
+try { checkExploreOut(out); fs.mkdirSync(out, { recursive: true }); if (!fs.existsSync(path.join(out, 'ABOUT-THIS-FOLDER.md'))) fs.writeFileSync(path.join(out, 'ABOUT-THIS-FOLDER.md'), '# site-explorer 輸出資料夾（探索進行中）\n'); } // marks the folder as ours right away
+catch (e) { if (e instanceof UnsafeOutputError) { console.error(e.message); process.exit(1); } throw e; }
 const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
 const siteDir = path.join(siteRoot, host), motionDir = path.join(motionRoot, host);

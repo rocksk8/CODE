@@ -6,7 +6,7 @@ import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
 import { BANNER, sanitizeDoc } from './untrusted.mjs';
-import { readCapped, readCappedBuffer, mayFetch, guardInternal } from './util.mjs';
+import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch } from './util.mjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -262,7 +262,7 @@ async function openPage(page, url) {
 // What a crawler that does NOT run JavaScript would receive for this URL.
 async function fetchRaw(u) {
   try {
-    const r = await fetch(u, { headers: { 'user-agent': UA, accept: 'text/html' }, redirect: 'follow', signal: AbortSignal.timeout(15000) });
+    const r = await gfetch(u, { headers: { 'user-agent': UA, accept: 'text/html' }, signal: AbortSignal.timeout(15000) });
     if (!mayFetch(r.url, u)) return { status: null, error: 'redirected to an internal address' };
     const html = await readCapped(r, 3_000_000);
     const bi = html.search(/<body/i); const be = html.toLowerCase().lastIndexOf('</body>'); // linear scans, no backtracking
@@ -427,7 +427,7 @@ if (pages[0]?.meta.ogImage) wanted.set('og-image', new URL(pages[0].meta.ogImage
 for (const [name, u] of wanted) {
   try {
     if (!mayFetch(u, startUrl)) continue; // a public site must not make us read the user's LAN
-    const r = await fetch(u, { signal: AbortSignal.timeout(15000) }); if (!r.ok || !/^(image\/|text\/xml|application\/xml)/i.test(r.headers.get('content-type') || '')) continue;
+    const r = await gfetch(u, { signal: AbortSignal.timeout(15000) }); if (!r.ok || !/^(image\/|text\/xml|application\/xml)/i.test(r.headers.get('content-type') || '')) continue;
     const buf = await readCappedBuffer(r, 5_000_000); if (!buf) continue;
     const ext = (new URL(u).pathname.match(/\.(svg|png|jpe?g|webp|ico|gif)$/i) || [, 'bin'])[1].toLowerCase();
     fs.writeFileSync(path.join(outDir, 'assets', `${name}.${ext}`), buf);

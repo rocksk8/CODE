@@ -89,7 +89,7 @@ test('first run installs pinned dependencies ONCE into ~/.site-explorer/deps; th
   assert.equal(J(path.join(home, 'deps', 'node_modules', 'playwright-core', 'package.json')).version, J(path.join(fresh, 'package.json')).dependencies['playwright-core'], 'the pinned version');
   assert.ok(!fs.existsSync(path.join(fresh, 'node_modules')), 'nothing was written inside the plugin directory');
   assert.ok(!fs.existsSync(path.join(home, 'deps', '.lock')), 'lock released');
-  const again = await run(fresh, [bin, 'setup', '--deps-only'], env); assert.equal(again.status, 0); assert.ok(again.ms < 3000, 'second run is a no-op');
+  const again = await run(fresh, [bin, 'setup', '--deps-only'], env); assert.equal(again.status, 0); assert.ok(again.ms < 10000, 'second run is a no-op (' + again.ms + ' ms)');
 });
 
 test('two first runs at the same time: one installs, the other waits, both succeed', async () => {

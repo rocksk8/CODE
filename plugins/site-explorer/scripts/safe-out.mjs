@@ -40,3 +40,18 @@ export function requireExtension(file, re, what) {
   if (!re.test(file)) throw new UnsafeOutputError(`輸出檔名必須是 ${what}（收到「${file}」）。為避免覆蓋其他檔案，已停止。`);
   return path.resolve(file);
 }
+
+/** Explore output folder: may be new, empty, or one we made before (ABOUT-THIS-FOLDER.md / runs.json). Never a foreign non-empty folder, root or home. */
+export function checkExploreOut(dir) {
+  const abs = path.resolve(dir);
+  const refuse = (why) => { throw new UnsafeOutputError(`不會寫入「${abs}」：${why}\n請指定一個新的資料夾，例如 --out ./explore-out（不會動到你現有的檔案）。`); };
+  const ours = ['ABOUT-THIS-FOLDER.md', 'runs.json'].some((f) => fs.existsSync(path.join(abs, f)));
+  if (ours) return abs;
+  if (samePath(abs, path.parse(abs).root)) refuse('這是檔案系統的根目錄');
+  if (samePath(abs, os.homedir())) refuse('這是你的家目錄');
+  if (!fs.existsSync(abs)) return abs;
+  if (!fs.statSync(abs).isDirectory()) refuse('這是一個檔案，不是資料夾');
+  const entries = fs.readdirSync(abs);
+  if (entries.length) refuse(`資料夾不是空的（有 ${entries.length} 個項目，例如 ${entries.slice(0, 3).join('、')}），而且不是先前由本工具產生的`);
+  return abs;
+}
