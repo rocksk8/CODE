@@ -324,3 +324,20 @@ test('health: a page with no text in the raw HTML AND after rendering is reporte
     assert.ok(!(hj.passed || []).some((p) => /不需執行 JavaScript/.test(p.title)), 'no false "readable without JavaScript" pass when a page has no text');
   } finally { srv.close(); }
 });
+
+test('a page whose scripts load but do nothing is explained: evidence line, page errors, and the specific verdict; "administration" is not an admin link', async (t) => {
+  if (skip(t)) return;
+  const srv = http.createServer((q, r) => {
+    if (q.url === '/app.js') { r.setHeader('content-type', 'text/javascript'); return r.end('throw new Error("WebGL is required to start this experience");'); }
+    r.setHeader('content-type', 'text/html');
+    if (q.url === '/dead') return r.end('<!doctype html><title>Orano</title><body><div id="root"></div><script src="/app.js"></script></body>');
+    r.end('<!doctype html><title>Home</title><body><h1>Home</h1><p>' + 'Words for the page body. '.repeat(15) + '</p><a href="/fr/groupe/conseil-d-administration">Conseil d\'administration</a> <a href="/wp-admin/">Admin area</a> <a href="/accreditation/credit">Credit</a></body>');
+  }).listen(0); await new Promise((res) => srv.once('listening', res)); const port = srv.address().port;
+  try {
+    const out = path.join(tmp, 'dead'); const r = await run('crawl.mjs', [`http://127.0.0.1:${port}/dead`, `http://127.0.0.1:${port}/`, '--max-pages', '2', '--wait', '1500', '--no-screenshots', '--no-interact', '--out', out]); assert.equal(r.status, 0, r.out);
+    const base = path.join(out, `127.0.0.1_${port}`); const site = JSON.parse(fs.readFileSync(path.join(base, 'site.json'), 'utf8')); const dead = site.pages.find((p) => /\/dead/.test(p.url));
+    assert.ok(dead.emptyDiag.scripts >= 1 && dead.emptyDiag.dataRequests === 0, JSON.stringify(dead.emptyDiag)); assert.ok(dead.emptyDiag.consoleErrors.some((e) => /WebGL is required/.test(e)), JSON.stringify(dead.emptyDiag.consoleErrors));
+    const md = fs.readFileSync(path.join(base, 'report.md'), 'utf8'); assert.match(md, /腳本有載入，卻沒有發出任何資料請求/); assert.match(md, /WebGL is required to start/); assert.doesNotMatch(md, /```yaml\n\n```/, 'no empty accessibility block');
+    const links = site.editing.loginOrAdminLinks.map((l) => l.href); assert.ok(links.some((h) => /wp-admin/.test(h)), 'real admin link is found'); assert.ok(!links.some((h) => /conseil-d-administration|accreditation/.test(h)), 'false positives: ' + links.join(','));
+  } finally { srv.close(); }
+});
