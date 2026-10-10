@@ -10,7 +10,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test test/e2e.test.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
     "doctor": "node scripts/doctor.mjs",
     "explore": "node scripts/explore.mjs"
   }

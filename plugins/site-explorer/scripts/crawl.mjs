@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Crawl a site with a real browser and capture design, content, layout and editing signals.
 import { launchBrowser } from './launch.mjs';
+import { findUrl, intOpt, sameSite } from './args.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
 const args = process.argv.slice(2);
-const startUrl = args.find((a) => /^https?:\/\//.test(a));
+const startUrl = findUrl(args);
 const opt = (name, def) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
@@ -14,10 +15,10 @@ if (!startUrl) {
   console.error('Usage: crawl.mjs <url> [--max-pages 10] [--depth 2] [--out ./site-report] [--no-screenshots]');
   process.exit(1);
 }
-const maxPages = Number(opt('max-pages', 10));
-const maxDepth = Number(opt('depth', 2));
+const maxPages = intOpt(args, 'max-pages', 10, { min: 1, max: 500 });
+const maxDepth = intOpt(args, 'depth', 2, { min: 0, max: 6 });
 const shots = !args.includes('--no-screenshots');
-const origin = new URL(startUrl).origin;
+let origin = new URL(startUrl).origin; // follows the first redirect (example.com -> www.example.com)
 const host = new URL(startUrl).host.replace(/[^a-z0-9.-]/gi, '_');
 const outDir = path.join(opt('out', './site-report'), host);
 fs.mkdirSync(path.join(outDir, 'pages'), { recursive: true });
@@ -206,7 +207,7 @@ async function detect(pages, headers, fetchStatus) {
 async function dismissConsent(page) {
   try {
     return await page.evaluate(() => {
-      const box = [...document.querySelectorAll('[id*=cookie i],[class*=cookie i],[id*=consent i],[class*=consent i],[id*=onetrust i],[role=dialog]')].find((e) => e.getBoundingClientRect().height > 40);
+      const box = [...document.querySelectorAll('[id*=cookie i],[class*=cookie i],[id*=consent i],[class*=consent i],[id*=onetrust i]')].find((e) => e.getBoundingClientRect().height > 40);
       if (!box) return null;
       const btns = [...box.querySelectorAll('button, a[role=button], [role=button]')];
       const pick = (re) => btns.find((b) => re.test((b.innerText || b.getAttribute('aria-label') || '').trim()));
@@ -225,9 +226,21 @@ async function detectBlock(page, status) {
   return null;
 }
 
+// Never wait for "networkidle" indefinitely: many sites keep analytics/websocket requests open forever.
+async function openPage(page, url) {
+  const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForLoadState('load', { timeout: 12000 }).catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+  return resp;
+}
+
 // ---- main ----
-const robots = await loadRobots();
+let robots = await loadRobots();
 const allowed = (u) => !robots.some((r) => new URL(u).pathname.startsWith(r));
+if (!allowed(startUrl)) {
+  console.error('\n沒有成功爬取任何頁面。\n原因：robots.txt 不允許爬取此網站（' + robots.join(', ') + '）。已依網站設定停止；若你擁有此網站，請調整 robots.txt，或改用 Playwright MCP 手動瀏覽。');
+  process.exit(3);
+}
 const browser = await launchBrowser();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)' });
 const queue = [[norm(startUrl), 0]], seen = new Set([norm(startUrl)]), pages = [], headers = {};
@@ -239,12 +252,18 @@ while (queue.length && pages.length < maxPages) {
   const [url, depth] = queue.shift();
   if (!allowed(url)) { console.log('skip (robots):', url); skippedByRobots.push(url); continue; }
   const page = await ctx.newPage();
+  const watchdog = setTimeout(() => { console.log('timeout (120s), giving up on:', url); page.close().catch(() => {}); }, 120000);
   try {
-    const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 }).catch(() => page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }));
+    const resp = await openPage(page, url);
+    if (pages.length === 0 && new URL(page.url()).origin !== origin) {
+      origin = new URL(page.url()).origin; robots = await loadRobots();
+      console.log('redirected to', origin);
+    }
     if (pages.length === 0 && resp) headers.main = resp.headers();
     if (pages.length === 0) { consentAction = await dismissConsent(page); if (consentAction) await page.waitForTimeout(600); }
     // trigger lazy content
-    await page.evaluate(async () => { for (let y = 0; y < document.body.scrollHeight; y += 600) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 80)); } scrollTo(0, 0); });
+    // bounded: infinite-scroll pages grow forever while you scroll
+    await page.evaluate(async () => { const t0 = Date.now(); for (let y = 0, n = 0; y < document.body.scrollHeight && n < 40 && Date.now() - t0 < 4000; y += 600, n++) { scrollTo(0, y); await new Promise((r) => setTimeout(r, 80)); } scrollTo(0, 0); });
     await page.waitForTimeout(400);
     const data = await page.evaluate(extractInPage);
     data.status = resp?.status();
@@ -282,7 +301,7 @@ while (queue.length && pages.length < maxPages) {
     if (depth < maxDepth) {
       for (const l of data.content.links) {
         try {
-          if (!/^https?:/.test(l.href) || new URL(l.href).origin !== origin) continue;
+          if (!/^https?:/.test(l.href) || !sameSite(l.href, origin)) continue;
           if (/(wp-admin|wp-login|\/admin|\/login|\/ghost\/|\/administrator|logout|signin|sign-in)/i.test(new URL(l.href).pathname)) continue;
           if (/\.(pdf|zip|jpe?g|png|gif|svg|webp|mp4|css|js)(\?|$)/i.test(l.href)) continue;
           const n = norm(l.href);
@@ -291,9 +310,18 @@ while (queue.length && pages.length < maxPages) {
       }
     }
   } catch (e) { console.log('failed:', url, e.message.split('\n')[0]); }
-  await page.close();
+  clearTimeout(watchdog);
+  await page.close().catch(() => {});
 }
 await browser.close();
+
+
+if (pages.length === 0) {
+  console.error('\n沒有成功爬取任何頁面。');
+  if (skippedByRobots.length) console.error(`原因：robots.txt 不允許爬取此網站（${robots.join(', ')}）。已依網站設定停止；若你擁有此網站，請調整 robots.txt，或改用 Playwright MCP 手動瀏覽。`);
+  else console.error('原因：頁面無法載入（網址錯誤、逾時或被擋住）。請先執行 doctor.mjs <網址> 確認連線。');
+  process.exit(3);
+}
 
 // download key brand assets (logo, favicon, og image)
 fs.mkdirSync(path.join(outDir, 'assets'), { recursive: true });

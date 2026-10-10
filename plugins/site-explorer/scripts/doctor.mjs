@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from './launch.mjs';
 import { openDb, DB_PATH } from './db.mjs';
+import { findUrl } from './args.mjs';
 
 export async function runChecks(url) {
   const out = [];
@@ -39,7 +40,7 @@ export const printChecks = (rows) => {
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const rows = await runChecks(process.argv.slice(2).find((a) => /^https?:/.test(a)));
+  const rows = await runChecks(findUrl(process.argv.slice(2)));
   printChecks(rows);
   process.exit(rows.some((r) => r.level === 'fail') ? 1 : 0);
 }

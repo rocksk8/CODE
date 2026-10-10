@@ -3,15 +3,18 @@
 // CSS 3D transforms, Lottie, video): frame sequences over time, on scroll, and on mouse interaction,
 // plus a screen recording, a motion report and an HTML contact sheet.
 import { launchBrowser } from './launch.mjs';
+import { findUrl, intOpt, robotsBlocks } from './args.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
 const args = process.argv.slice(2);
-const url = args.find((a) => /^https?:\/\//.test(a));
+const url = findUrl(args);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 if (!url) { console.error('Usage: capture-3d.mjs <url> [--out DIR] [--frames 12] [--interval 250] [--max-targets 6] [--wait 2500] [--no-video]'); process.exit(1); }
-const FRAMES = Number(opt('frames', 12)), INTERVAL = Number(opt('interval', 250)), MAX = Number(opt('max-targets', 6)), WAIT = Number(opt('wait', 2500));
+const FRAMES = intOpt(args, 'frames', 12, { min: 1, max: 60 }), INTERVAL = intOpt(args, 'interval', 250, { min: 16, max: 5000 }), MAX = intOpt(args, 'max-targets', 6, { min: 1, max: 20 }), WAIT = intOpt(args, 'wait', 2500, { min: 0, max: 60000 });
+const blockedBy = await robotsBlocks(url);
+if (blockedBy) { console.error(`robots.txt 不允許存取此頁面（Disallow: ${blockedBy}），已依網站設定停止。`); process.exit(3); }
 const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const out = path.join(opt('out', './motion-report'), host);
 fs.mkdirSync(out, { recursive: true });
@@ -54,7 +57,9 @@ catch (e) {
 }
 const assets3d = new Set();
 page.on('response', (r) => { const u = r.url(); if (/\.(glb|gltf|obj|fbx|usdz|hdr|exr|ktx2?|basis|drc|splat|ply|riv|lottie)(\?|$)/i.test(u) || /lottie.*\.json|\/models?\/.*\.bin/i.test(u)) assets3d.add(u); });
-await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 }).catch(() => page.goto(url, { waitUntil: 'domcontentloaded' }));
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+await page.waitForLoadState('load', { timeout: 15000 }).catch(() => {});
+await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
 await page.waitForTimeout(WAIT);
 
 // ---- detection ----
@@ -130,7 +135,7 @@ const scrollDir = path.join(out, 'frames', 'scroll'); fs.mkdirSync(scrollDir, { 
 const steps = Math.min(16, Math.max(4, Math.ceil(detected.docHeight / 700))), scrollHashes = [];
 await page.evaluate(() => scrollTo(0, 0)); await sleep(500);
 for (let i = 0; i <= steps; i++) {
-  await page.mouse.wheel(0, detected.docHeight / steps); await sleep(600);
+  await page.mouse.wheel(0, Math.min(detected.docHeight / steps, 1200)); await sleep(600);
   const buf = await page.screenshot({ animations: 'allow' }); fs.writeFileSync(path.join(scrollDir, `s-${String(i).padStart(2, '0')}.png`), buf); scrollHashes.push(hash(buf));
 }
 

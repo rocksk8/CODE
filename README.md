@@ -9,7 +9,7 @@
 ```bash
 cd plugins/site-explorer && npm install
 node scripts/doctor.mjs https://example.com      # 先檢查環境，每個問題都附修復指令
-node scripts/explore.mjs https://example.com     # 一鍵：爬取→設計包→3D→資料庫→儀表板
+node scripts/explore.mjs example.com             # 一鍵：爬取→設計包→3D→資料庫→儀表板（可省略 https://）
 open explore-out/dashboard.html                  # Mac
 ```
 
@@ -56,4 +56,4 @@ open explore-out/dashboard.html                  # Mac
 
 ## 邊界
 
-遵守 robots.txt；不登入、不繞過驗證碼或防機器人；後台路徑只探測是否存在。被擋住時會明確標示而不是回報空白結果。3D 模型與網站素材受版權保護，只供參考。僅用於公開或已授權的網站。
+遵守 robots.txt（網站全面禁止時會明確說明並停止，不會硬爬）；不登入、不繞過驗證碼或防機器人；後台路徑只探測是否存在。被擋住時會明確標示而不是回報空白結果。3D 模型與網站素材受版權保護，只供參考。僅用於公開或已授權的網站。

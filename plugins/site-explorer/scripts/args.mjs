@@ -5,7 +5,11 @@ export function normalizeUrl(input) {
   if (!input) return null;
   let v = String(input).trim();
   if (!v || v.startsWith('--')) return null;
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) v = 'https://' + v.replace(/^\/\//, '');
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) {
+    const bare = v.replace(/^\/\//, '');
+    // local servers and raw IPs rarely speak TLS; everything else defaults to https
+    v = (/^(localhost|\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:]+\])(:|\/|$)/i.test(bare) ? 'http://' : 'https://') + bare;
+  }
   try {
     const u = new URL(v);
     if (!/^https?:$/.test(u.protocol) || !u.hostname.includes('.') && u.hostname !== 'localhost' && !/^[\d.]+$|^\[/.test(u.hostname)) return null;
@@ -39,3 +43,20 @@ export function intOpt(args, name, def, { min = 0, max = Infinity } = {}) {
 export const sameSite = (a, b) => {
   try { return new URL(a).host.replace(/^www\./, '') === new URL(b).host.replace(/^www\./, ''); } catch { return false; }
 };
+
+/** Returns the matching `Disallow` rule for this URL under `User-agent: *`, or null when allowed/unknown. */
+export async function robotsBlocks(url) {
+  try {
+    const u = new URL(url);
+    const r = await fetch(u.origin + '/robots.txt', { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return null;
+    let applies = false;
+    for (const line of (await r.text()).split('\n')) {
+      const [k, ...v] = line.split('#')[0].split(':');
+      const key = k.trim().toLowerCase(), val = v.join(':').trim();
+      if (key === 'user-agent') applies = val === '*';
+      else if (applies && key === 'disallow' && val && u.pathname.startsWith(val)) return val;
+    }
+  } catch {}
+  return null;
+}

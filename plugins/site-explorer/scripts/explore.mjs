@@ -7,12 +7,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runChecks, printChecks } from './doctor.mjs';
 import { openDb, ingest, DB_PATH } from './db.mjs';
+import { findUrl, intOpt } from './args.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
-const url = args.find((a) => /^https?:\/\//.test(a));
+const url = findUrl(args);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
-if (!url || args.includes('--help')) { console.log('Usage: explore.mjs <url> [--max-pages 6] [--out ./explore-out] [--no-motion] [--no-db] [--wait 4000]'); process.exit(url ? 0 : 1); }
+if (!url || args.includes('--help')) { console.log('Usage: explore.mjs <url> [--max-pages 6] [--out ./explore-out] [--no-motion] [--no-db] [--wait 4000]\n  <url> 可省略 https://，例如：explore.mjs example.com'); process.exit(url ? 0 : 1); }
+const maxPages = intOpt(args, 'max-pages', 6, { min: 1, max: 500 }), waitMs = intOpt(args, 'wait', 4000, { min: 0, max: 60000 });
 
 const out = path.resolve(opt('out', './explore-out'));
 const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
@@ -39,10 +41,10 @@ const checks = await runChecks(url);
 printChecks(checks);
 if (checks.some((c) => c.level === 'fail')) { console.error('\n環境檢查未通過，請先依上方建議處理。'); process.exit(1); }
 
-const crawlOk = await run('爬取頁面、設計、內容、排版', 'crawl.mjs', [url, '--max-pages', opt('max-pages', '6'), '--out', siteRoot]);
+const crawlOk = await run('爬取頁面、設計、內容、排版', 'crawl.mjs', [url, '--max-pages', String(maxPages), '--out', siteRoot]);
 if (crawlOk) await run('整理設計包（tokens、Tailwind、W3C）', 'export-design.mjs', [siteDir]);
 let motionOk = false;
-if (!args.includes('--no-motion')) motionOk = await run('擷取 3D／動畫畫格', 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', opt('wait', '4000')]);
+if (!args.includes('--no-motion')) motionOk = await run('擷取 3D／動畫畫格', 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', String(waitMs)]);
 
 if (!args.includes('--no-db')) {
   console.log(`\n[${++n}/${total}] 存入資料庫`);
