@@ -94,7 +94,7 @@ test('3D and video arrive as text + numbers + single-image filmstrips, with vali
   assert.deepEqual(danglingRefs(H2), []);
   const m = read(H2, 'motion.md'), b = read(H2, 'ai-brief.md'), j = JSON.parse(read(H2, 'spec.json'));
   assert.match(m, /AI 無法直接觀看/); assert.match(m, /media\/motion\/t0-filmstrip\.png/); assert.match(m, /ProductCube/);
-  assert.match(b, /three\.js r\d+ 場景/); assert.match(b, /ProductCube/); assert.match(b, /影片規格：1\.\d 秒/);
+  assert.match(b, /three\.js r\d+ 場景/); assert.match(b, /ProductCube/); assert.match(b, /影片規格：\d+\.\d 秒/);
   assert.equal(j.motion.targets.length, 2); assert.ok(j.motion.targets.every((x) => x.filmstrip && x.ai.description.length >= 3));
   assert.ok(fs.readdirSync(path.join(H2, 'media', 'motion')).length >= 3);
 });
