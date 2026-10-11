@@ -24,7 +24,7 @@ site-explorer https://example.com
 
 You get a folder: double-click `dashboard.html` for the overview; give the whole `handoff/` folder to an AI and paste the prompt from `PROMPT.md` — it can start building pages and motion without you writing any briefing.
 
-> **Language note.** Output defaults to Traditional Chinese; add `--lang en` (or `SITE_EXPLORER_LANG=en`) and the console, reports, dashboard, handoff documents and PR comments are all English. The handoff entry points (`START-HERE.md`, `PROMPT.md`, `AI-PACKAGE.md`, the starter code) are English either way, and everything is plain text / JSON that any LLM reads fine.
+> **Language note.** Output defaults to Traditional Chinese; add `--lang en` (or `SITE_EXPLORER_LANG=en`) and the console, reports, dashboard, handoff documents and the issue text in PR comments are all English. The handoff entry points (`START-HERE.md`, `PROMPT.md`, `AI-PACKAGE.md`, the starter code) are English either way, and everything is plain text / JSON that any LLM reads fine.
 
 ## What it does
 
@@ -100,7 +100,7 @@ Results land in `./out`. The container is the sandbox, so Chromium runs without 
 
 ```bash
 site-explorer https://example.com --json --no-open > result.json   # stdout is one JSON document, progress goes to stderr
-site-explorer verify ./explore-out/handoff --json --min-score 70    # exits 2 when the score is too low
+site-explorer verify ./explore-out/handoff --json --min-score 70    # exits 2 when the score is too low (no gate without --min-score). The score measures layout — section height, light/dark structure, colour — not text or photos
 site-explorer mcp                                                   # MCP server (stdio)
 ```
 
@@ -133,7 +133,7 @@ jobs:
           min-health: 70                  # optional: fail below this health score
 ```
 
-A comment appears on the PR (and is updated in place on later pushes) with the score, the verdict, the difference from production, the top issues and their fixes; the dashboard and AI handoff are attached to the run as Artifacts. PRs from forks have a read-only token, so the comment is skipped and the result stays in the job summary. The comment is in English by default; set `lang: zh` for Traditional Chinese.
+A comment appears on the PR (and is updated in place on later pushes) with the score, the verdict, the difference from production, the top issues and their fixes; the dashboard and AI handoff are attached to the run as Artifacts. PRs from forks have a read-only token, so the comment is skipped and the result stays in the job summary. The comment frame (title, column names) is always English; `lang: zh` only switches the issue titles and fixes inside it to Traditional Chinese.
 
 ## Exploring pages behind a login
 
@@ -235,13 +235,13 @@ The whole package is relocatable: every file referenced in a document is inside 
 
 ## What the health check covers
 
-Indexing & crawling 25% · on-page SEO 20% · links 10% · performance 15% · mobile 10% · security & transport 10% · structured data & social 5% · AI-crawler friendliness 5%. Scoring has diminishing returns, and any *critical* problem (site blocked, whole site noindex, no HTTPS, expired certificate) caps the total at 55. **The score is a relative indicator, not Google's score**; it only covers the crawled pages (a sample); performance is lab data.
+Indexing & crawling 25% · on-page SEO 20% · links 10% · performance 15% · mobile 10% · security & transport 10% · structured data & social 5% · AI-crawler friendliness 5% (with `--a11y` an accessibility category of weight 10 is added and the others shrink proportionally). Scoring has diminishing returns, and any *critical* problem (site blocked, whole site noindex, no HTTPS, expired certificate) caps the total at 55. **The score is a relative indicator, not Google's score**; it only covers the crawled pages (a sample); performance is lab data.
 
 The report opens with a **verdict** (pass / conditional / fail). For automation: `site-explorer explore <url> --fail-on high` exits with code 4 when there are issues of that severity or worse. Run the same site again and the report lists new and fixed issues.
 
 ### Trackers, cookies, structured data, tablet/phone, before/after
 
-- **Trackers & cookies** — recognises 40+ services (Google Analytics/GTM, Meta Pixel, Hotjar…), lists cookies (name, who sets it, lifetime, Secure/HttpOnly) and whether a cookie banner exists. It looks at the state "before a new visitor clicks any consent button"; **only names and flags are stored, never cookie values**. Trackers without a banner become a finding (whether that is a violation is for the owner to judge).
+- **Trackers & cookies** — recognises nearly 40 services (39 today) (Google Analytics/GTM, Meta Pixel, Hotjar…), lists cookies (name, who sets it, lifetime, Secure/HttpOnly) and whether a cookie banner exists. It looks at the state "before a new visitor clicks any consent button"; **only names and flags are stored, never cookie values**. Trackers without a banner become a finding (whether that is a violation is for the owner to judge).
 - **Structured data** — beyond "is there any": required properties per type (Product, Article, FAQ, LocalBusiness…), `@context`, and markup that only exists after JavaScript runs.
 - **Tablet/phone, measured** — each page is measured at 1440 / 768 / 390: navigation style, side-by-side columns, type size, horizontal overflow, how much content a phone loses. Written into the report, dashboard and handoff — no guessed breakpoints.
 - **Before/after** — rerun the same site and `changes.md` is written automatically; for an old site vs a staging domain use `site-explorer history compare <old run> <new run> --md changes.md`. Pages are matched by *path*; it lists vanished URLs (need a 301), pages that became noindex, dropped descriptions, big text loss, lost structured data.

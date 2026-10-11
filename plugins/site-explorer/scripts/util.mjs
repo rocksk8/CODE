@@ -50,7 +50,7 @@ export async function readCappedBuffer(res, maxBytes = 5_000_000) {
 
 /** Loopback / private / link-local hosts: never fetched on behalf of a PUBLIC site's content (SSRF guard). */
 export function isInternalHost(host) {
-  let h = String(host).toLowerCase().replace(/^\[|\]$/g, '');
+  let h = String(host).toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, ''); // "localhost." is localhost
   // IPv4 hidden inside IPv6: ::ffff:127.0.0.1, ::ffff:7f00:1 (Node normalises to the hex form), ::127.0.0.1, 64:ff9b::a.b.c.d
   let mm = h.match(/^(?:0{0,4}:){2,6}(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/) || h.match(/^64:ff9b::(\d+\.\d+\.\d+\.\d+)$/);
   if (mm) h = mm[1];
@@ -67,12 +67,12 @@ import dns from 'node:dns/promises';
 const dnsCache = new Map();
 /** isInternalHost, plus: a public-looking NAME whose DNS answer is a private/loopback/link-local address (e.g. 169.254.169.254.nip.io) counts as internal. */
 export async function resolvesInternal(host) {
-  const h = String(host).toLowerCase().replace(/^\[|\]$/g, '');
+  const h = String(host).toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
   if (isInternalHost(h)) return true;
   if (/^[\d.]+$/.test(h) || h.includes(':')) return false; // an IP literal was already judged above
   if (dnsCache.has(h)) return dnsCache.get(h);
   let res = false;
-  try { const all = await Promise.race([dns.lookup(h, { all: true }), new Promise((_, rej) => setTimeout(() => rej(new Error('dns timeout')), 4000))]); res = all.some((a) => isInternalHost(a.address)); } catch { res = false; } // unresolvable: nothing to connect to
+  let timer; try { const all = await Promise.race([dns.lookup(h, { all: true }), new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('dns timeout')), 4000); timer.unref?.(); })]); res = all.some((a) => isInternalHost(a.address)); } catch { res = false; } finally { clearTimeout(timer); } // unresolvable: nothing to connect to
   if (dnsCache.size > 2000) dnsCache.clear();
   dnsCache.set(h, res); return res;
 }
@@ -81,7 +81,7 @@ export const mayFetch = (target, base) => { try { const t = new URL(target); if 
 
 /** Block every browser request (redirects, subresources) to loopback/private hosts when the site being explored is public. */
 export async function guardInternal(ctx, startUrl) {
-  let startInternal = false; try { startInternal = isInternalHost(new URL(startUrl).hostname); } catch {}
+  let startInternal = false; try { startInternal = await resolvesInternal(new URL(startUrl).hostname); } catch {} // a staging name that resolves to a private address is the user's own choice
   if (startInternal) return;
   await ctx.route('**/*', async (route) => {
     const u = route.request().url(); if (/^(data|blob|about):/.test(u)) return route.continue();
@@ -98,7 +98,7 @@ export async function gfetch(url, opts = {}, maxHops = 5) {
   const base = url; let cur = url;
   for (let i = 0; i <= maxHops; i++) {
     if (i > 0 && !mayFetch(cur, base)) throw new Error('blocked redirect to an internal address: ' + cur);
-    if (!isInternalHost(new URL(base).hostname) && await resolvesInternal(new URL(cur).hostname)) throw new Error('blocked: ' + new URL(cur).hostname + ' resolves to an internal address');
+    if (!(await resolvesInternal(new URL(base).hostname)) && await resolvesInternal(new URL(cur).hostname)) throw new Error('blocked: ' + new URL(cur).hostname + ' resolves to an internal address');
     const r = await fetch(cur, { ...opts, redirect: 'manual' });
     if (r.status >= 300 && r.status < 400 && r.headers.get('location')) {
       try { await r.body?.cancel(); } catch {}
@@ -119,7 +119,7 @@ export function stripMarkup(src) {
     let skipTo = -1;
     if (src.startsWith('<!--', lt)) { const e = src.indexOf('-->', lt + 4); skipTo = e < 0 ? src.length : e + 3; }
     else for (const t of ['script', 'style', 'noscript']) if (lower.startsWith('<' + t, lt) && /[\s>\/]/.test(lower[lt + t.length + 1] || '>')) { const e = noClose.has(t) ? -1 : lower.indexOf('</' + t, lt); if (e < 0) noClose.add(t); skipTo = e < 0 ? lt + 1 + t.length : (lower.indexOf('>', e) + 1 || src.length); break; }
-    if (skipTo < 0) { if (gt !== -1 && gt < lt) gt = src.indexOf('>', lt); skipTo = gt < 0 || gt - lt > 400 ? lt + 1 : gt + 1; }
+    if (skipTo < 0) { if (gt !== -1 && gt < lt) gt = src.indexOf('>', lt); skipTo = gt < 0 ? lt + 1 : gt + 1; }
     i = skipTo;
   }
   return out;

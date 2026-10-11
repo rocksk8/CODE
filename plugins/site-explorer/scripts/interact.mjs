@@ -48,7 +48,8 @@ export async function exploreStates(page, { outDir, maxSteps = 6, settleMs = 700
   const guard = (route) => { const rq = route.request(); if (rq.isNavigationRequest() && rq.frame() === page.mainFrame()) { let ok = false; try { ok = new URL(rq.url()).origin === startOrigin && allowed(rq.url()); } catch {} if (!ok) { blockedNav++; return route.abort('blockedbyclient'); } } return route.fallback(); };
   await page.route('**/*', guard);
   // a click must never change anything on the server: anything but a read is dropped while we interact
-  const readOnly = (route) => (['GET', 'HEAD', 'OPTIONS'].includes(route.request().method()) ? route.fallback() : route.abort('blockedbyclient'));
+  let blockedWrites = 0; // writes (POST/PUT/DELETE…) are refused; a page that needs one to show content may look broken in the recorded states
+  const readOnly = (route) => { if (['GET', 'HEAD', 'OPTIONS'].includes(route.request().method())) return route.fallback(); blockedWrites++; return route.abort('blockedbyclient'); };
   await page.route('**/*', readOnly);
   try {
     return await run();
@@ -81,7 +82,7 @@ export async function exploreStates(page, { outDir, maxSteps = 6, settleMs = 700
     if (next.id !== cur.id && !seenIds.has(next.id)) { seenIds.add(next.id); stalls = 0; cur = next; await record(action, label, next); log(_t`   互動 ${states.length - 1}：${action}${label ? _t('「') + label + _t('」') : ''} → 畫面改變`); }
     else { stalls++; if (stalls > 4) { stopped = 'nothingChanges'; break; } }
   }
-  fs.writeFileSync(path.join(outDir, 'states.json'), JSON.stringify({ states, stoppedBecause: stopped, blockedNavigations: blockedNav }, null, 2));
-  return { states, stoppedBecause: stopped, blockedNavigations: blockedNav };
+  fs.writeFileSync(path.join(outDir, 'states.json'), JSON.stringify({ states, stoppedBecause: stopped, blockedNavigations: blockedNav, blockedWrites }, null, 2));
+  return { states, stoppedBecause: stopped, blockedNavigations: blockedNav, blockedWrites };
   }
 }

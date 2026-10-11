@@ -98,7 +98,7 @@ docker run --rm -v "$PWD/out:/out" site-explorer https://example.com --out /out
 
 ```bash
 site-explorer https://example.com --json --no-open > result.json   # stdout 只有一份 JSON，進度走 stderr
-site-explorer verify ./explore-out/handoff --json --min-score 70    # 分數不夠就以結束代碼 2 結束
+site-explorer verify ./explore-out/handoff --json --min-score 70    # 分數不夠就以結束代碼 2 結束（不加 --min-score 就不設門檻）。分數衡量「版面」：區塊高度、明暗結構、顏色；不比對文字與照片
 site-explorer mcp                                                   # MCP 伺服器（stdio）
 ```
 
@@ -131,7 +131,7 @@ jobs:
           min-health: 70                  # 選填：健檢分數低於 70 就失敗
 ```
 
-PR 底下會出現（並在之後更新同一則）留言：分數、判定、與正式站的差異、前幾名問題與修法；儀表板和交接包會附在該次執行的 Artifacts。fork 來的 PR 沒有寫入權限，留言會略過，結果仍在 job summary。留言預設為英文，設 `lang: zh` 可改成繁體中文。
+PR 底下會出現（並在之後更新同一則）留言：分數、判定、與正式站的差異、前幾名問題與修法；儀表板和交接包會附在該次執行的 Artifacts。fork 來的 PR 沒有寫入權限，留言會略過，結果仍在 job summary。留言的外框（標題、欄位名稱）一律是英文；`lang: zh` 只會把其中的問題標題與修法改成繁體中文。
 
 ## 探索登入後的頁面
 
@@ -142,7 +142,7 @@ site-explorer https://example.com/ --storage-state ./auth-state.json
 
 - 密碼只打在網站自己的頁面，工具看不到；存下來的是登入狀態（cookie／localStorage），**等於你已登入**。檔案只有你讀得到（權限 600）；**不要放進 git、不要寄給別人，用完請刪除**。
 - 登入狀態值**不會**寫進任何輸出檔。
-- 會自動略過登出、刪除、取消、退訂等「點了會改資料」的連結；健檢的連結檢查任何時候都不會請求這類網址。
+- 爬取（登入與未登入都一樣）會略過登出、刪除、移除、退訂、停用帳號等路徑與 `?action=delete` 這類「點了會改資料」的連結；探索互動時也會拒絕所有非讀取（POST／PUT／DELETE）請求；健檢的連結檢查任何時候都不會請求這類網址。這是盡力而為的規則，不是保證——請只探索你信任的網站。
 - 登入後的截圖與文字可能含個人資料：交接包、儀表板都會標註「以登入狀態探索」，且**不會存進歷史資料庫**。請勿公開分享這些輸出。
 - 只用於你有權存取的帳號與網站。
 
@@ -230,20 +230,20 @@ AI 只能讀文字和圖片。所以：
 
 ## 網站健檢涵蓋
 
-索引與爬取 25%・頁面 SEO 20%・連結 10%・效能 15%・行動版 10%・安全與傳輸 10%・結構化資料與社群 5%・AI 爬蟲友善度 5%。評分有遞減效果，且出現「嚴重」問題（全站被擋、全站 noindex、無 HTTPS、憑證過期）時總分上限 55。**分數是相對指標，不是 Google 的評分**；只分析本次爬取的頁面（抽樣）；效能為實驗室數據。
+索引與爬取 25%・頁面 SEO 20%・連結 10%・效能 15%・行動版 10%・安全與傳輸 10%・結構化資料與社群 5%・AI 爬蟲友善度 5%（加 `--a11y` 時多一類「無障礙」權重 10，其他類別等比例縮小）。評分有遞減效果，且出現「嚴重」問題（全站被擋、全站 noindex、無 HTTPS、憑證過期）時總分上限 55。**分數是相對指標，不是 Google 的評分**；只分析本次爬取的頁面（抽樣）；效能為實驗室數據。
 
 健檢報告最上面有**驗收結論**（通過／有條件通過／不通過）。給自動化用：`site-explorer explore <網址> --fail-on high`，有「高」以上問題時以結束代碼 4 結束。再跑一次同一個網站，報告會列出「新出現／已修復」的問題。
 
 ### 追蹤碼、Cookie、結構化資料、手機／平板、改版前後
 
-- **追蹤碼與 Cookie**：辨識 Google Analytics／GTM、Meta Pixel、Hotjar 等 40 多種服務，列出 Cookie（名稱、誰設的、有效期、Secure／HttpOnly）與是否有 Cookie 橫幅。看的是「新訪客還沒點任何同意按鈕」時的狀態；**只記名稱與旗標，不記 Cookie 的值**。有追蹤碼卻沒橫幅會列為健檢問題（是否違規由負責人判斷）。
+- **追蹤碼與 Cookie**：辨識 Google Analytics／GTM、Meta Pixel、Hotjar 等 近 40 種服務（目前 39 種），列出 Cookie（名稱、誰設的、有效期、Secure／HttpOnly）與是否有 Cookie 橫幅。看的是「新訪客還沒點任何同意按鈕」時的狀態；**只記名稱與旗標，不記 Cookie 的值**。有追蹤碼卻沒橫幅會列為健檢問題（是否違規由負責人判斷）。
 - **結構化資料**：不只看「有沒有」，還檢查各類型（Product、Article、FAQ、LocalBusiness…）的必填欄位、`@context`，以及標記是否只在執行 JavaScript 後才出現。
 - **手機／平板實測**：在 1440／768／390 三種寬度各量一次——導覽是連結還是選單按鈕、並排欄數、字級、橫向溢出、手機版少掉多少內容；寫進報告、儀表板與交接包，不再用預設斷點猜。
 - **改版前後對照**：同一網站再跑一次會自動產生 `changes.md`；舊站與新站在不同網域（例如測試站）時用 `site-explorer history compare <舊 run> <新 run> --md 對照.md`，以「路徑」對應頁面，列出消失的網址（需要 301）、變成 noindex、description 被拿掉、文字大減、結構化資料不見等風險。交接包另有 `inventory.csv`（所有頁面清單，Excel 可開）。
 
 ### 交給 AI 直接開工（匯出）
 
-交接包（`handoff/`）現在從 **`START-HERE.md`** 開始：
+交接包（`handoff/`）現在從 **`START-HERE.md`** 開始（注意：`START-HERE.md`、`PROMPT.md`、`AI-PACKAGE.md` 與 starter 程式碼是英文，因為它們是要貼給 AI 用的；`ai-brief.md`、`DECISIONS.md`、`README.md` 等說明文件是繁體中文）：
 - **`PROMPT.md`**：可直接貼給 AI 的提示（A＝做頁面、B＝做動態／3D、C＝兩者）。
 - **`starter/`**：可執行的頁面骨架（HTML＋CSS，結構、欄數、間距、手機導覽都來自實測；文案與圖片一律是佔位）；以及 **`starter/motion/index.html`**——把每個擷取到的動畫／3D 元素跑起來（CSS keyframes、three.js 骨架，帶入實測的顏色、鏡頭、轉速），下面附參考畫格序列圖，AI 可逐張比對修正。
 - **`AI-PACKAGE.md`**：單一檔案版（說明＋簡報＋token＋起手 CSS／頁面＋動態程式），AI 讀不了資料夾時貼這個，再附上區塊截圖與畫格序列圖。
