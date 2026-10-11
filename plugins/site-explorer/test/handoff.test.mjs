@@ -142,3 +142,17 @@ test('with 3D captured: a runnable motion starter (valid JS, keyframes, page wir
   assert.match(read(H2, 'starter/index.html'), /motion\/motion\.css/); assert.match(read(H2, 'PROMPT.md'), /## B\. Build the motion/); assert.match(read(H2, 'starter/motion/index.html'), /filmstrip\.png/);
   assert.match(read(H2, 'START-HERE.md'), /starter\/motion\/index\.html/);
 });
+
+test('regenerating the package never destroys work done inside starter/ (edited copy is kept as starter.backup-*)', async (t) => {
+  if (skip(t)) return;
+  const h3 = path.join(tmp, 'h3'), args = ['--site', siteDir, '--out', h3];
+  assert.equal((await run('build-handoff.mjs', args)).status, 0);
+  assert.equal((await run('build-handoff.mjs', args)).status, 0);
+  assert.deepEqual(fs.readdirSync(h3).filter((f) => f.startsWith('starter.backup')), [], 'untouched starter/ is simply regenerated, no clutter');
+  fs.writeFileSync(path.join(h3, 'starter', 'index.html'), '<h1>MY WORK IN PROGRESS</h1>'); fs.writeFileSync(path.join(h3, 'starter', 'extra.css'), '/* mine */');
+  const r = await run('build-handoff.mjs', args); assert.equal(r.status, 0, r.out); assert.match(r.out, /starter\.backup-/);
+  const backups = fs.readdirSync(h3).filter((f) => f.startsWith('starter.backup')); assert.equal(backups.length, 1);
+  assert.equal(fs.readFileSync(path.join(h3, backups[0], 'index.html'), 'utf8'), '<h1>MY WORK IN PROGRESS</h1>'); assert.ok(fs.existsSync(path.join(h3, backups[0], 'extra.css')));
+  assert.match(fs.readFileSync(path.join(h3, 'starter', 'index.html'), 'utf8'), /STARTER SKELETON/, 'a fresh starter/ was generated');
+  assert.ok(!fs.existsSync(path.join(h3, 'starter', 'extra.css')));
+});

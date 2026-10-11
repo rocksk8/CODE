@@ -121,7 +121,9 @@ export function extractDesignerInPage() {
     }
     return { kind, why, content, tag: el.tagName.toLowerCase(), id: el.id || undefined, class: String(cls).trim().split(/\s+/).slice(0, 3).join(' ') || undefined,
       y: Math.round(r.top + scrollY), h: Math.round(r.height), w: Math.round(r.width), columns: rep, headings: h, buttons: btn, media, links,
-      heading: (el.querySelector('h1,h2,h3')?.innerText || '').trim().slice(0, 80), text: t.replace(/\s+/g, ' ').slice(0, 90) };
+      heading: (el.querySelector('h1,h2,h3')?.innerText || '').trim().slice(0, 80), text: t.replace(/\s+/g, ' ').slice(0, 90),
+      // how the section LOOKS (background colour / gradient, text colour, vertical padding): without this a dark pricing band or a coloured CTA cannot be rebuilt
+      style: { bg: s.backgroundColor, bgImage: /gradient\(/.test(s.backgroundImage) ? s.backgroundImage.slice(0, 400) : null, fg: s.color, padT: Math.round(parseFloat(s.paddingTop) || 0), padB: Math.round(parseFloat(s.paddingBottom) || 0) } };
   };
   const blocks = blocksEls.slice(0, 40).map((e, i, a) => classify(e, i, a.length));
 

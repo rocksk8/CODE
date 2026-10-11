@@ -15,6 +15,7 @@
 //     tokens/          css, W3C, Tokens Studio, tailwind, palette.svg
 //     media/           section crops, page shots, motion filmstrips, brand assets (all viewable by AI)
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +23,7 @@ import { cleanDeep, clean, BANNER, sanitizeDoc } from './untrusted.mjs';
 import { claimOutputDir, UnsafeOutputError } from './safe-out.mjs';
 import { privacyMarkdown } from './trackers.mjs';
 import { responsiveLine, responsiveMarkdown } from './responsive.mjs';
-import { pageHtml, starterCss, appJs, motionStarter, promptMd, startHereMd, aiPackageMd, slugOk } from './starter.mjs';
+import { pageHtml, starterCss, appJs, motionStarter, promptMd, startHereMd, aiPackageMd, slugOk, toHex } from './starter.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -32,6 +33,7 @@ if (!siteDir || !fs.existsSync(path.join(siteDir, 'site.json'))) { console.error
 const out = path.resolve(opt('out', './handoff'));
 const J = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const has = fs.existsSync;
+const hashTree = (dir) => { const out = {}; const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (e.name !== '.manifest.json') out[path.relative(dir, f).split(path.sep).join('/')] = crypto.createHash('sha1').update(fs.readFileSync(f)).digest('hex'); } }; walk(dir); return out; };
 
 // ------------------------------------------------------------------ load (everything that came from the website is untrusted: sanitise + quarantine on the way in)
 const suspects = [];
@@ -114,6 +116,14 @@ function pageType(p) {
 let previous;
 try { previous = claimOutputDir(out, 'handoff.json'); } // never delete files that are not ours; keep the user's DECISIONS.md
 catch (e) { if (e instanceof UnsafeOutputError) { console.error(e.message); process.exit(1); } throw e; }
+// starter/ is where the next person (or AI) WORKS: when the package is regenerated, keep any edited copy as starter.backup-<time> instead of deleting it
+{ const sd = path.join(out, 'starter'), mf = path.join(sd, '.manifest.json');
+  if (has(sd)) {
+    let changed = true;
+    try { const listed = JSON.parse(fs.readFileSync(mf, 'utf8')); const now = hashTree(sd); changed = Object.keys(now).some((k) => listed[k] !== now[k]) || Object.keys(listed).some((k) => !(k in now)); } catch {}
+    if (changed) { const dest = `${sd}.backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`; fs.renameSync(sd, dest); console.log(`  ⚠️ starter/ had been edited (or has no record): kept as ${path.basename(dest)}; a fresh starter/ was generated`); }
+    else fs.rmSync(sd, { recursive: true, force: true });
+  } }
 for (const d of ['tokens', 'media/sections', 'media/pages', 'media/motion', 'media/assets']) fs.mkdirSync(path.join(out, d), { recursive: true });
 const copy = (src, dst) => { if (has(src)) { fs.mkdirSync(path.dirname(dst), { recursive: true }); if (/\.(css|md|js)$/i.test(src)) fs.writeFileSync(dst, sanitizeDoc(fs.readFileSync(src, 'utf8'))); else fs.copyFileSync(src, dst); return true; } return false; };
 const rel = (p) => p.split(path.sep).join('/');
@@ -198,7 +208,7 @@ const spec = {
     url: p.url, path: new URL(p.url).pathname || '/', slug: p.slug, type: pageType(p),
     observed: { responsive: p.responsive || null, emptyPage: !!p.emptyPage, emptyDiag: p.emptyDiag || null, deep: p.deep || null, network: p.network || null, aria: p.aria || null, states: (p.states || []).map((s) => ({ index: s.index, action: s.action, label: s.label, textChars: s.textChars, text: s.text, shot: s.shotPath || null })) },
     meta: { title: p.seo?.title ?? p.title, description: p.seo?.description ?? null, canonical: p.seo?.canonical ?? null, lang: p.lang || p.seo?.lang || null, h1: p.seo?.h1 || [] },
-    sections: (p.designer?.blocks || []).map((b, i) => ({ index: i + 1, kind: b.kind, kindLabel: KIND[b.kind], purpose: PURPOSE[b.kind], why: b.why, y: b.y, height: b.h, columns: b.columns, headings: b.headings, buttons: b.buttons, media: b.media, image: b.image || null, content: b.content || [] })),
+    sections: (p.designer?.blocks || []).map((b, i) => ({ index: i + 1, kind: b.kind, kindLabel: KIND[b.kind], purpose: PURPOSE[b.kind], why: b.why, y: b.y, height: b.h, columns: b.columns, headings: b.headings, buttons: b.buttons, media: b.media, image: b.image || null, look: b.style || null, content: b.content || [] })),
     responsive: { desktopOverflow: !!p.layout?.desktopOverflow, tabletOverflow: !!p.layout?.tabletOverflow, mobileOverflow: !!p.layout?.mobileOverflow, mobile: p.seo?.mobile || null }, media: media.pages[p.slug],
     images: (p.content?.images || []).slice(0, 40).map((i) => ({ src: i.src, alt: i.alt, w: i.w, h: i.h })), forms: p.content?.forms || [],
   })),
@@ -310,17 +320,19 @@ const hasMotionStarter = !!(motion && motion.targets.length);
 const starterDir = path.join(out, 'starter'); fs.mkdirSync(starterDir, { recursive: true });
 const ms = hasMotionStarter ? motionStarter(motion, { pageUrlLabel: host }) : null;
 const starterPages = [];
+const btnBg = ((comps && comps.buttons) || [])[0] ? toHex(comps.buttons[0].backgroundColor)?.hex || null : null;
 const usedNames = new Set(['index']), mobileToggle = respPage ? respPage.responsive?.mobile?.nav === 'toggle' : false;
 for (const p of live.slice(0, 30)) {
   let name = 'index';
   if (p !== home) { const base = slugOk(p.slug) === 'index' ? 'page' : slugOk(p.slug); name = base; for (let n = 2; usedNames.has(name); n++) name = `${base.slice(0, 50)}-${n}`; } // unique, never overwrites index.html
   usedNames.add(name);
-  fs.writeFileSync(path.join(starterDir, `${name}.html`), pageHtml(p, { title: p === home ? 'Home' : name, motion: !!ms && p === home, mobileToggle }));
+  fs.writeFileSync(path.join(starterDir, `${name}.html`), pageHtml(p, { title: p === home ? 'Home' : name, motion: !!ms && p === home, mobileToggle, btnBg }));
   starterPages.push(`${name}.html`);
 }
 fs.writeFileSync(path.join(starterDir, 'styles.css'), starterCss({ tok, comps, grid: D.grid, responsive: respPage?.responsive, mobileToggle }));
 fs.writeFileSync(path.join(starterDir, 'app.js'), appJs);
 if (ms) { fs.mkdirSync(path.join(starterDir, 'motion'), { recursive: true }); fs.writeFileSync(path.join(starterDir, 'motion', 'motion.css'), ms.css); fs.writeFileSync(path.join(starterDir, 'motion', 'motion.js'), ms.js); fs.writeFileSync(path.join(starterDir, 'motion', 'index.html'), ms.html); }
+fs.writeFileSync(path.join(starterDir, '.manifest.json'), JSON.stringify(hashTree(starterDir), null, 2)); // lets the next run tell untouched files from edited ones
 const todayS = new Date().toISOString().slice(0, 10);
 const startHere = startHereMd({ host, srcUrl: site.startUrl, pages: starterPages.map((f) => `starter/${f}`), hasMotion: !!ms, today: todayS });
 fs.writeFileSync(path.join(out, 'START-HERE.md'), startHere);

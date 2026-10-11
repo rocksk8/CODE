@@ -12,26 +12,57 @@ const slugOk = (s) => String(s || 'page').replace(/[^a-z0-9._-]/gi, '_').slice(0
 const POOL = 'Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua'.split(' ');
 const ph = (n, unit = 'word') => (n > 0 ? Array.from({ length: Math.min(n, 40) }, (_, i) => POOL[i % POOL.length]).join(' ').replace(/^./, (c) => c.toUpperCase()) + (unit === 'sentence' ? '.' : '') : 'Lorem ipsum');
 
+
+// ------------------------------------------------------------------ section look (measured background / gradient / text colour / padding)
+const RGB = /^rgba?\(\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*(?:[,/]\s*([\d.]+%?)\s*)?\)$/;
+export function toHex(v) {
+  const m = String(v || '').trim().match(RGB); if (!m) return null;
+  const a = m[4] == null ? 1 : m[4].endsWith('%') ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+  if (![m[1], m[2], m[3]].every((x) => +x <= 255) || !(a >= 0 && a <= 1)) return null;
+  const h = (x) => Number(x).toString(16).padStart(2, '0');
+  return { hex: `#${h(m[1])}${h(m[2])}${h(m[3])}${a < 1 ? h(Math.round(a * 255)) : ''}`, alpha: a, lum: (0.2126 * m[1] + 0.7152 * m[2] + 0.0722 * m[3]) / 255 };
+}
+function splitTop(s) { const out = []; let d = 0, cur = ''; for (const c of s) { if (c === '(') d++; if (c === ')') d--; if (c === ',' && d === 0) { out.push(cur.trim()); cur = ''; } else cur += c; } if (cur.trim()) out.push(cur.trim()); return out; }
+function safeGradient(v) { // rebuilt from parsed pieces only: angle/direction + colour stops
+  const m = String(v || '').match(/^linear-gradient\((.*)\)$/); if (!m) return null;
+  const parts = splitTop(m[1]); if (parts.length < 2 || parts.length > 8) return null;
+  let head = ''; if (/^-?\d+(\.\d+)?deg$/.test(parts[0]) || /^to (top|bottom|left|right)( (top|bottom|left|right))?$/.test(parts[0])) head = parts.shift() + ', ';
+  const stops = parts.map((p) => { const q = p.match(/^(rgba?\([^)]*\))\s*(\d{1,3}(?:\.\d+)?%)?$/); const c = q && toHex(q[1]); return c ? c.hex + (q[2] ? ' ' + q[2] : '') : null; });
+  return stops.length >= 2 && stops.every(Boolean) ? `linear-gradient(${head}${stops.join(', ')})` : null;
+}
+/** -> { style: 'inline css vars', dark: bool } — only validated values, nothing copied from the source as text */
+function blockLook(b) {
+  const st = b && b.style; if (!st || typeof st !== 'object') return { style: '', dark: false };
+  const bg = toHex(st.bg), grad = safeGradient(st.bgImage), fg = toHex(st.fg), v = [];
+  const solid = bg && bg.alpha >= 0.05 ? bg : null; if (solid) v.push(`--sec-bg:${solid.hex}`); if (grad) v.push(`--sec-img:${grad}`);
+  if (fg && fg.alpha >= 0.5) v.push(`--sec-fg:${fg.hex}`);
+  const pt = num(st.padT, -1, 0, 300), pb = num(st.padB, -1, 0, 300); if (pt >= 0) v.push(`--sec-pt:${Math.round(pt)}px`); if (pb >= 0) v.push(`--sec-pb:${Math.round(pb)}px`);
+  const h = Math.round(num(b.h, 0, 0, 900)); if (h) v.push(`--ref-h:${h}`);
+  return { style: v.length ? ` style="${v.join(';')}"` : '', dark: !!(solid && solid.lum < 0.4), hex: solid ? solid.hex : null };
+}
+
 // ------------------------------------------------------------------ pages
 const count = (b, re) => (b.content || []).filter((c) => re.test(c.t)).length;
 const mediaSlot = (ratio, label = 'Image') => `<div class="media-slot" style="aspect-ratio:${ratio}" role="img" aria-label="${label} placeholder"></div>`;
 const btn = (i, label) => `<a class="btn ${i === 0 ? 'btn--primary' : 'btn--ghost'}" href="#">${label}</a>`;
 
-function sectionHtml(b, i, { slug, nav, mobileToggle, st = { navDone: false, h1Done: false } }) {
+function sectionHtml(b, i, { slug, nav, mobileToggle, btnBg = null, st = { navDone: false, h1Done: false } }) {
   const kind = /^[a-z-]+$/.test(String(b.kind)) ? b.kind : 'content';
   const cols = Math.min(6, Math.max(1, num(b.columns, 1)));
   const h = Math.round(num(b.h, 0, 0, 5000)), heads = Math.max(0, num(b.headings, 0, 0, 40)), buttons = Math.max(0, num(b.buttons, 0, 0, 6)), medias = Math.max(0, num(b.media, 0, 0, 12));
   const ref = b.image && /^media\/[\w./-]+$/.test(b.image) ? `../${b.image}` : null;
   const note = `<!-- ${i + 1}. ${kind}${ref ? ` | reference image: ${ref}` : ''} | measured height ≈ ${h}px | columns ${cols} | headings ${heads} | buttons ${buttons} | media ${medias} -->`;
-  const open = (cls, extra = '') => `${note}\n<section class="sec sec--${kind}" data-section="${kind}" data-ref-height="${h}"${extra}>`;
+  const look = blockLook(b);
+  const invert = !!(look.hex && btnBg && look.hex.toLowerCase() === btnBg.toLowerCase()); // a brand-coloured button on a brand-coloured band would vanish: invert it there
+  const open = (cls, extra = '') => `${note}\n<section class="sec sec--${kind}${look.dark ? ' sec--dark' : ''}${invert ? ' sec--invert' : ''}" data-section="${kind}" data-ref-height="${h}"${look.style}${extra}>`;
   const actions = buttons ? `<div class="actions">${Array.from({ length: Math.min(buttons, 3) }, (_, k) => btn(k, k === 0 ? 'Primary action' : 'Secondary action')).join('')}</div>` : '';
   switch (kind) {
     case 'header': {
       const links = Math.max(2, Math.min(8, nav)), nid = st.navDone ? '' : 'site-nav', first = !st.navDone; st.navDone = true;
-      return `${note}\n<header class="site-header" data-section="header" data-ref-height="${h}"><div class="container bar"><a class="brand" href="#">Brand</a>${mobileToggle && first ? '\n  <button class="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="site-nav">Menu</button>' : ''}\n  <nav${nid ? ` id="${nid}"` : ''} class="site-nav">${Array.from({ length: links }, (_, k) => `<a href="#">Link ${k + 1}</a>`).join('')}</nav></div></header>`;
+      return `${note}\n<header class="site-header${look.dark ? ' sec--dark' : ''}" data-section="header" data-ref-height="${h}"${look.style}><div class="container bar"><a class="brand" href="#">Brand</a>${mobileToggle && first ? '\n  <button class="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="site-nav">Menu</button>' : ''}\n  <nav${nid ? ` id="${nid}"` : ''} class="site-nav">${Array.from({ length: links }, (_, k) => `<a href="#">Link ${k + 1}</a>`).join('')}</nav></div></header>`;
     }
     case 'footer':
-      return `${note}\n<footer class="site-footer" data-section="footer" data-ref-height="${h}"><div class="container grid grid--${Math.min(cols, 4) || 3}">${Array.from({ length: Math.min(Math.max(cols, 2), 4) }, (_, k) => `<div><h4>Column ${k + 1}</h4><ul><li><a href="#">Link</a></li><li><a href="#">Link</a></li><li><a href="#">Link</a></li></ul></div>`).join('')}</div><div class="container fine">© Your Company</div></footer>`;
+      return `${note}\n<footer class="site-footer${look.dark ? ' sec--dark' : ''}" data-section="footer" data-ref-height="${h}"${look.style}><div class="container grid grid--${Math.min(cols, 4) || 3}">${Array.from({ length: Math.min(Math.max(cols, 2), 4) }, (_, k) => `<div><h4>Column ${k + 1}</h4><ul><li><a href="#">Link</a></li><li><a href="#">Link</a></li><li><a href="#">Link</a></li></ul></div>`).join('')}</div><div class="container fine">© Your Company</div></footer>`;
     case 'hero':
       return `${open()}<div class="container hero-grid${medias ? ' has-media' : ''}"><div class="copy">${st.h1Done ? `<h2>${ph(5)}</h2>` : (st.h1Done = true, `<h1>${ph(5)}</h1>`)}<p class="lead">${ph(18, 'sentence')}</p>${actions || btn(0, 'Primary action')}</div>${medias ? mediaSlot('4 / 3', 'Hero image') : ''}</div></section>`;
     case 'faq':
@@ -60,19 +91,20 @@ function sectionHtml(b, i, { slug, nav, mobileToggle, st = { navDone: false, h1D
 }
 
 /** One page -> a complete HTML document. `p.designer.blocks[].image` already points inside the handoff folder. */
-export function pageHtml(p, { title, cssHref = 'styles.css', jsHref = 'app.js', motion = false, mobileToggle: mt } = {}) {
+export function pageHtml(p, { title, cssHref = 'styles.css', jsHref = 'app.js', motion = false, mobileToggle: mt, btnBg = null } = {}) {
   const blocks = (p.designer && p.designer.blocks) || [];
   const header = blocks.find((b) => b.kind === 'header');
   const nav = header ? count(header, /^a$/) : 4;
   const mobileToggle = mt != null ? !!mt : !!(p.responsive && p.responsive.mobile && p.responsive.mobile.nav === 'toggle');
   const st = { navDone: false, h1Done: false }; // one nav id and one h1 per page, however many header/hero-like blocks were measured
-  const parts = blocks.map((b, i) => sectionHtml(b, i, { slug: p.slug, nav, mobileToggle, st }));
+  const parts = blocks.map((b, i) => sectionHtml(b, i, { slug: p.slug, nav, mobileToggle, btnBg, st }));
   if (!parts.some((x) => /<h1[ >]/.test(x))) { // every page needs exactly one h1: put it in the first real section
     const k = blocks.findIndex((b) => b.kind !== 'header' && b.kind !== 'footer');
     if (k >= 0) parts[k] = parts[k].replace(/(<div class="container[^"]*">)/, '$1<h1>Page heading</h1>');
   }
   const body = parts.join('\n\n');
-  return `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${comment(title || 'Page')} — starter</title>\n<link rel="stylesheet" href="${cssHref}">${motion ? '\n<link rel="stylesheet" href="motion/motion.css">' : ''}\n</head>\n<body>\n<!-- STARTER SKELETON: structure and spacing are measured from the reference site; ALL text and images are placeholders. Replace them with your own content.\n     Each section has a comment with its reference image (../media/sections/...). Open it, compare, then refine the section. -->\n\n${body || '<main class="container"><h1>Page</h1></main>'}\n\n<script src="${jsHref}"></script>${motion ? '\n<script type="module" src="motion/motion.js"></script>' : ''}\n</body>\n</html>\n`;
+  const lang = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}$/.test(String(p.lang || '')) ? p.lang : 'en';
+  return `<!doctype html>\n<html lang="${lang}">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${comment(title || 'Page')} — starter</title>\n<link rel="stylesheet" href="${cssHref}">${motion ? '\n<link rel="stylesheet" href="motion/motion.css">' : ''}\n</head>\n<body>\n<!-- STARTER SKELETON: structure and spacing are measured from the reference site; ALL text and images are placeholders. Replace them with your own content.\n     Each section has a comment with its reference image (../media/sections/...). Open it, compare, then refine the section. -->\n\n${body || '<main class="container"><h1>Page</h1></main>'}\n\n<script src="${jsHref}"></script>${motion ? '\n<script type="module" src="motion/motion.js"></script>' : ''}\n</body>\n</html>\n`;
 }
 
 // ------------------------------------------------------------------ styles
@@ -94,13 +126,16 @@ export function starterCss({ tok, comps, grid, responsive, mobileToggle = false 
 
 :root { --container: ${container}px; --gap: ${gap}; --btn-bg: ${v(b0.backgroundColor, 'var(--color-brand)')}; --btn-fg: ${v(b0.color, 'var(--color-text-inverse)')}; --btn-radius: ${v(b0.borderRadius, 'var(--radius-1, 8px)')}; --btn-pad: ${v(b0.padding, '12px 24px')}; --btn-weight: ${v(b0.fontWeight, '600')}; --btn-hover-bg: ${v(hov && hov.backgroundColor, 'var(--btn-bg)')}; --card-radius: ${v(card.borderRadius, 'var(--radius-1, 8px)')}; --card-shadow: ${v(card.boxShadow === 'none' ? '' : card.boxShadow, 'none')}; --card-pad: ${v(card.padding, '24px')}; --input-radius: ${v(inp.borderRadius, '6px')}; }
 *,*::before,*::after { box-sizing: border-box; }
-body { margin: 0; background: var(--color-background); color: var(--color-text); font-family: var(--font-body); font-size: var(--text-p, 16px); line-height: 1.6; }
-h1,h2,h3,h4 { font-family: var(--font-heading); line-height: 1.15; margin: 0 0 .5em; }
+body { margin: 0; background: var(--color-background, #fff); color: var(--color-text, #222); font-family: var(--font-body, system-ui, sans-serif); font-size: var(--text-p, 16px); line-height: 1.6; }
+h1,h2,h3,h4 { font-family: var(--font-heading, system-ui, sans-serif); line-height: 1.15; margin: 0 0 .5em; }
 h1 { font-size: var(--text-h1, 48px); } h2 { font-size: calc(var(--text-h1, 48px) * .66); } h3 { font-size: calc(var(--text-h1, 48px) * .45); }
 img { max-width: 100%; height: auto; }
 .container { max-width: var(--container); margin-inline: auto; padding-inline: var(--space-4, 24px); }
 .container.narrow { max-width: 640px; } .center { text-align: center; }
-.sec { padding-block: var(--space-5, 48px); }
+.sec { padding-top: var(--sec-pt, var(--space-5, 48px)); padding-bottom: var(--sec-pb, var(--space-5, 48px)); background-color: var(--sec-bg, transparent); background-image: var(--sec-img, none); color: var(--sec-fg, inherit); }
+.sec--invert .btn--primary { background: var(--sec-fg, #fff); color: var(--sec-bg, #000); }
+.site-footer ul { list-style: none; padding: 0; margin: 0; } .site-footer li { margin: 4px 0; }
+.sec--dark .card { background: rgb(255 255 255 / .06); border-color: rgb(255 255 255 / .14); } .sec--dark a:not(.btn) { color: inherit; } .sec--dark .media-slot, .sec--dark .logo-slot { background: rgb(255 255 255 / .12); }
 .grid { display: grid; gap: var(--gap); } .grid--1 { grid-template-columns: 1fr; }
 .grid--2 { grid-template-columns: repeat(2, 1fr); } .grid--3 { grid-template-columns: repeat(3, 1fr); } .grid--4 { grid-template-columns: repeat(4, 1fr); }
 .btn { display: inline-block; padding: var(--btn-pad); border-radius: var(--btn-radius); font-weight: var(--btn-weight); text-decoration: none; border: 2px solid transparent; transition: background-color .2s, transform .2s; }
@@ -114,12 +149,14 @@ img { max-width: 100%; height: auto; }
 .stat strong { display: block; font-size: 2.2em; font-family: var(--font-heading); }
 .brand { font-weight: 700; font-family: var(--font-heading); color: inherit; text-decoration: none; }
 a { color: var(--color-brand); }
+.site-header { background-color: var(--sec-bg, transparent); background-image: var(--sec-img, none); color: var(--sec-fg, inherit); }
 .site-header .bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 16px; }
 .site-nav { display: flex; gap: 20px; } .site-nav a { color: inherit; text-decoration: none; } .nav-toggle { display: none; }
-.site-footer { background: var(--color-surface-dark, #111); color: #fff; padding-block: 48px; } .site-footer a { color: inherit; } .site-footer .fine { margin-top: 24px; opacity: .7; font-size: .9em; }
+.site-footer { background-color: var(--sec-bg, var(--color-surface-dark, #111)); background-image: var(--sec-img, none); color: var(--sec-fg, #fff); padding-top: var(--sec-pt, 48px); padding-bottom: var(--sec-pb, 48px); } .site-footer a { color: inherit; } .site-footer .fine { margin-top: 24px; opacity: .7; font-size: .9em; }
 form label { display: block; margin-bottom: 14px; } form input, form textarea { display: block; width: 100%; padding: 10px 12px; border-radius: var(--input-radius); border: 1px solid color-mix(in srgb, var(--color-text) 30%, transparent); font: inherit; }
 details { border-bottom: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent); padding-block: 12px; } summary { cursor: pointer; font-weight: 600; }
 
+@media (min-width: ${tabletMax + 1}px) { .sec { min-height: calc(var(--ref-h, 0) * 1px); } } /* section heights measured at desktop width; phones and tablets size to their content */
 @media (max-width: ${tabletMax}px) { .grid--3, .grid--4 { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: ${mobileMax}px) {
   .grid--2, .grid--3, .grid--4, .hero-grid.has-media { grid-template-columns: 1fr; }

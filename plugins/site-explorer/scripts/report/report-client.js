@@ -437,7 +437,7 @@ function openPage(p){
   const render=()=>{
     sec.innerHTML='<div class="card"><h3>讓接手的 AI 直接開始做</h3><div class="steps"><div><b>1</b> 選要 AI 做什麼</div><div><b>2</b> 複製提示貼給 AI</div><div><b>3</b> 把資料夾（或下面的單一檔案）給它</div></div>'+
     '<div class="seg" id="xseg">'+[['A','做頁面'],['B','做動態／3D'],['C','兩者（先頁面再動態）']].filter(([x])=>x==='A'||k.hasMotion).map(([x,l])=>'<button data-x="'+x+'" aria-pressed="'+(cur===x)+'">'+l+'</button>').join('')+'</div>'+
-    '<pre class="prompt" id="xprompt">'+esc(mk(cur))+'</pre><div class="xact"><button class="go" id="xcopy">複製提示</button><label class="hint"><input type="checkbox" id="xpath" '+(withPath?'checked':'')+'> 附上資料夾位置（AI 能讀你電腦檔案時，例如 Claude Code）</label></div>'+
+    '<pre class="prompt" id="xprompt">'+(mk(cur).trim()?esc(mk(cur)):esc('（找不到這個目標的提示，請直接開啟 handoff 資料夾裡的 PROMPT.md）'))+'</pre><div class="xact"><button class="go" id="xcopy">複製提示</button><label class="hint"><input type="checkbox" id="xpath" '+(withPath?'checked':'')+'> 附上資料夾位置（AI 能讀你電腦檔案時，例如 Claude Code）</label></div>'+
     '<div class="row"><span>資料夾</span><span><code>'+esc(k.dir)+'</code> <button class="chip" data-cp="'+esc(k.dir)+'">複製路徑</button></span></div>'+
     (k.hasMotion?'<div class="row"><span>預覽動態起手式</span><span><code>npx serve "'+esc(k.dir)+'"</code> <button class="chip" data-cp="npx serve &quot;'+esc(k.dir)+'&quot;">複製</button> <span class="hint">→ 開 /starter/motion/</span></span></div>':'')+'</div>'+
     '<div class="card" style="margin-top:14px"><h3>交給 AI 之前</h3>'+ok.map(x=>'<p class="say">✅ '+x+'</p>').join('')+issues.map(([t,x])=>'<p class="say">'+(t==='bad'?'❌':'⚠️')+' '+x+'</p>').join('')+'</div>'+
