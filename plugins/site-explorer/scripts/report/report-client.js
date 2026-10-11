@@ -42,7 +42,7 @@ function show(k){if(k==='data'&&!document.body.classList.contains('detail'))setD
   if(T&&(T.contrastAudit||[]).some(a=>!a.pass))steps.push([_t('修正對比不足'),_t('有 ')+T.contrastAudit.filter(a=>!a.pass).length+_t(' 項文字／按鈕對比低於 4.5:1，改版時建議調深前景或底色')]);
   if(M&&M.targets.length)steps.push([_t('理解動畫'),_t('到「3D／動畫」分頁播放畫格；要推算節奏與觸發方式，請 Claude 逐張檢視畫格並對照 motion.json')]);
   if(D.history&&D.history.runs.length>1)steps.push([_t('追蹤改版'),_t('這個網站已有 ')+D.history.runs.length+_t(' 次紀錄，見「歷史」分頁')]);
-  steps.push([_t('比較其他網站'),_t('終端機：<code>node scripts/db.mjs search --lib three</code>、<code>node scripts/db.mjs list</code>')]);
+  steps.push([_t('比較其他網站'),_t('終端機：<code>site-explorer history search --lib three</code>、<code>site-explorer history list</code>')]);
   o.insertAdjacentHTML('beforeend',_t('<div class="card" style="margin-top:14px"><h3>下一步可以做什麼</h3>')+steps.map(x=>'<p class="say"><b>'+x[0]+'</b><br><span class="hint">'+x[1]+'</span></p>').join('')+'</div>');
 
   if(S){const rb=(S.robotsDisallow||[]);

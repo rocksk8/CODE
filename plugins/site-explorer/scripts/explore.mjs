@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runChecks, printChecks } from './doctor.mjs';
+import { warnNoSandboxOnce } from './launch.mjs';
 import { openDb, ingest, runsForHost, renderChangesMd, DB_PATH } from './db.mjs';
 import { findUrl, findUrls, intOpt, sameSite, normalizeFlags } from './args.mjs';
 import { isInside, checkExploreOut, UnsafeOutputError } from './safe-out.mjs';
@@ -78,9 +79,13 @@ function run(label, script, a) {
 }
 
 console.log(_t`探索 ${url}\n輸出：${out}\n`);
+warnNoSandboxOnce(); // once for the whole run: the stages below inherit the flag
 const checks = await runChecks(url);
 printChecks(checks);
-if (checks.some((c) => c.level === 'fail')) { console.error(_t('\n環境檢查未通過，請先依上方建議處理。')); process.exit(1); }
+if (checks.some((c) => c.level === 'fail')) {
+  try { const left = fs.readdirSync(out); if (left.length === 1 && left[0] === 'ABOUT-THIS-FOLDER.md') fs.rmSync(out, { recursive: true, force: true }); } catch {} // do not leave an empty folder behind
+  console.error(_t('\n環境檢查未通過，請先依上方建議處理。')); process.exit(1);
+}
 
 const crawlOk = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
 if (crawlOk) await run(_t('整理設計包（tokens、Tailwind、W3C）'), 'export-design.mjs', [siteDir]);
@@ -88,7 +93,8 @@ let healthOk = false;
 if (crawlOk && args.includes('--a11y')) await run(_t('無障礙檢查（axe-core）'), 'a11y.mjs', ['--site', siteDir, ...authArgs, ...(args.includes('--max-pages') ? ['--max-pages', String(maxPages)] : [])]);
 if (crawlOk && !args.includes('--no-health')) healthOk = await run(_t('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）'), 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
 let motionOk = false;
-if (!args.includes('--no-motion')) motionOk = await run(_t('擷取 3D／動畫畫格'), 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])]);
+if (!crawlOk && !args.includes('--no-motion')) console.log(_t`\n沒有任何頁面被爬取，略過其餘階段。請檢查網址有沒有打錯、網路是否正常，或執行：site-explorer doctor ${url}`);
+else if (!args.includes('--no-motion')) motionOk = await run(_t('擷取 3D／動畫畫格'), 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])]);
 
 // 3D／motion is per page: also capture the other crawled pages (--motion-pages N, default 5 pages in total; 1 = only the start page)
 if (!args.includes('--no-motion') && crawlOk) {

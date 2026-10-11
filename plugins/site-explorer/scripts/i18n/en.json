@@ -363,7 +363,7 @@
 "（尚無）": "(none yet)",
 "## 擷取紀錄（Provenance）": "## Capture record (provenance)",
 "項目": "Item",
-"內容": "Value",
+"內容": "Content",
 "來源網址": "Source URL",
 "擷取時間": "Captured at",
 "工具版本": "Tool version",
@@ -457,7 +457,6 @@
 "   (互動探索略過：": "   (interaction exploration skipped: ",
 "\n沒有成功爬取任何頁面。": "\nNo pages were crawled successfully.",
 "原因：robots.txt 不允許爬取此網站（{}）。已依網站設定停止；若你擁有此網站，請調整 robots.txt，或改用 Playwright MCP 手動瀏覽。": "Reason: robots.txt does not allow crawling this site ({}). Stopped, as the site requests; if you own the site, adjust robots.txt, or browse manually with Playwright MCP.",
-"原因：頁面無法載入（網址錯誤、逾時或被擋住）。請先執行 doctor.mjs <網址> 確認連線。": "Reason: the page could not be loaded (wrong URL, timeout or blocked). Run doctor.mjs <url> first to check the connection.",
 "# 網站探索報告：{}": "# Site exploration report: {}",
 "爬取 {} 頁，耗時 {}s，時間 {}": "Crawled {} page(s) in {}s, at {}",
 "> ⚠️ **有頁面在等待後仍幾乎是空的**（": "> ⚠️ **Some pages were still almost empty after waiting** (",
@@ -1450,7 +1449,6 @@
 "這個網站已有 ": "This site already has ",
 " 次紀錄，見「歷史」分頁": " record(s); see the \"History\" tab",
 "比較其他網站": "Compare other sites",
-"終端機：<code>node scripts/db.mjs search --lib three</code>、<code>node scripts/db.mjs list</code>": "Terminal: <code>node scripts/db.mjs search --lib three</code>, <code>node scripts/db.mjs list</code>",
 "<div class=\"card\" style=\"margin-top:14px\"><h3>下一步可以做什麼</h3>": "<div class=\"card\" style=\"margin-top:14px\"><h3>What you can do next</h3>",
 "<div class=\"card\" style=\"margin-top:14px\"><h3>探索紀錄（可稽核）</h3>": "<div class=\"card\" style=\"margin-top:14px\"><h3>Exploration record (auditable)</h3>",
 "<div class=\"spec\"><small>時間</small><span>": "<div class=\"spec\"><small>Time</small><span>",
@@ -1908,5 +1906,10 @@
 "頁尾附近的短文＋按鈕": "short text + button near the footer",
 "未符合特定版型": "no specific pattern matched",
 "重複 {} 個卡片": "{} repeated cards",
-"被擋住": "were blocked"
+"被擋住": "were blocked",
+"無法開啟 {}：{}": "Cannot open {}: {}",
+"沒有 ffmpeg，略過錄影（只擷取畫格）。要錄影請執行：site-explorer setup --with-ffmpeg": "No ffmpeg, so video recording is skipped (frames only). To record video run: site-explorer setup --with-ffmpeg",
+"\n沒有任何頁面被爬取，略過其餘階段。請檢查網址有沒有打錯、網路是否正常，或執行：site-explorer doctor {}": "\nNo pages could be crawled, so the other stages are skipped. Check the address for typos and the network, or run: site-explorer doctor {}",
+"原因：頁面無法載入（網址錯誤、逾時或被擋住）。請執行：site-explorer doctor <網址> 確認連線。": "Reason: the page could not be loaded (wrong URL, timeout or blocked). Run: site-explorer doctor <url> to check the connection.",
+"終端機：<code>site-explorer history search --lib three</code>、<code>site-explorer history list</code>": "Terminal: <code>site-explorer history search --lib three</code>, <code>site-explorer history list</code>"
 }

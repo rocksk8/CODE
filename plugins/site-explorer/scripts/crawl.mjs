@@ -544,7 +544,7 @@ await browser.close();
 if (pages.length === 0) {
   console.error(_t('\n沒有成功爬取任何頁面。'));
   if (skippedByRobots.length) console.error(_t`原因：robots.txt 不允許爬取此網站（${robotsList().join(', ')}）。已依網站設定停止；若你擁有此網站，請調整 robots.txt，或改用 Playwright MCP 手動瀏覽。`);
-  else console.error(_t('原因：頁面無法載入（網址錯誤、逾時或被擋住）。請先執行 doctor.mjs <網址> 確認連線。'));
+  else console.error(_t('原因：頁面無法載入（網址錯誤、逾時或被擋住）。請執行：site-explorer doctor <網址> 確認連線。'));
   process.exit(3);
 }
 
