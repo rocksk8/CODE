@@ -8,9 +8,9 @@ const toast=(m)=>{const t=$('#toast');t.textContent=m;t.classList.add('on');setT
 const copy=(v)=>{navigator.clipboard?.writeText(v);toast('已複製 '+v)};
 $('#sub').textContent=(S?.startUrl||M?.url||'')+' · '+new Date(D.generatedAt).toLocaleString();
 
-const tabs=[['overview','總覽'],['design','設計'],['layout','排版'],['content','內容'],['motion','3D／動畫'],['edit','編輯方式'],['health','健檢'],['history','歷史'],['about','關於']].filter(([k])=>k==='overview'||(k==='health'?D.health:k==='motion'?(M||D.motionPages):k==='history'?(D.history&&D.history.runs.length>0):k==='about'?true:S));
-tabs.forEach(([k,l],i)=>{const b=el('<button role="tab">'+l+'</button>');b.dataset.k=k;b.onclick=()=>show(k);$('#tabs').append(b)});
-function show(k){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='s-'+k));document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.k===k));history.replaceState(null,'','#'+k)}
+const tabs=[['overview','總覽'],['design','設計'],['layout','排版'],['content','內容'],['motion','3D／動畫'],['edit','編輯方式'],['health','健檢'],['history','歷史'],['export','匯出給 AI'],['data','詳細資料'],['about','關於']].filter(([k])=>k==='overview'||(k==='health'?D.health:k==='motion'?(M||D.motionPages):k==='history'?(D.history&&D.history.runs.length>0):k==='export'?D.exportKit:k==='data'||k==='about'?true:S));
+tabs.forEach(([k,l],i)=>{const b=el('<button role="tab">'+l+'</button>');b.dataset.k=k;if(k==='data')b.classList.add('dt-tab');b.onclick=()=>show(k);$('#tabs').append(b)});
+function show(k){if(k==='data'&&!document.body.classList.contains('detail'))setDetail(true);document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='s-'+k));document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.k===k));history.replaceState(null,'','#'+k)}
 
 // ---------- overview ----------
 (function(){
@@ -354,5 +354,125 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   '<div class="card" style="margin-top:14px"><h3>重新產生</h3>'+(rerun?'<code>'+esc(rerun)+'</code> <button class="chip" data-cp="'+esc(rerun)+'">複製</button>':'—')+'<p class="hint">工具版本 '+esc(A.toolVersion||'?')+' · Node '+esc(A.node||'?')+' · '+esc(A.platform||'')+'</p></div>';
   h.addEventListener('click',e=>{const b=e.target.closest('[data-cp]');if(b)copy(b.dataset.cp)});
 })();
+
+// ===================================================================== v2: visual overview, detail switch, export-to-AI tab, detail tab
+const BRAND=(T&&T.color&&/^#[0-9a-f]{6}$/i.test(T.color.brand||''))?T.color.brand:null;
+if(BRAND)document.documentElement.style.setProperty('--site',BRAND);
+const kb=(n)=>n>1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
+const stripData=(k,v)=>(typeof v==='string'&&v.startsWith('data:')?'(內嵌檔案 '+kb(v.length*0.75)+')':v);
+function download(name,text,type){try{const u=URL.createObjectURL(new Blob([text],{type:type||'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000)}catch(e){toast('下載失敗：'+e.message)}}
+function copyText(t,msg){const done=()=>toast(msg||'已複製');if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,()=>fallback())}else fallback();function fallback(){const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.append(ta);ta.select();try{document.execCommand('copy');done()}catch{toast('無法自動複製，請手動選取')}ta.remove()}}
+
+// ---------- detail switch ----------
+function setDetail(on){document.body.classList.toggle('detail',!!on);const c=$('#dtsw');if(c)c.checked=!!on;try{localStorage.setItem('se-detail',on?'1':'0')}catch{}if(!on&&(location.hash==='#data')&&$('#tabs button[data-k=overview]'))show('overview')}
+(function(){
+  $('header').insertAdjacentHTML('beforeend','<label class="dtsw" title="顯示每一頁的技術細節、原始資料與 JSON"><input type="checkbox" id="dtsw"> <span>詳細資料</span></label>');
+  $('#dtsw').onchange=(e)=>setDetail(e.target.checked);
+  let on=false;try{on=localStorage.getItem('se-detail')==='1'}catch{}if(on)setDetail(true);
+})();
+
+// ---------- page viewer (modal) ----------
+function openPage(p){
+  const old=$('#pgmodal');if(old)old.remove();
+  const views=[['desktop','桌機'],['tablet','平板'],['mobile','手機']].filter(([k])=>p.shots&&p.shots[k]);
+  const blocks=(p.blocks||[]).map((b,i)=>'<div class="row"><span>'+(i+1)+'. '+esc(b.kind)+'</span><span>'+Math.round(b.h||0)+'px'+(b.columns>1?' · '+b.columns+' 欄':'')+'</span></div>').join('');
+  const m=el('<div id="pgmodal" class="modal" role="dialog" aria-modal="true"><div class="mbox"><div class="mtop"><div><b>'+esc(p.title||p.url)+'</b><div class="hint">'+esc(p.url)+'</div></div><button class="chip" id="mclose">關閉 ✕</button></div><div class="mbody"><div class="mimg"><div class="seg" id="mseg">'+views.map(([k,l],i)=>'<button data-v="'+k+'" aria-pressed="'+(i===0)+'">'+l+'</button>').join('')+'</div><div class="mscroll"><img id="mimg" alt="頁面截圖" src="'+esc(views.length?p.shots[views[0][0]]:'')+'"></div></div><div class="mside"><h3>區塊（'+(p.blocks||[]).length+'）</h3>'+(blocks||'<div class="hint">沒有區塊資料</div>')+'<div class="dt"><h3 style="margin-top:14px">詳細資料</h3><div class="row"><span>狀態</span><span>'+esc(p.status)+'</span></div><div class="row"><span>頁面高度</span><span>'+esc(p.docHeight)+'px</span></div><div class="row"><span>標題數／連結／圖片</span><span>'+(p.headings||[]).length+' / '+p.linkCount+' / '+(p.images||[]).length+'</span></div><div class="row"><span>表單</span><span>'+((p.forms||[]).length)+'</span></div><div class="row"><span>手機橫向溢出</span><span>'+(p.mobileOverflow?'是':'否')+'</span></div></div></div></div></div></div>');
+  document.body.append(m);const close=()=>{m.remove();document.removeEventListener('keydown',esc_)};const esc_=(e)=>{if(e.key==='Escape')close()};document.addEventListener('keydown',esc_);
+  m.addEventListener('click',(e)=>{if(e.target===m)close()});$('#mclose',m).onclick=close;
+  $('#mseg',m).onclick=(e)=>{const b=e.target.closest('button');if(!b)return;m.querySelectorAll('#mseg button').forEach(x=>x.setAttribute('aria-pressed',x===b));$('#mimg',m).src=p.shots[b.dataset.v];$('#mimg',m).style.maxWidth=b.dataset.v==='mobile'?'390px':b.dataset.v==='tablet'?'768px':'100%'};
+}
+
+// ---------- visual hero + page wall + live motion preview (top of overview) ----------
+(function(){
+  const o=$('#s-overview');if(!o||!S)return;
+  const pages=D.pages||[];const home=pages.find(p=>p.shots&&p.shots.desktop)||pages[0];if(!home)return;
+  const sh=home.shots||{};const host=(()=>{try{return new URL(S.startUrl).host}catch{return ''}})();
+  const dev=(cls,img,bar)=>img?'<div class="dv '+cls+'">'+(bar?'<div class="bar"><i></i><i></i><i></i><span>'+esc(host)+'</span></div>':'')+'<div class="scr"><img alt="" src="'+esc(img)+'"></div></div>':'';
+  const plat=(S.editing&&S.editing.platforms||[]).map(p=>p.platform);
+  const c=(T&&T.color)||{};const pal=(T&&T.palette||[]).slice(0,6);
+  const fonts=T&&T.typography&&T.typography.fontStack?[T.typography.fontStack.heading,T.typography.fontStack.body].filter((x,i,a)=>x&&a.indexOf(x)===i):[];
+  const nMotion=(M&&M.targets?M.targets.length:0)||((D.motionPages||[]).reduce((n,x)=>n+(x.targets||0),0));
+  const H=D.health;const col=(v)=>v>=80?'var(--ok)':v>=60?'var(--warn)':'#dc2626';
+  const hero=el('<div class="hero">'+
+    '<div class="devs">'+dev('d',sh.desktop,true)+dev('t',sh.tablet)+dev('m',sh.mobile)+'</div>'+
+    '<div class="hinfo"><div class="eyebrow">網站探索報告</div><h2>'+esc(host)+'</h2><div class="hint">'+esc(S.startUrl)+'</div>'+
+    '<div class="hchips">'+[pages.length+' 頁',plat.length?esc(plat.join(' / ')):'',nMotion?nMotion+' 個 3D／動畫':'',(S.privacy&&S.privacy.trackingVendors&&S.privacy.trackingVendors.length)?S.privacy.trackingVendors.length+' 個追蹤服務':''].filter(Boolean).map(x=>'<span class="chip">'+x+'</span>').join('')+'</div>'+
+    '<div class="hk">'+(H?'<div class="hkpi"><div class="ring sm" style="--p:'+H.score+';--c:'+col(H.score)+'"><b>'+H.score+'</b></div><div><b>'+esc(H.grade)+'</b><div class="hint">'+(H.verdict?esc(H.verdict.label):'健檢')+'</div></div></div>':'')+
+      (pal.length?'<div class="hkpi" style="flex-direction:column;align-items:flex-start"><div class="swr">'+pal.map(x=>'<button title="'+esc(x.hex)+'（點一下複製）" data-cp="'+esc(x.hex)+'" style="background:'+css(x.hex)+'"></button>').join('')+'</div><div class="hint">'+esc(c.brand||pal[0].hex)+' · 點色塊複製</div></div>':'')+
+      (fonts.length?'<div class="hkpi" style="flex-direction:column;align-items:flex-start"><div class="spec2" style="font-family:'+css(fonts[0])+',serif">Aa 字型</div><div class="hint">'+fonts.map(esc).join(' / ')+'</div></div>':'')+'</div>'+
+    '<div class="dt hint" style="margin-top:8px">詳細資料：爬取 '+S.seconds+' 秒・'+(S.skippedByRobots||[]).length+' 頁因 robots.txt 略過・身分 '+esc(S.userAgent||'')+'</div>'+
+    '<div class="cta">'+(D.exportKit?'<button class="go" data-go="export">匯出給 AI →</button>':'')+(M||D.motionPages?'<button data-go="motion">看 3D／動畫</button>':'')+(H?'<button data-go="health">看健檢</button>':'')+'<button data-go="layout">看排版</button></div></div></div>');
+  hero.addEventListener('click',(e)=>{const g=e.target.closest('[data-go]');if(g)show(g.dataset.go);const cp=e.target.closest('[data-cp]');if(cp)copy(cp.dataset.cp)});
+  // page wall
+  const mp=D.motionPages||[];const has3d=(p)=>mp.some(x=>x.url===p.url&&x.targets>0)||(M&&M.targets&&M.targets.length&&p===pages[0]);
+  const wall=el('<div class="card" style="margin-top:14px"><h3>每一頁長什麼樣（點開看全頁）</h3><div class="wall">'+pages.map((p,i)=>'<button class="wc" data-i="'+i+'"><div class="th">'+(p.shots&&p.shots.desktop?'<img alt="" loading="lazy" src="'+esc(p.shots.desktop)+'">':'<div class="noimg">沒有截圖</div>')+'</div><div class="wt"><b>'+esc(p.title||'(無標題)')+'</b><span class="hint">'+esc((()=>{try{return new URL(p.url).pathname}catch{return p.url}})())+'</span><span>'+(p.status&&p.status>=400?'<span class="chip warn">'+p.status+'</span>':'')+(p.emptyPage?'<span class="chip warn">內容空白</span>':'')+(has3d(p)?'<span class="chip">3D／動畫</span>':'')+'<span class="chip ok">'+(p.blocks||[]).length+' 區塊</span></span><span class="dt hint">'+(p.headings||[]).length+' 標題・'+p.linkCount+' 連結・'+(p.images||[]).length+' 圖・高 '+p.docHeight+'px'+(p.mobileOverflow?'・手機溢出':'')+'</span></div></button>').join('')+'</div></div>');
+  wall.addEventListener('click',(e)=>{const b=e.target.closest('.wc');if(b)openPage(pages[+b.dataset.i])});
+  // live motion preview: the captured frames play on a loop (paused when off-screen, still when the visitor prefers reduced motion)
+  let live=null;
+  const targets=(M&&M.targets||[]).filter(t=>t.frames&&t.frames.idle&&t.frames.idle.length>1).slice(0,6);
+  if(targets.length){
+    const KN={webgl:'WebGL 3D','css-3d':'CSS 3D','model-viewer':'3D 模型',video:'影片',lottie:'Lottie',canvas:'Canvas',svg:'SVG 動畫',animation:'CSS 動畫'};
+    live=el('<div class="card" style="margin-top:14px"><h3>動態預覽（擷取到的畫格，循環播放）</h3><div class="live">'+targets.map(t=>'<figure class="lv"><img alt="" data-n="'+t.id+'" src="'+esc(t.frames.idle[0])+'"><figcaption><b>'+esc(KN[t.kind]||t.kind)+'</b> <span class="hint">'+Math.round((t.box&&t.box.w)||0)+'×'+Math.round((t.box&&t.box.h)||0)+'・'+(t.animatesOnItsOwn?'自己會動':'需互動')+'</span></figcaption></figure>').join('')+'</div></div>');
+    const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!reduce)for(const t of targets){const img=live.querySelector('img[data-n="'+t.id+'"]');let i=0,tm=null;const step=()=>{i=(i+1)%t.frames.idle.length;img.src=t.frames.idle[i]};const io=new IntersectionObserver(([e])=>{clearInterval(tm);if(e.isIntersecting)tm=setInterval(step,Math.max(120,t.intervalMs||250))});io.observe(img)}
+  }
+  const first=o.querySelector('.grid.g3');
+  if(first){first.before(hero);hero.after(wall);if(live)wall.after(live)}else{o.prepend(hero);hero.after(wall);if(live)wall.after(live)}
+})();
+
+// ---------- export to AI tab ----------
+(function(){
+  const k=D.exportKit;const sec=$('#s-export');if(!sec||!k)return;
+  const target=k.hasMotion?'C':'A';let cur=target,withPath=true;
+  const mk=(key)=>{let t=key==='C'?[k.prompts.A,k.prompts.B,k.prompts.C].filter(Boolean).join('\n\n=====\n\n'):(k.prompts[key]||'');if(withPath)t='The reference package is the folder: '+k.dir+'\n(Treat "handoff/" below as that folder.)\n\n'+t;return t};
+  const files=k.files||[];const grp=(f)=>f==='AI-PACKAGE.md'?'單一檔案版（最簡單）':f.startsWith('starter/motion')?'動態起手式':f.startsWith('starter/')?'頁面起手式':f.startsWith('tokens/')?'設計 token':'說明文件';
+  const groups={};for(const f of files)(groups[grp(f.name)]=groups[grp(f.name)]||[]).push(f);
+  const issues=[];const empt=(D.pages||[]).filter(p=>p.emptyPage);
+  if(!k.sectionImages)issues.push(['bad','沒有區塊截圖：AI 看不到每個區塊長什麼樣，請用 --no-screenshots 以外的設定重跑']);
+  if(empt.length)issues.push(['warn',empt.length+' 頁幾乎是空的（'+empt.map(p=>esc(p.url)).join('、')+'）：這些頁面的骨架會很空，建議先看總覽的診斷']);
+  if((S&&S.blockedPages||[]).length)issues.push(['warn',(S.blockedPages.length)+' 頁被防機器人擋住，沒有內容']);
+  if(D.health&&D.health.issues.some(i=>i.id==='prompt-injection'))issues.push(['warn','偵測到疑似針對 AI 的指令文字（已隔離）；請提醒 AI 把網站文字當資料']);
+  if(!k.hasMotion&&(M||D.motionPages))issues.push(['warn','有 3D／動畫資料但沒有產生動態起手式']);
+  const ok=[k.starterPages+' 頁可直接開始的頁面骨架',k.sectionImages+' 張區塊截圖（AI 靠這些看懂版面）',k.hasMotion?k.motionImages+' 張動態畫格序列圖＋可執行的動態起手式':'（這個網站沒有擷取到 3D／動畫）'];
+  const render=()=>{
+    sec.innerHTML='<div class="card"><h3>讓接手的 AI 直接開始做</h3><div class="steps"><div><b>1</b> 選要 AI 做什麼</div><div><b>2</b> 複製提示貼給 AI</div><div><b>3</b> 把資料夾（或下面的單一檔案）給它</div></div>'+
+    '<div class="seg" id="xseg">'+[['A','做頁面'],['B','做動態／3D'],['C','兩者（先頁面再動態）']].filter(([x])=>x==='A'||k.hasMotion).map(([x,l])=>'<button data-x="'+x+'" aria-pressed="'+(cur===x)+'">'+l+'</button>').join('')+'</div>'+
+    '<pre class="prompt" id="xprompt">'+esc(mk(cur))+'</pre><div class="xact"><button class="go" id="xcopy">複製提示</button><label class="hint"><input type="checkbox" id="xpath" '+(withPath?'checked':'')+'> 附上資料夾位置（AI 能讀你電腦檔案時，例如 Claude Code）</label></div>'+
+    '<div class="row"><span>資料夾</span><span><code>'+esc(k.dir)+'</code> <button class="chip" data-cp="'+esc(k.dir)+'">複製路徑</button></span></div>'+
+    (k.hasMotion?'<div class="row"><span>預覽動態起手式</span><span><code>npx serve "'+esc(k.dir)+'"</code> <button class="chip" data-cp="npx serve &quot;'+esc(k.dir)+'&quot;">複製</button> <span class="hint">→ 開 /starter/motion/</span></span></div>':'')+'</div>'+
+    '<div class="card" style="margin-top:14px"><h3>交給 AI 之前</h3>'+ok.map(x=>'<p class="say">✅ '+x+'</p>').join('')+issues.map(([t,x])=>'<p class="say">'+(t==='bad'?'❌':'⚠️')+' '+x+'</p>').join('')+'</div>'+
+    '<div class="card" style="margin-top:14px"><h3>檔案（可直接複製或下載）</h3>'+Object.entries(groups).map(([g,fs_])=>'<div class="hint" style="margin:10px 0 4px">'+g+'</div>'+fs_.map(f=>'<div class="row"><span><code>'+esc(f.name)+'</code> <span class="hint">'+kb(f.text.length)+'</span></span><span><button class="chip" data-fc="'+esc(f.name)+'">複製</button> <button class="chip" data-fd="'+esc(f.name)+'">下載</button></span></div>').join('')).join('')+'<p class="hint">AI 讀不了資料夾時：複製或下載 <code>AI-PACKAGE.md</code> 貼給它，再附上 <code>media/</code> 內的區塊截圖與影格序列圖（AI 要看圖才看得懂版面與動態）。</p></div>';
+  };
+  render();
+  sec.addEventListener('click',(e)=>{
+    const sg=e.target.closest('#xseg button');if(sg){cur=sg.dataset.x;render();return}
+    if(e.target.id==='xcopy'){copyText(mk(cur),'已複製提示，貼給 AI 即可');return}
+    const cp=e.target.closest('[data-cp]');if(cp){copy(cp.dataset.cp);return}
+    const fc=e.target.closest('[data-fc]');if(fc){const f=files.find(x=>x.name===fc.dataset.fc);if(f)copyText(f.text,'已複製 '+f.name);return}
+    const fd=e.target.closest('[data-fd]');if(fd){const f=files.find(x=>x.name===fd.dataset.fd);if(f)download(f.name.split('/').pop(),f.text)}
+  });
+  sec.addEventListener('change',(e)=>{if(e.target.id==='xpath'){withPath=e.target.checked;render()}});
+})();
+
+// ---------- detail tab: per-page technical data + raw JSON explorers ----------
+(function(){
+  const sec=$('#s-data');if(!sec)return;
+  const reg=[];const jval=(v)=>v===null?'<span class="jn">null</span>':typeof v==='string'?'<span class="js" title="'+esc(v.slice(0,500))+'">"'+esc(v.length>160?v.slice(0,160)+'…':v)+'"</span>':'<span class="jn">'+esc(String(v))+'</span>';
+  const clean=(v)=>JSON.parse(JSON.stringify(v,stripData));
+  function node(v,key,depth){
+    if(v===null||typeof v!=='object')return '<div class="jl"><span class="jk">'+esc(key)+'</span> '+jval(v)+'</div>';
+    const n=Array.isArray(v)?v.length:Object.keys(v).length;if(!n)return '<div class="jl"><span class="jk">'+esc(key)+'</span> <span class="jn">'+(Array.isArray(v)?'[]':'{}')+'</span></div>';
+    reg.push(v);return '<details class="jd" data-r="'+(reg.length-1)+'"'+(depth<1?' open':'')+'><summary><span class="jk">'+esc(key)+'</span> <span class="hint">'+(Array.isArray(v)?'['+n+']':'{'+n+'}')+'</span></summary><div class="jb">'+(depth<1?kids(v,depth+1):'')+'</div></details>';
+  }
+  function kids(v,d){const ents=Array.isArray(v)?v.map((x,i)=>[i,x]):Object.entries(v);const lim=ents.slice(0,80);return lim.map(([k,x])=>node(x,k,d)).join('')+(ents.length>80?'<div class="hint">… 還有 '+(ents.length-80)+' 項（請用下載 JSON 看全部）</div>':'')}
+  sec.addEventListener('toggle',(e)=>{const d=e.target;if(d.tagName==='DETAILS'&&d.open&&d.dataset.r&&!d.dataset.done){d.dataset.done='1';d.querySelector('.jb').innerHTML=kids(reg[+d.dataset.r],2)}},true);
+  const rawCards=[['site.json（探索結果）',S&&Object.assign({},S,{pages:undefined}),'site.json'],['tokens（設計 token）',T,'tokens.json'],['motion（3D／動畫）',M&&Object.assign({},M,{targets:(M.targets||[]).map(t=>Object.assign({},t,{frames:undefined}))}),'motion.json'],['health（健檢）',D.health,'health.json'],['history（歷史）',D.history,'history.json'],['export kit（匯出檔案清單）',D.exportKit&&{dir:D.exportKit.dir,prompts:Object.keys(D.exportKit.prompts),files:D.exportKit.files.map(f=>f.name),counts:{starterPages:D.exportKit.starterPages,images:D.exportKit.images}},'export-kit.json']].filter(x=>x[1]);
+  const rows=(D.pages||[]).map(p=>{const sp=(S&&S.pages||[]).find(x=>x.slug===p.slug)||{};const hp=(D.health&&D.health.pages||[]).find(x=>x.url===p.url)||{};const r=sp.responsive||{};const cols=['desktop','tablet','mobile'].map(v=>r[v]?(r[v].maxColumns>1?r[v].maxColumns:1):'—').join('/');
+    return '<tr><td>'+esc((()=>{try{return new URL(p.url).pathname}catch{return p.url}})())+'</td><td>'+esc(p.status)+'</td><td>'+p.docHeight+'</td><td>'+(p.headings||[]).length+'</td><td>'+p.linkCount+'</td><td>'+(p.images||[]).length+'</td><td>'+(p.blocks||[]).length+'</td><td>'+(hp.words??'—')+'</td><td>'+(hp.lcpMs??'—')+'</td><td>'+(hp.ttfbMs??'—')+'</td><td>'+(hp.bytes?kb(hp.bytes):'—')+'</td><td>'+cols+'</td><td>'+(sp.network?sp.network.total:'—')+'</td><td>'+(p.mobileOverflow?'⚠️':'')+'</td></tr>'}).join('');
+  sec.innerHTML='<div class="card"><h3>逐頁技術資料</h3><div style="overflow:auto"><table class="t"><tr><th>路徑</th><th>狀態</th><th>高 px</th><th>標題</th><th>連結</th><th>圖片</th><th>區塊</th><th>字數</th><th>LCP ms</th><th>TTFB ms</th><th>下載量</th><th>欄數 桌/平/手</th><th>請求數</th><th>手機溢出</th></tr>'+rows+'</table></div><p class="hint">空白 ＝ 這次沒有量到。完整單位與意義見 SPEC.md。</p></div>'+
+   '<div class="card" style="margin-top:14px"><h3>原始資料（展開看每一層；大型清單只顯示前 80 項）</h3>'+rawCards.map(([title,obj,fn],i)=>'<div class="jroot"><div class="jhead"><b>'+esc(title)+'</b> <button class="chip" data-dl="'+i+'">下載 JSON</button> <button class="chip" data-cj="'+i+'">複製 JSON</button></div>'+node(clean(obj),'(根)',0)+'</div>').join('')+'</div>';
+  sec.addEventListener('click',(e)=>{const d=e.target.closest('[data-dl]'),c=e.target.closest('[data-cj]');const i=d?+d.dataset.dl:c?+c.dataset.cj:-1;if(i<0)return;const txt=JSON.stringify(clean(rawCards[i][1]),null,2);if(d)download(rawCards[i][2],txt,'application/json');else copyText(txt,'已複製 JSON')});
+})();
+
 show(location.hash.slice(1)&&tabs.some(t=>t[0]===location.hash.slice(1))?location.hash.slice(1):'overview');
 

@@ -84,14 +84,37 @@ test('explore pipeline produces all artifacts', async (t) => {
   assert.ok(motion.targets.every((x) => x.animatesOnItsOwn), 'both animate by themselves');
 
   // dashboard renders without script errors and shows the blocked warning
-  const b = await launchBrowser(); const page = await b.newPage(); const errs = [];
+  const b = await launchBrowser(); try {
+  const page = await b.newPage(); const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
   await page.goto('file://' + path.join(out, 'dashboard.html'));
-  for (const k of ['overview', 'design', 'layout', 'content', 'motion', 'edit', 'history', 'about']) { const tab = page.locator(`#tabs button[data-k=${k}]`); if (await tab.count()) await tab.click(); }
+  for (const k of ['overview', 'design', 'layout', 'content', 'motion', 'edit', 'history', 'export', 'about']) { const tab = page.locator(`#tabs button[data-k=${k}]`); if (await tab.count()) await tab.click(); }
+  assert.deepEqual(errs, []);
+  // visual overview: device mockups, a page wall that opens a viewer, a live motion preview that really has frames (standalone files carry no file names: frames are picked by name before embedding)
+  await page.click('#tabs button[data-k=overview]');
+  assert.ok(await page.locator('.hero .dv.d img').count() === 1 && await page.locator('.hero .dv.m img').count() === 1, 'desktop + phone mockups');
+  assert.ok(await page.locator('.wall .wc').count() >= 1); assert.ok(await page.locator('.live img').count() >= 1, 'live motion preview'); assert.ok(await page.locator('.live img').first().getAttribute('src').then((v) => v.startsWith('data:image/png')));
+  await page.locator('.wc').first().click(); assert.ok(await page.locator('#pgmodal #mimg').count() === 1, 'page viewer opens'); await page.keyboard.press('Escape'); assert.equal(await page.locator('#pgmodal').count(), 0, 'Escape closes it');
+  await page.click('#tabs button[data-k=motion]'); assert.ok(await page.locator('#s-motion img').count() > 3, 'the motion tab shows captured frames in a standalone dashboard');
+  // detail switch: hidden by default, shown when on, and it reveals the detail tab
+  await page.click('#tabs button[data-k=overview]'); assert.equal(await page.locator('.hero .dt').first().isVisible(), false); assert.equal(await page.locator('#tabs button[data-k=data]').isVisible(), false);
+  await page.check('#dtsw'); assert.equal(await page.locator('.hero .dt').first().isVisible(), true); await page.click('#tabs button[data-k=data]'); assert.match(await page.locator('#s-data').innerText(), /逐頁技術資料/);
+  await page.locator('#s-data .jd summary').first().click(); assert.ok(await page.locator('#s-data .jl').count() > 3, 'raw JSON explorer expands'); await page.uncheck('#dtsw');
+  // export tab: a ready prompt per goal, readiness list, files that can be copied/downloaded
+  await page.click('#tabs button[data-k=export]'); const prompt = await page.locator('#xprompt').innerText();
+  assert.match(prompt, /Build the pages|taking over a website rebuild|Do prompt A first/); await page.click('#xseg button[data-x=A]'); assert.match(await page.locator('#xprompt').innerText(), /Build|rebuild/);
+  await page.click('#xseg button[data-x=C]'); const both = await page.locator('#xprompt').innerText(); assert.ok(/taking over a website rebuild/.test(both) && /recreating the animations/.test(both), 'the combined prompt is self-contained (A + B)');
+  await page.uncheck('#xpath'); assert.ok(!/The reference package is the folder/.test(await page.locator('#xprompt').innerText()));
+  assert.match(await page.locator('#s-export').innerText(), /AI-PACKAGE\.md/); assert.match(await page.locator('#s-export').innerText(), /可直接開始的頁面骨架/);
   assert.deepEqual(errs, []);
   assert.match(await page.locator('#s-overview').innerText(), /被擋住/);
+  // the export kit's counts must not depend on what the output folder is called
+  { const odd = path.join(tmp, 'motion-sections-odd'); fs.cpSync(path.join(out, 'handoff'), path.join(odd, 'handoff'), { recursive: true });
+    const r2 = await node('build-report.mjs', ['--site', path.join(out, 'site', host), '--handoff', path.join(odd, 'handoff'), '--out', path.join(odd, 'd.html')]); assert.equal(r2.status, 0, r2.stdout + r2.stderr);
+    const kit = JSON.parse(fs.readFileSync(path.join(odd, 'd.html'), 'utf8').match(/<script id="data" type="application\/json">([\s\S]*?)<\/script>/)[1]).exportKit;
+    assert.ok(kit.starterPages >= 1 && kit.sectionImages >= 1 && kit.motionImages >= 1 && kit.motionImages < kit.images, JSON.stringify({ ...kit, files: undefined, prompts: undefined })); }
   const about = await page.locator('#s-about').innerText(); assert.ok(about.includes(out) && /SITE_EXPLORER_OUT/.test(about) && /site-explorer/.test(about) && /127\.0\.0\.1/.test(about), 'about tab shows output location, env var, rerun command and runs');
-  await b.close();
+  } finally { await b.close(); }
 });
 
 test('database: second run yields history and search works', async (t) => {

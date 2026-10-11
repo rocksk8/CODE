@@ -87,13 +87,15 @@ test('health.md is AI-readable and the dashboard health tab works', async (t) =>
   const md = fs.readFileSync(path.join(siteDir, 'health.md'), 'utf8');
   assert.match(md, /## 總分：\d+ \/ 100/); assert.match(md, /最該先處理的事/); assert.match(md, /怎麼修：/); assert.match(md, /\| GPTBot \|/);
   const dash = path.join(tmp, 'dash.html'); assert.equal((await run('build-report.mjs', ['--site', siteDir, '--out', dash])).status, 0);
-  const b = await launchBrowser(), p = await b.newPage(), errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  const b = await launchBrowser(); try {
+  const p = await b.newPage(), errs = []; p.on('pageerror', (e) => errs.push(e.message));
   await p.goto('file://' + dash); await p.click('#tabs button[data-k=health]');
-  assert.match(await p.locator('.ring').innerText(), new RegExp(String(H.score)));
+  assert.match(await p.locator('#s-health .ring').innerText(), new RegExp(String(H.score)));
   const all = await p.locator('details.is').count(); await p.click('[data-cat=indexability]');
   assert.ok(await p.locator('details.is').count() < all, 'category filter narrows the list');
   for (const v of ['pages', 'crawl', 'sitemap', 'perf', 'sec']) { await p.click(`[data-view=${v}]`); }
-  assert.match(await p.locator('#hv').innerText(), /TLS|HTTPS|傳輸/); assert.deepEqual(errs, []); await b.close();
+  assert.match(await p.locator('#hv').innerText(), /TLS|HTTPS|傳輸/); assert.deepEqual(errs, []);
+  } finally { await b.close(); } // a failed assertion must not leave the browser open (it would hang the whole run)
 });
 
 test('verdict, broken images, page errors-ready and chains found only by the link check', (t) => {

@@ -125,13 +125,12 @@ try {
     '## 重新產生', '```bash', 'site-explorer <網址> --out ' + JSON.stringify(path.relative(process.cwd(), out) || '.'), '```', '',
     '工具說明與安裝：https://github.com/rocksk8/code', ''].join('\n'));
 } catch {}
-const dash = path.join(out, 'dashboard.html');
-if (!crawlOk && !motionOk) console.log('\n探索沒有成功，略過儀表板與交接包。請先處理上面的錯誤（可執行 site-explorer doctor 檢查環境），再重新執行。');
-else await run('產生圖形化儀表板', 'build-report.mjs', [...(crawlOk ? ['--site', siteDir] : []), ...(motionOk ? ['--motion', motionDir] : []), '--out', dash, ...(args.includes('--no-standalone') ? [] : ['--standalone'])]);
-
 let handoffOk = false;
 const handoffDir = path.join(out, 'handoff');
 if ((crawlOk || motionOk) && crawlOk && !args.includes('--no-handoff')) handoffOk = await run('產生交接包（AI 簡報、完整規格、決策紀錄、圖片）', 'build-handoff.mjs', ['--site', siteDir, ...(motionOk ? ['--motion', motionDir] : []), '--out', handoffDir]);
+const dash = path.join(out, 'dashboard.html');
+if (!crawlOk && !motionOk) console.log('\n探索沒有成功，略過儀表板與交接包。請先處理上面的錯誤（可執行 site-explorer doctor 檢查環境），再重新執行。');
+else await run('產生圖形化儀表板', 'build-report.mjs', [...(crawlOk ? ['--site', siteDir] : []), ...(motionOk ? ['--motion', motionDir] : []), '--out', dash, ...(handoffOk ? ['--handoff', handoffDir] : []), ...(args.includes('--no-standalone') ? [] : ['--standalone'])]);
 
 const failed = steps.filter((s) => !s.ok);
 console.log(`\n完成：${steps.length - failed.length}/${steps.length} 階段成功${failed.length ? '，失敗：' + failed.map((f) => f.label).join('、') : ''}`);
@@ -148,7 +147,8 @@ if (!args.includes('--no-motion')) { // always say what happened to 3D / animati
     }
   } catch {}
 }
-if (handoffOk) console.log(`交接包：${handoffDir}\n  先讀 ai-brief.md（給 AI）；完整規格 SPEC.md；決策紀錄 DECISIONS.md`);
+const hasMotionLine = fs.existsSync(path.join(handoffDir, 'starter', 'motion')) ? '、B=做動態／3D' : '';
+if (handoffOk) console.log(`交接包：${handoffDir}\n  要交給 AI：把整個資料夾給它，再貼 PROMPT.md 裡的提示（A=做頁面${hasMotionLine}）；可直接開跑的骨架在 starter/（動態在 starter/motion/index.html）；沒辦法附檔就貼 AI-PACKAGE.md\n  人先看 START-HERE.md；完整規格 SPEC.md；決策紀錄 DECISIONS.md`);
 if (fs.existsSync(dash)) {
   const mb = (fs.statSync(dash).size / 1048576).toFixed(1);
   console.log(`儀表板：${dash}（${mb} MB${args.includes('--no-standalone') ? '，需連同資料夾一起搬移' : '，單一檔案，可直接寄送或丟進聊天室'}）\n  開啟：${process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start ""' : 'xdg-open'} "${dash}"`);
