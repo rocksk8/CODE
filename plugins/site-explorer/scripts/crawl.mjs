@@ -635,4 +635,4 @@ const md = [
   })(),
 ].join('\n');
 fs.writeFileSync(path.join(outDir, 'report.md'), BANNER + '\n\n' + sanitizeDoc(md) + '\n');
-console.log(`\nDone. Report: ${path.join(outDir, 'report.md')}`);
+console.log(_t`\n完成。報告：${path.join(outDir, 'report.md')}`);

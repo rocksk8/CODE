@@ -228,5 +228,5 @@ const readme = [
   '## Files', '- `tokens.json` / `tokens.css` / `tokens.w3c.json` / `tailwind.config.js` — machine-readable tokens (CSS, W3C Design Tokens, Tailwind)', '- `tokens.studio.json` — import with the Tokens Studio plugin in Figma', '- `palette.svg` — drag into Figma / Illustrator / Keynote', '- `components.json` — component styles', '- `assets/` — logo, favicon, og image', '- `reference/` — desktop and mobile screenshots',
 ].filter((l) => l !== undefined && l !== null).join('\n');
 fs.writeFileSync(path.join(out, 'README.md'), BANNER + '\n\n' + sanitizeDoc(readme) + '\n');
-console.log('Design bundle written to', out);
-console.log(`brand ${colors.brand || '?'} · fonts ${fontStack.heading || '?'} / ${fontStack.body || '?'} · base unit ${spacing.baseUnit}px · ${audit.filter((a) => !a.pass).length} contrast issue(s)`);
+console.log(_t`設計包已寫入 ${out}`);
+console.log(_t`品牌色 ${colors.brand || '?'} · 字型 ${fontStack.heading || '?'} / ${fontStack.body || '?'} · 基準單位 ${spacing.baseUnit}px · ${audit.filter((a) => !a.pass).length} 項對比問題`);

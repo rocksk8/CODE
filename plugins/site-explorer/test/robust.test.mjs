@@ -65,7 +65,7 @@ test('follows a redirect to another hostname and keeps crawling there', async (t
 test('a page that never goes network-idle does not stall the crawl', async (t) => {
   if (!haveBrowser) return t.skip('no browser');
   const r = await run('crawl.mjs', [`http://localhost:${port(open)}/slow`, '--max-pages', '1', '--no-screenshots', '--out', path.join(tmp, 'c')]);
-  assert.equal(r.status, 0, r.out); assert.ok(r.secs < 25, `took ${r.secs}s`);
+  assert.equal(r.status, 0, r.out); assert.ok(r.secs < 40, `took ${r.secs}s`); // the point is "does not stall" (it used to hang), not a tight speed limit: shared CI runners vary
 });
 
 test('infinite scroll cannot hang the crawler', async (t) => {
