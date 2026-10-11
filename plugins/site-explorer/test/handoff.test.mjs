@@ -5,7 +5,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from '../scripts/launch.mjs';
 
@@ -86,7 +86,7 @@ test('DECISIONS.md and CLAUDE.md make the package a living record', (t) => {
   if (skip(t)) return;
   const d = read(H1, 'DECISIONS.md'), c = read(H1, 'CLAUDE.md');
   assert.match(d, /## 待確認問題/); assert.match(d, /- \[ \] 區塊版型/); assert.match(d, /## 已做決策\n（尚無）/); assert.match(d, /未登入、未送出表單、未繞過驗證/);
-  assert.match(c, /先讀 `ai-brief\.md`/); assert.match(c, /DECISIONS\.md.*新增一筆/); assert.match(c, /無法觀看影片或 3D/);
+  assert.match(c, /先讀 `START-HERE\.md`/); assert.match(c, /ai-brief\.md/); assert.match(c, /DECISIONS\.md.*新增一筆/); assert.match(c, /無法觀看影片或 3D/);
 });
 
 test('3D and video arrive as text + numbers + single-image filmstrips, with valid paths', (t) => {
@@ -106,4 +106,53 @@ test('inventory.csv lists every page for the redesign, opens in a spreadsheet an
   const lines = c.trim().split('\n'); assert.match(lines[0], /網址.*標題.*改版時請保留/);
   assert.ok(lines.length >= 2 && lines[1].includes(`http://127.0.0.1:${port}/`), lines[1]);
   assert.ok(!/(^|,)"[=+\-@]/m.test(lines.slice(1).join('\n')), 'no cell starts with a formula character');
+});
+
+// every file reference inside the starter kit must resolve inside the package (the AI opens these)
+function starterRefs(dir) {
+  const bad = [];
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+  for (const f of walk(path.join(dir, 'starter'))) {
+    const t = fs.readFileSync(f, 'utf8'); const refs = [];
+    if (/\.html$/.test(f)) { for (const m of t.matchAll(/(?:href|src)="([^"#]+)"/g)) refs.push(m[1]); for (const m of t.matchAll(/reference image: (\S+)/g)) refs.push(m[1]); }
+    if (/\.css$/.test(f)) for (const m of t.matchAll(/@import url\("([^"]+)"\)/g)) refs.push(m[1]);
+    for (const r of refs) if (!/^(https?:|#|data:)/.test(r) && !fs.existsSync(path.resolve(path.dirname(f), r))) bad.push(`${path.relative(dir, f)} -> ${r}`);
+  }
+  return bad;
+}
+
+test('the package starts the next AI immediately: START-HERE, PROMPT, AI-PACKAGE and a starter kit whose references all resolve', (t) => {
+  if (skip(t)) return;
+  for (const f of ['START-HERE.md', 'PROMPT.md', 'AI-PACKAGE.md', 'starter/index.html', 'starter/styles.css', 'starter/app.js']) assert.ok(fs.existsSync(path.join(H1, f)), f);
+  assert.deepEqual(starterRefs(H1), []);
+  const html = read(H1, 'starter/index.html'); assert.equal((html.match(/<h1[ >]/g) || []).length, 1); assert.match(html, /reference image: \.\.\/media\/sections\/home\/01-/);
+  assert.match(read(H1, 'START-HERE.md'), /PROMPT\.md/); assert.match(read(H1, 'PROMPT.md'), /## A\. Build the pages/);
+  const pk = read(H1, 'AI-PACKAGE.md'); assert.ok(pk.includes('## 4. STARTER CSS') && pk.includes('## 5. STARTER PAGE') && pk.includes('--color-brand'), 'single-file version carries tokens, CSS and a page');
+  assert.ok(!read(H1, 'starter/index.html').includes('Hello'), 'source copy is not reproduced in the skeleton');
+  assert.match(read(H1, 'CLAUDE.md'), /START-HERE\.md/); assert.match(read(H1, 'README.md'), /START-HERE\.md/);
+  assert.ok(!fs.existsSync(path.join(H1, 'starter', 'motion')), 'no motion captured → no motion starter');
+});
+
+test('with 3D captured: a runnable motion starter (valid JS, keyframes, page wired, filmstrips referenced)', (t) => {
+  if (skip(t, true)) return;
+  for (const f of ['starter/motion/index.html', 'starter/motion/motion.css', 'starter/motion/motion.js']) assert.ok(fs.existsSync(path.join(H2, f)), f);
+  assert.deepEqual(starterRefs(H2), []);
+  const js = read(H2, 'starter/motion/motion.js'), tmpJs = path.join(tmp, 'motion-check.mjs'); fs.writeFileSync(tmpJs, js);
+  const r = spawnSync(process.execPath, ['--check', tmpJs], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr);
+  assert.match(read(H2, 'starter/index.html'), /motion\/motion\.css/); assert.match(read(H2, 'PROMPT.md'), /## B\. Build the motion/); assert.match(read(H2, 'starter/motion/index.html'), /filmstrip\.png/);
+  assert.match(read(H2, 'START-HERE.md'), /starter\/motion\/index\.html/);
+});
+
+test('regenerating the package never destroys work done inside starter/ (edited copy is kept as starter.backup-*)', async (t) => {
+  if (skip(t)) return;
+  const h3 = path.join(tmp, 'h3'), args = ['--site', siteDir, '--out', h3];
+  assert.equal((await run('build-handoff.mjs', args)).status, 0);
+  assert.equal((await run('build-handoff.mjs', args)).status, 0);
+  assert.deepEqual(fs.readdirSync(h3).filter((f) => f.startsWith('starter.backup')), [], 'untouched starter/ is simply regenerated, no clutter');
+  fs.writeFileSync(path.join(h3, 'starter', 'index.html'), '<h1>MY WORK IN PROGRESS</h1>'); fs.writeFileSync(path.join(h3, 'starter', 'extra.css'), '/* mine */');
+  const r = await run('build-handoff.mjs', args); assert.equal(r.status, 0, r.out); assert.match(r.out, /starter\.backup-/);
+  const backups = fs.readdirSync(h3).filter((f) => f.startsWith('starter.backup')); assert.equal(backups.length, 1);
+  assert.equal(fs.readFileSync(path.join(h3, backups[0], 'index.html'), 'utf8'), '<h1>MY WORK IN PROGRESS</h1>'); assert.ok(fs.existsSync(path.join(h3, backups[0], 'extra.css')));
+  assert.match(fs.readFileSync(path.join(h3, 'starter', 'index.html'), 'utf8'), /STARTER SKELETON/, 'a fresh starter/ was generated');
+  assert.ok(!fs.existsSync(path.join(h3, 'starter', 'extra.css')));
 });

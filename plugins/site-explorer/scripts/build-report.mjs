@@ -10,8 +10,8 @@ import { openDb, runsForHost, diffRuns } from './db.mjs';
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
-const siteDir = opt('site'), motionDir = opt('motion');
-if (!siteDir && !motionDir) { console.error('Usage: build-report.mjs --site <crawl dir> [--motion <motion dir>] [--out dashboard.html]'); process.exit(1); }
+const siteDir = opt('site'), motionDir = opt('motion'), handoffDir = opt('handoff');
+if (!siteDir && !motionDir) { console.error('Usage: build-report.mjs --site <crawl dir> [--motion <motion dir>] [--handoff <handoff dir>] [--out dashboard.html]'); process.exit(1); }
 const standalone = args.includes('--standalone');
 const embedBudget = Number(opt('embed-mb', 12)) * 1024 * 1024;
 import { requireExtension, UnsafeOutputError } from './safe-out.mjs';
@@ -33,7 +33,7 @@ const ref = (file, allowEmbed = true) => {
 const readJSON = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const exists = fs.existsSync;
 
-const data = { standalone, embed, generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, health: null, files: [], motionPages: null };
+const data = { standalone, embed, generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, health: null, files: [], motionPages: null, exportKit: null };
 
 if (siteDir && exists(path.join(siteDir, 'site.json'))) {
   data.site = readJSON(path.join(siteDir, 'site.json'));
@@ -64,10 +64,11 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
 }
 if (motionDir && exists(path.join(motionDir, 'motion.json'))) {
   const m = readJSON(path.join(motionDir, 'motion.json'));
-  const list = (d) => (exists(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.png')).sort().map((f) => ref(path.join(d, f))) : []);
+  // pick frames by FILE NAME (in standalone mode ref() returns data: URIs, which carry no file name), in natural order (idle-2 before idle-10)
+  const list = (d, re = /./) => (exists(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.png') && !/filmstrip/.test(f) && re.test(f)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((f) => ref(path.join(d, f))) : []);
   for (const t of m.targets) {
     const d = path.join(motionDir, 'frames', t.id);
-    t.frames = { idle: list(d).filter((f) => /idle-/.test(f)), hover: list(d).filter((f) => /hover-/.test(f)), drag: list(d).filter((f) => /drag-/.test(f)) };
+    t.frames = { idle: list(d, /^idle-/), hover: list(d, /^hover-/), drag: list(d, /^drag-/) };
   }
   m.scroll = list(path.join(motionDir, 'frames', 'scroll'));
   if (m.video) m.video = ref(path.join(motionDir, m.video), false);
@@ -97,6 +98,21 @@ try {
   }
 } catch {}
 
+// Export kit: the handoff package (START-HERE, prompts, single-file AI package, starter files) so the dashboard can copy / download them directly.
+if (handoffDir && exists(path.join(handoffDir, 'START-HERE.md'))) {
+  const textOf = (rel_) => { const f = path.join(handoffDir, rel_); try { return exists(f) && fs.statSync(f).size <= 1.5 * 1024 * 1024 ? fs.readFileSync(f, 'utf8') : null; } catch { return null; } };
+  const walk = (d) => (exists(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)])) : []);
+  const promptMd = textOf('PROMPT.md') || '';
+  const prompts = {}; for (const key of ['A', 'B', 'C']) { const m = promptMd.match(new RegExp('## ' + key + '\\.[^\\n]*\\n```\\n([\\s\\S]*?)\\n```')); if (m) prompts[key] = m[1]; }
+  let budget = 4 * 1024 * 1024; const files = [];
+  const add_ = (name, text) => { if (text != null && budget - text.length > 0) { budget -= text.length; files.push({ name, text }); } };
+  add_('AI-PACKAGE.md', textOf('AI-PACKAGE.md')); add_('START-HERE.md', textOf('START-HERE.md')); add_('PROMPT.md', promptMd); add_('ai-brief.md', textOf('ai-brief.md')); add_('tokens/tokens.css', textOf('tokens/tokens.css'));
+  for (const f of walk(path.join(handoffDir, 'starter')).sort()) add_(path.relative(handoffDir, f).split(path.sep).join('/'), /\.(html|css|js)$/.test(f) ? textOf(path.relative(handoffDir, f)) : null);
+  const relOf = (f) => path.relative(handoffDir, f).split(path.sep).join('/'); // judge RELATIVE paths: the output folder's own name must not change the counts
+  const imgs = walk(path.join(handoffDir, 'media')).filter((f) => /\.png$/.test(f)).map(relOf);
+  data.exportKit = { dir: handoffDir, prompts, files, hasMotion: exists(path.join(handoffDir, 'starter', 'motion')), starterPages: walk(path.join(handoffDir, 'starter')).map(relOf).filter((f) => /^starter\/[^/]+\.html$/.test(f)).length, images: imgs.length, sectionImages: imgs.filter((f) => /^media\/sections\//.test(f)).length, motionImages: imgs.filter((f) => /^media\/motion\//.test(f)).length };
+}
+
 // "About this folder": where things are, what ran here, how to rerun (shown in the dashboard's 關於 tab)
 {
   let runs = []; try { runs = JSON.parse(fs.readFileSync(path.join(outDir, 'runs.json'), 'utf8')); } catch {}
@@ -118,7 +134,7 @@ ${read('report.css')}
 <nav><div class="in" id="tabs"></div></nav>
 <main>
 <section id="s-overview"></section><section id="s-design"></section><section id="s-layout"></section>
-<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-health"></section><section id="s-history"></section><section id="s-about"></section>
+<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-health"></section><section id="s-history"></section><section id="s-export"></section><section id="s-data"></section><section id="s-about"></section>
 </main><div class="toast" id="toast"></div>
 <script id="data" type="application/json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>
 <script>

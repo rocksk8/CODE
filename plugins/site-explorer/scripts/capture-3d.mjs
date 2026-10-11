@@ -86,7 +86,7 @@ const detected = await page.evaluate(() => {
     if (anim) {
       const cs = getComputedStyle(anim); ai.animation = `${cs.animationName} ${cs.animationDuration} ${cs.animationTimingFunction} ${cs.animationIterationCount}`;
       const nm = cs.animationName.split(',')[0].trim();
-      for (const sh of document.styleSheets) { try { for (const rule of sh.cssRules) if (rule.type === CSSRule.KEYFRAMES_RULE && rule.name === nm) { ai.keyframesText = rule.cssText.slice(0, 700); } } catch {} }
+      for (const sh of document.styleSheets) { try { for (const rule of sh.cssRules) if (rule.type === CSSRule.KEYFRAMES_RULE && rule.name === nm) { ai.keyframesText = rule.cssText.slice(0, 2500); } } catch {} }
     }
     if (el.tagName === 'VIDEO') ai.video = { duration: Number.isFinite(el.duration) ? el.duration : null, videoWidth: el.videoWidth, videoHeight: el.videoHeight, src: el.currentSrc || el.src, poster: el.poster || null, autoplay: el.autoplay, loop: el.loop, muted: el.muted, controls: el.controls, readyState: el.readyState };
     targets.push({ id: el.dataset.s3dId, kind, selector: sel(el), box: { x: Math.round(r.x), y: Math.round(r.y + scrollY), w: Math.round(r.width), h: Math.round(r.height) }, context, ...ai, ...extra });
