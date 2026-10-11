@@ -1920,5 +1920,6 @@
 "（是不是 {}？）": " (did you mean {}?)",
 "選項的值不能是空的。": "An option value cannot be empty.",
 "找不到頁面「{}」。可用的頁面：{}": "Page \"{}\" not found. Available pages: {}",
-"starter 頁面裡找不到可比對的區塊（缺少「reference image」註解），沒有東西可驗證。": "No comparable sections were found in the starter pages (the \"reference image\" comments are missing), so there is nothing to verify."
+"starter 頁面裡找不到可比對的區塊（缺少「reference image」註解），沒有東西可驗證。": "No comparable sections were found in the starter pages (the \"reference image\" comments are missing), so there is nothing to verify.",
+"（注意：這次只爬了 {} 頁，上次是 {} 頁。消失的網址可能只是這次沒爬到——先開啟確認，再決定要不要設 301。）": "(Note: this run crawled only {} pages, the previous one {}. The \"missing\" URLs may simply not have been crawled this time — open them to confirm before adding 301s.)"
 }

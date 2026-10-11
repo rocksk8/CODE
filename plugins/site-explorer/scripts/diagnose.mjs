@@ -7,6 +7,8 @@ import path from 'node:path';
 import { launchBrowser } from './launch.mjs';
 import { findUrl } from './args.mjs';
 import { guardInternal, isMain } from './util.mjs';
+import { stripControl } from './untrusted.mjs';
+const __log = console.log; console.log = (...a) => __log(...a.map((x) => (typeof x === 'string' ? x.split('\n').map(stripControl).join('\n') : x))); // page text is printed here: no terminal escape sequences
 import { attachNetworkRecorder, deepContent } from './observe.mjs';
 
 const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';

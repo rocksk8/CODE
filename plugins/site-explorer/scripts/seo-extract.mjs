@@ -90,7 +90,7 @@ export async function extractSeoInPage() {
   const size = (e) => e.transferSize || e.encodedBodySize || 0;
   const byType = {}; let total = 0; const thirdParty = new Set();
   for (const e of res) { const t = e.initiatorType || 'other'; byType[t] = byType[t] || { count: 0, bytes: 0 }; byType[t].count++; byType[t].bytes += size(e); total += size(e); try { const h = new URL(e.name).hostname; if (strip(h) !== myHost) thirdParty.add(h); } catch {} }
-  const largest = [...res].sort((a, b) => size(b) - size(a)).slice(0, 5).map((e) => ({ url: e.name.slice(0, 120), bytes: size(e), ms: Math.round(e.duration) }));
+  const largest = [...res].sort((a, b) => size(b) - size(a)).slice(0, 5).map((e) => ({ url: e.name.split(/[?#]/)[0].slice(0, 120), bytes: size(e), ms: Math.round(e.duration) }));
   const blockingScripts = [...document.querySelectorAll('head script[src]')].filter((s) => !s.async && !s.defer && s.type !== 'module').length;
   const blockingCss = document.querySelectorAll('head link[rel=stylesheet]').length;
   const perf = {
