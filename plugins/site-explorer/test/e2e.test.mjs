@@ -61,6 +61,7 @@ test('explore pipeline produces all artifacts', async (t) => {
   const out = path.join(tmp, 'out');
   const r = await node('explore.mjs', [base, '--max-pages', '4', '--out', out, '--wait', '1500']);
   assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /3D／動畫：偵測到 \d+ 個元素.*motion\.md/, 'the closing summary says what happened to 3D / animation');
   const host = new URL(base).host.replace(/[^a-z0-9.-]/gi, '_');
   assert.match(fs.readFileSync(path.join(out, 'ABOUT-THIS-FOLDER.md'), 'utf8'), /這是什麼資料夾/); assert.equal(JSON.parse(fs.readFileSync(path.join(out, 'runs.json'), 'utf8'))[0].host, new URL(base).host.replace(/[^a-z0-9.-]/gi, '_'));
   const site = JSON.parse(fs.readFileSync(path.join(out, 'site', host, 'site.json'), 'utf8'));

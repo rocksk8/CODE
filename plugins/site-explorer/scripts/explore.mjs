@@ -136,6 +136,18 @@ if ((crawlOk || motionOk) && crawlOk && !args.includes('--no-handoff')) handoffO
 const failed = steps.filter((s) => !s.ok);
 console.log(`\n完成：${steps.length - failed.length}/${steps.length} 階段成功${failed.length ? '，失敗：' + failed.map((f) => f.label).join('、') : ''}`);
 try { const hj = path.join(siteDir, 'health.json'); if (fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(`健檢：${h.score}/100（${h.grade}）— 嚴重 ${h.severity.critical}・高 ${h.severity.high}・中 ${h.severity.medium}　詳見 ${path.join(siteDir, 'health.md')}`); } } catch {}
+if (!args.includes('--no-motion')) { // always say what happened to 3D / animation, so its absence from the summary never looks like the feature vanished
+  try {
+    const pj = path.join(motionDir, 'pages.json'); const pgs = fs.existsSync(pj) ? JSON.parse(fs.readFileSync(pj, 'utf8')).pages : [];
+    const mj = path.join(motionDir, 'motion.json'); const m = fs.existsSync(mj) ? JSON.parse(fs.readFileSync(mj, 'utf8')) : null;
+    if (!motionOk || (!m && !pgs.length)) console.log('3D／動畫：這次沒有擷取成功（看上面「擷取 3D／動畫畫格」那一段的原因；可試 --headed 或 --wait 8000）');
+    else {
+      const total = pgs.length ? pgs.reduce((n, x) => n + (x.targets || 0), 0) : (m.targets || []).length;
+      const withAny = pgs.filter((x) => x.targets).length;
+      console.log(`3D／動畫：${total ? `偵測到 ${total} 個元素${pgs.length ? `（${withAny}/${pgs.length} 頁有）` : ''}，AI 可讀的文字說明：${path.join(motionDir, 'motion.md')}${handoffOk ? '（也複製在 handoff/motion.md，畫格序列圖在 handoff/media/motion/）' : ''}` : '沒有偵測到 3D 或動畫元素（若網站其實有，常見原因是整頁 3D 要先點「進入」、或需要顯示卡：可試 --headed）'}`);
+    }
+  } catch {}
+}
 if (handoffOk) console.log(`交接包：${handoffDir}\n  先讀 ai-brief.md（給 AI）；完整規格 SPEC.md；決策紀錄 DECISIONS.md`);
 if (fs.existsSync(dash)) {
   const mb = (fs.statSync(dash).size / 1048576).toFixed(1);
