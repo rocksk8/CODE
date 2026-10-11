@@ -68,8 +68,8 @@ for (const [name, out] of [['acme-studio', outAcme], ['three-demo', outThree]]) 
   fs.rmSync(path.join(demo, name, 'handoff', 'media', 'states'), { recursive: true, force: true });
 }
 // the demo must not carry the maintainer's temp paths: show a neutral location instead
-{ const swap = (dir, from) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const f = path.join(dir, e.name); if (e.isDirectory()) swap(f, from); else if (/\.(html|md|json|css|js|csv|svg)$/.test(f)) { const t = fs.readFileSync(f, 'utf8'); if (t.includes(from)) fs.writeFileSync(f, t.split(from).join('~/explore-out')); } } };
-  swap(path.join(demo, 'acme-studio'), outAcme); swap(path.join(demo, 'three-demo'), outThree); swap(path.join(demo, 'acme-studio'), tmp); swap(path.join(demo, 'three-demo'), tmp); }
+{ const swap = (dir, from, to = '~/explore-out') => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const f = path.join(dir, e.name); if (e.isDirectory()) swap(f, from, to); else if (/\.(html|md|json|css|js|csv|svg)$/.test(f)) { const t = fs.readFileSync(f, 'utf8'); if (t.includes(from)) fs.writeFileSync(f, t.split(from).join(to)); } } };
+  swap(path.join(demo, 'acme-studio'), outAcme); swap(path.join(demo, 'three-demo'), outThree); swap(path.join(demo, 'acme-studio'), tmp); swap(path.join(demo, 'three-demo'), tmp); for (const n of ['acme-studio', 'three-demo']) swap(path.join(demo, n), os.homedir(), '~'); }
 fs.writeFileSync(path.join(demo, 'README.md'), `# Demo output (fictional sites)
 
 Real output of the current version against the fictional fixture sites in \`plugins/site-explorer/test/fixtures/\` (Acme Studio, and a WebGL + CSS-3D + video page). **Not an analysis of a real website.**
