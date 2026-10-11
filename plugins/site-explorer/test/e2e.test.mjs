@@ -72,7 +72,8 @@ test('explore pipeline produces all artifacts', async (t) => {
   const bundle = path.join(out, 'site', host, 'design-bundle');
   const tok = JSON.parse(fs.readFileSync(path.join(bundle, 'tokens.json'), 'utf8'));
   assert.equal(tok.color.brand, '#e4572e');
-  for (const f of ['tokens.css', 'tokens.w3c.json', 'tailwind.config.js', 'README.md']) assert.ok(fs.existsSync(path.join(bundle, f)), f);
+  for (const f of ['tokens.css', 'tokens.w3c.json', 'tailwind.config.js', 'tailwind-v4.css', 'DESIGN.md', 'README.md']) assert.ok(fs.existsSync(path.join(bundle, f)), f);
+  const v4 = fs.readFileSync(path.join(bundle, 'tailwind-v4.css'), 'utf8'); assert.match(v4, /@import "tailwindcss";[\s\S]*@theme \{[\s\S]*--color-/); assert.match(fs.readFileSync(path.join(bundle, 'DESIGN.md'), 'utf8'), /^---\n[\s\S]*colors:/);
   JSON.parse(fs.readFileSync(path.join(bundle, 'tokens.w3c.json'), 'utf8'));
   // the new stages of the pipeline: health check + handoff package
   const health = JSON.parse(fs.readFileSync(path.join(out, 'site', host, 'health.json'), 'utf8'));

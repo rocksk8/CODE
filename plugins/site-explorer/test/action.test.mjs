@@ -74,3 +74,25 @@ test('ci-run: explores a baseline and a PR site, shows the improvement, writes t
     assert.equal(strict.gate.failed, true, 'an old-style page cannot reach a perfect score');
   } finally { oldSite.close(); newSite.close(); }
 });
+
+test('gateResult: regression gates compare with the baseline (max-drop, fail-on-new)', () => {
+  const mk = (score, issues) => ({ health: { score, issueCounts: { critical: 0, high: 0, medium: 0, low: 0 }, issueList: issues.map(([id, severity]) => ({ id, severity })) } });
+  const base = mk(90, [['nosniff', 'low'], ['csp', 'info']]);
+  // 90 -> 84: a drop of 6
+  assert.equal(gateResult(mk(84, []), { baseline: base, maxDrop: 5 }).failed, true);
+  assert.match(gateResult(mk(84, []), { baseline: base, maxDrop: 5 }).reasons[0], /dropped 6 points/);
+  assert.equal(gateResult(mk(86, []), { baseline: base, maxDrop: 5 }).failed, false);
+  assert.equal(gateResult(mk(95, []), { baseline: base, maxDrop: 0 }).failed, false, 'an improvement is never a drop');
+  // new issues at or above a severity that the baseline does not have; old ones and lower severities do not count
+  const cur = mk(88, [['nosniff', 'low'], ['noindex', 'critical'], ['og-missing', 'low']]);
+  const g = gateResult(cur, { baseline: base, failOnNew: 'high' });
+  assert.equal(g.failed, true); assert.match(g.reasons[0], /1 new issue\(s\) at high or above.*noindex/);
+  assert.equal(gateResult(mk(88, [['nosniff', 'low'], ['og-missing', 'low']]), { baseline: base, failOnNew: 'high' }).failed, false);
+  // without a baseline the regression gates are inert (main() refuses the combination up front)
+  assert.equal(gateResult(cur, { baseline: null, maxDrop: 1, failOnNew: 'low' }).failed, false);
+});
+
+test('main(): max-drop / fail-on-new need a baseline-url', async () => {
+  await assert.rejects(() => main({ INPUT_URL: 'https://example.com', INPUT_MAX_DROP: '5', INPUT_OUT: '/tmp/se-ci-x' }), /baseline-url/);
+  await assert.rejects(() => main({ INPUT_URL: 'https://example.com', INPUT_BASELINE_URL: 'https://example.org', INPUT_FAIL_ON_NEW: 'nope', INPUT_OUT: '/tmp/se-ci-x' }), /fail-on-new/);
+});

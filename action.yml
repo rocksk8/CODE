@@ -7,6 +7,8 @@ inputs:
   baseline-url: { description: 'Optional production URL: adds a before/after comparison to the comment', required: false, default: '' }
   max-pages: { description: 'Pages to crawl (1-50)', required: false, default: '6' }
   fail-on: { description: 'Fail when an issue of this severity or worse exists: critical, high, medium or low. Empty = never fail on severity', required: false, default: 'high' }
+  max-drop: { description: 'Fail when the health score is more than this many points lower than the baseline-url run (needs baseline-url). Empty = no limit', required: false, default: '' }
+  fail-on-new: { description: 'Fail when an issue of this severity or worse exists that the baseline-url run does not have (needs baseline-url): critical, high, medium or low. Empty = off', required: false, default: '' }
   min-health: { description: 'Fail when the health score (0-100) is below this. Empty = no minimum', required: false, default: '' }
   a11y: { description: 'Also run the accessibility check (axe-core, WCAG 2.2 AA); results count toward the health score', required: false, default: 'false' }
   lang: { description: 'Language of the comment and reports: en or zh', required: false, default: 'en' }
@@ -41,6 +43,8 @@ runs:
         INPUT_MAX_PAGES: ${{ inputs.max-pages }}
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
         INPUT_MIN_HEALTH: ${{ inputs.min-health }}
+        INPUT_MAX_DROP: ${{ inputs.max-drop }}
+        INPUT_FAIL_ON_NEW: ${{ inputs.fail-on-new }}
         INPUT_A11Y: ${{ inputs.a11y }}
         INPUT_LANG: ${{ inputs.lang }}
         INPUT_OUT: ${{ runner.temp }}/site-explorer-out

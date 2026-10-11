@@ -129,6 +129,8 @@ jobs:
           baseline-url: https://你的正式網址  # 選填：加入改版前後對照
           fail-on: high                   # 有 high 以上的問題就讓檢查失敗
           min-health: 70                  # 選填：健檢分數低於 70 就失敗
+          max-drop: 5                     # 選填（需要 baseline-url）：比正式站低超過 5 分就失敗
+          fail-on-new: high               # 選填（需要 baseline-url）：出現正式站沒有的 high 以上新問題就失敗
 ```
 
 PR 底下會出現（並在之後更新同一則）留言：分數、判定、與正式站的差異、前幾名問題與修法；儀表板和交接包會附在該次執行的 Artifacts。fork 來的 PR 沒有寫入權限，留言會略過，結果仍在 job summary。留言的外框（標題、欄位名稱）一律是英文；`lang: zh` 只會把其中的問題標題與修法改成繁體中文。
@@ -211,7 +213,7 @@ AI 只能讀文字和圖片。所以：
 | `motion.md`、`health.md` | 動態與健檢 |
 | `DECISIONS.md` | **持續更新**的決策紀錄、待確認問題、假設、擷取紀錄（誰在何時用什麼身分讀了哪些頁面） |
 | `CLAUDE.md` | 給在此資料夾工作的 AI：怎麼讀、不能做什麼、每個決策都要記錄 |
-| `tokens/`、`media/` | css／W3C／Tokens Studio／Tailwind／色票 SVG；區塊裁切圖、影格序列圖、品牌素材 |
+| `tokens/`、`media/` | css／W3C／Tokens Studio／Tailwind（v3 設定檔與 v4 `@theme`，色彩為 OKLCH）／`DESIGN.md`（給 AI 工具先讀的設計規則）／色票 SVG；區塊裁切圖、影格序列圖、品牌素材 |
 
 整包可獨立搬移：文件中引用的每個檔案都在包內（有測試保證）。
 
