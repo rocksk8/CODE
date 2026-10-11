@@ -110,3 +110,20 @@ test('setup without a browser and without a terminal asks for consent instead of
   if (r.status === 0) return t.skip('this machine has Chrome/Edge installed, so no download is needed');
   assert.equal(r.status, 2); assert.match(r.out, /需要你的同意才會下載/); assert.match(r.out, /site-explorer setup --yes/);
 });
+
+test('npm package: ships only what the CLI needs, is small, and the unpacked tarball runs', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const dest = path.join(tmp, 'pack'); fs.mkdirSync(dest);
+  const packed = spawnSync('npm', ['pack', '--json', '--pack-destination', dest, '--ignore-scripts'], { cwd: repo, encoding: 'utf8', shell: process.platform === 'win32' });
+  assert.equal(packed.status, 0, packed.stderr);
+  const info = JSON.parse(packed.stdout)[0];
+  const paths = info.files.map((f) => f.path);
+  for (const must of ['package.json', 'README.md', 'LICENSE', 'plugins/site-explorer/bin/site-explorer.mjs', 'plugins/site-explorer/package.json', 'plugins/site-explorer/scripts/verify.mjs', 'plugins/site-explorer/scripts/report/report-client.js']) assert.ok(paths.includes(must), 'missing from package: ' + must);
+  assert.ok(!paths.some((p) => /(^|\/)(test|docs|node_modules|tools)\//.test(p) || /\.env|\.pem|\.db$/.test(p)), 'tests, docs, tools or secrets leaked into the package');
+  assert.ok(info.size < 1_500_000, `package is ${info.size} bytes`);
+  const ex = path.join(tmp, 'unpacked'); fs.mkdirSync(ex);
+  assert.equal(spawnSync('tar', ['-xzf', path.join(dest, info.filename), '-C', ex]).status, 0);
+  const bin = path.join(ex, 'package', 'plugins', 'site-explorer', 'bin', 'site-explorer.mjs');
+  const r = await run(tmp, [bin, '--version']); assert.equal(r.out.trim(), J(path.join(repo, 'package.json')).version);
+  const h = await run(tmp, [bin, 'verify']); assert.match(h.out, /用法：site-explorer verify/);
+});

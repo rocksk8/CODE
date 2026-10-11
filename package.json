@@ -1,7 +1,24 @@
 {
   "name": "site-explorer",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Explore a website with a real browser: design, content, layout, 3D/animation (AI-readable), SEO/indexability health, and an AI+developer handoff package. Also a Claude Code plugin.",
+  "keywords": [
+    "website",
+    "design-tokens",
+    "scraper",
+    "crawler",
+    "seo",
+    "playwright",
+    "claude-code",
+    "claude-code-plugin",
+    "three.js",
+    "handoff",
+    "web-audit"
+  ],
+  "homepage": "https://github.com/rocksk8/CODE#readme",
+  "bugs": {
+    "url": "https://github.com/rocksk8/CODE/issues"
+  },
   "type": "module",
   "bin": {
     "site-explorer": "plugins/site-explorer/bin/site-explorer.mjs"
@@ -16,5 +33,17 @@
     "type": "git",
     "url": "git+https://github.com/rocksk8/code.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "plugins/site-explorer/bin",
+    "plugins/site-explorer/scripts",
+    "plugins/site-explorer/package.json",
+    "plugins/site-explorer/LICENSE",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

@@ -86,6 +86,16 @@ No install: `npx git+https://github.com/rocksk8/CODE.git example.com`.
 
 Contributors: `cd plugins/site-explorer && npm run test:full`.
 
+## Docker (no Node needed)
+
+```bash
+git clone https://github.com/rocksk8/CODE.git && cd CODE
+docker build -t site-explorer .
+docker run --rm -v "$PWD/out:/out" site-explorer https://example.com --out /out
+```
+
+Results land in `./out`. The container is the sandbox, so Chromium runs without its own sandbox; explore only sites you trust.
+
 ## Commands
 
 | Command | What it does |

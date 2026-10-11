@@ -84,6 +84,16 @@ site-explorer example.com
 
 貢獻者：`cd plugins/site-explorer && npm run test:full`。
 
+## 用 Docker（不想裝 Node 的人）
+
+```bash
+git clone https://github.com/rocksk8/CODE.git && cd CODE
+docker build -t site-explorer .
+docker run --rm -v "$PWD/out:/out" site-explorer https://example.com --out /out
+```
+
+結果會出現在 `./out`。容器本身就是沙箱，所以瀏覽器以無沙箱模式執行；只探索你信任的網站。
+
 ## 指令
 
 | 指令 | 做什麼 |

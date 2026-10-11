@@ -1,0 +1,9 @@
+.git
+docs
+**/node_modules
+**/test
+**/tools
+plugins/site-explorer/skills
+plugins/site-explorer/commands
+plugins/site-explorer/agents
+plugins/site-explorer/hooks

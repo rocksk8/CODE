@@ -1,6 +1,6 @@
 {
   "name": "site-explorer",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Claude 自動控制瀏覽器探索網站：設計、內容、排版、3D／動畫（AI 可讀化）、SEO／爬蟲索引健檢、編輯方式，並產生可交接給 AI 與開發者的規格包。",
   "author": {
     "name": "rocksk8"
