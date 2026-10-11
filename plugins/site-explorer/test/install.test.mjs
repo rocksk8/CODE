@@ -31,6 +31,7 @@ test('manifests agree: one version everywhere, light dependencies, pinned MCP, v
   assert.equal(top.version, pkg.version);
   assert.equal(pkg.dependencies['playwright-core'], J(path.join(root, 'node_modules', 'playwright-core', 'package.json')).version, 'playwright-core is pinned to the tested version');
   assert.equal(top.dependencies['playwright-core'], pkg.dependencies['playwright-core']);
+  assert.equal(top.dependencies['axe-core'], pkg.dependencies['axe-core'], 'axe-core is pinned identically in both manifests'); assert.equal(pkg.dependencies['axe-core'], J(path.join(root, 'node_modules', 'axe-core', 'package.json')).version);
   assert.ok(!pkg.devDependencies, 'no devDependencies: Claude Code installs package.json dependencies into the plugin cache; the 3D tests get three via test:full');
   assert.equal(pkg.engines.node, '>=20'); assert.equal(top.engines.node, '>=20');
   assert.equal(pkg.bin['site-explorer'], 'bin/site-explorer.mjs'); assert.equal(top.bin['site-explorer'], 'plugins/site-explorer/bin/site-explorer.mjs');

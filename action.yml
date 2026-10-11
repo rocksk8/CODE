@@ -8,6 +8,7 @@ inputs:
   max-pages: { description: 'Pages to crawl (1-50)', required: false, default: '6' }
   fail-on: { description: 'Fail when an issue of this severity or worse exists: critical, high, medium or low. Empty = never fail on severity', required: false, default: 'high' }
   min-health: { description: 'Fail when the health score (0-100) is below this. Empty = no minimum', required: false, default: '' }
+  a11y: { description: 'Also run the accessibility check (axe-core, WCAG 2.2 AA); results count toward the health score', required: false, default: 'false' }
   comment: { description: 'Post / update a comment on the pull request', required: false, default: 'true' }
   github-token: { description: 'Token used to post the comment', required: false, default: '${{ github.token }}' }
 outputs:
@@ -39,6 +40,7 @@ runs:
         INPUT_MAX_PAGES: ${{ inputs.max-pages }}
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
         INPUT_MIN_HEALTH: ${{ inputs.min-health }}
+        INPUT_A11Y: ${{ inputs.a11y }}
         INPUT_OUT: ${{ runner.temp }}/site-explorer-out
         INPUT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       run: node "${{ github.action_path }}/plugins/site-explorer/scripts/ci-run.mjs"

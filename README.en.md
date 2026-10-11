@@ -148,6 +148,14 @@ site-explorer https://example.com/ --storage-state ./auth-state.json
 - Logged-in screenshots and text may contain personal data: the handoff and dashboard are marked "captured while logged in" and are **not stored in the history database**. Do not publish these outputs.
 - Use only on accounts and sites you are entitled to access.
 
+## Accessibility check (axe-core)
+
+```bash
+site-explorer https://example.com --a11y
+```
+
+Runs the industry-standard axe-core against WCAG 2.2 AA: missing alt text, buttons without names, insufficient contrast, unlabeled form fields, missing language… The result becomes a health category "Accessibility" (counted in the total score only when you pass `--a11y`; without it scores are exactly as before) and is written to `site/<site>/a11y.json`, each violation with a fix link and where it occurs. Automated checks catch only part of the problems and do not replace manual review. In the GitHub Action the option is `a11y: true`.
+
 ## Commands
 
 | Command | What it does |

@@ -14,6 +14,7 @@ export function buildSummary({ out, host, steps = [], url = null }) {
   const verify = readJSON(path.join(handoff, 'verify', 'verify.json'));
   const site = readJSON(path.join(siteDir, 'site.json'));
   const motionPages = readJSON(path.join(motionDir, 'pages.json'));
+  const a11y = readJSON(path.join(siteDir, 'a11y.json'));
   const has = (f) => fs.existsSync(f);
   const raw = {
     schemaVersion: 1, url, host, authenticated: !!site?.authenticated,
@@ -25,6 +26,7 @@ export function buildSummary({ out, host, steps = [], url = null }) {
       blocking: (health.verdict?.blocking || []).map((b) => ({ id: b.id, severity: b.severity, title: b.title })),
       topIssues: (health.issues || []).slice(0, 10).map((i) => ({ id: i.id, severity: i.severity, category: i.category, title: i.title, affected: i.affected, fix: i.fix })),
     } : null,
+    a11y: a11y ? { pagesChecked: a11y.pagesChecked, ruleViolations: a11y.rules.length, byImpact: Object.fromEntries(['critical', 'serious', 'moderate', 'minor'].map((k) => [k, a11y.rules.filter((r) => r.impact === k).length])), top: a11y.rules.slice(0, 5).map((r) => ({ id: r.id, impact: r.impact, help: r.help, pages: r.pages, nodes: r.nodes })) } : null,
     motion: motionPages ? { pages: (motionPages.pages || []).length, elements: (motionPages.pages || []).reduce((n, p) => n + (p.targets || 0), 0) } : null,
     verify: verify ? { overall: verify.overall, grade: verify.grade, passed: verify.passed, weakest: (verify.pages || []).flatMap((p) => (p.sections || []).filter((s) => s.status === 'ok').map((s) => ({ page: p.page, section: s.name, score: s.score }))).sort((a, b) => a.score - b.score).slice(0, 3) } : null,
     files: {

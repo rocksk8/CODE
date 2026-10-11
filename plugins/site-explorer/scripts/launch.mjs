@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { assertNode } from './util.mjs';
 
 const pluginRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -63,6 +64,24 @@ export async function loadPlaywright({ quiet = false } = {}) {
   for (let i = 0; i < 240 && !pw; i++) { pw = await importPlaywright(); if (!pw) await new Promise((r) => setTimeout(r, 250)); }
   if (!pw) throw new Error('安裝後仍找不到 playwright-core，請執行：site-explorer setup');
   return pw;
+}
+
+/** The exact axe-core version this release was tested with (pinned in package.json). */
+export const pinnedAxe = () => { try { return JSON.parse(fs.readFileSync(path.join(pluginRoot, 'package.json'), 'utf8')).dependencies['axe-core']; } catch { return '4.14.0'; } };
+
+/** Source code of axe-core (accessibility rules), found next to the plugin / global install, else in ~/.site-explorer/deps — installed there once if missing. */
+export function axeSource({ install = true } = {}) {
+  const req = createRequire(import.meta.url);
+  const find = () => { for (const base of [() => req.resolve('axe-core/axe.min.js'), () => createRequire(path.join(DEPS_DIR, 'x.js')).resolve('axe-core/axe.min.js')]) { try { return base(); } catch {} } return null; };
+  let f = find();
+  if (!f && install && !process.env.SITE_EXPLORER_NO_AUTO_INSTALL) {
+    console.error(`第一次使用無障礙檢查：正在安裝 axe-core ${pinnedAxe()} 到 ${DEPS_DIR}（只需一次）…`);
+    fs.mkdirSync(DEPS_DIR, { recursive: true }); if (!fs.existsSync(path.join(DEPS_DIR, 'package.json'))) fs.writeFileSync(path.join(DEPS_DIR, 'package.json'), JSON.stringify({ name: 'site-explorer-deps', private: true, dependencies: {} }));
+    spawnSync(isWin ? 'npm.cmd' : 'npm', ['install', `axe-core@${pinnedAxe()}`, '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: DEPS_DIR, stdio: 'ignore', shell: isWin });
+    f = find();
+  }
+  if (!f) throw new Error(`找不到 axe-core（無障礙檢查引擎）。請執行：cd "${DEPS_DIR}" && npm install axe-core@${pinnedAxe()}`);
+  return fs.readFileSync(f, 'utf8');
 }
 
 /** Chromium-based browsers worth trying after the standard channels. */
