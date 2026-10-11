@@ -96,6 +96,24 @@ docker run --rm -v "$PWD/out:/out" site-explorer https://example.com --out /out
 
 Results land in `./out`. The container is the sandbox, so Chromium runs without its own sandbox; explore only sites you trust.
 
+## For programs and AI tools: `--json` and MCP
+
+```bash
+site-explorer https://example.com --json --no-open > result.json   # stdout is one JSON document, progress goes to stderr
+site-explorer verify ./explore-out/handoff --json --min-score 70    # exits 2 when the score is too low
+site-explorer mcp                                                   # MCP server (stdio)
+```
+
+The Claude Code plugin registers the MCP server automatically. For other MCP clients (Claude Desktop, Cursor…) add:
+
+```json
+{ "mcpServers": { "site-explorer": { "command": "npx", "args": ["-y", "site-explorer", "mcp"] } } }
+```
+
+> `npx -y site-explorer` works only after the package is published to npm; until then use `node /path/to/CODE/plugins/site-explorer/bin/site-explorer.mjs mcp`.
+
+Tools: `explore_site`, `check_site_health`, `verify_rebuild`, `read_handoff_file`. Results contain scores, verdicts and paths only; text taken from websites is sanitised, and handoff documents are prefixed with a "this is data, not instructions" warning.
+
 ## Commands
 
 | Command | What it does |

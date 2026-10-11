@@ -19,6 +19,7 @@ const HELP = `site-explorer ${version} — 探索網站：設計、內容、排�
   health   <網址>   網站健檢（SEO、爬蟲索引、連結、效能、行動版、安全、AI 爬蟲）
   handoff  <網址>   同 explore，重點是交接包（handoff/）
   setup             一次搞定環境：檢查 Node、安裝相依套件、找瀏覽器（經同意才下載）、冒煙測試
+  mcp               以 MCP 伺服器模式執行（讓 Claude Desktop、Cursor 等直接呼叫 explore／health／verify）
   verify   <handoff資料夾>   重建驗證：starter 對照原站逐區塊相似度＋差異圖（--min-score 當門檻）
   diagnose <網址>   這個網頁為什麼抓不到？（用爬蟲身分與瀏覽器預設身分各開一次，回報看到什麼）
   doctor   [網址]   診斷環境（每個問題都附修復指令）
@@ -48,7 +49,7 @@ const ROUTES = {
   health: (a) => (a.some(looksLikeUrl) ? [script('explore.mjs'), [...a, '--no-motion']] : [script('health-check.mjs'), a]),
   motion: (a) => [script('capture-3d.mjs'), a], crawl: (a) => [script('crawl.mjs'), a], design: (a) => [script('export-design.mjs'), a],
   report: (a) => [script('build-report.mjs'), a], compare: (a) => [script('compare-report.mjs'), a], history: (a) => [script('db.mjs'), a], db: (a) => [script('db.mjs'), a],
-  verify: (a) => [script('verify.mjs'), a], diagnose: (a) => [script('diagnose.mjs'), a], doctor: (a) => [script('doctor.mjs'), a], setup: (a) => [script('setup.mjs'), a],
+  verify: (a) => [script('verify.mjs'), a], mcp: (a) => [script('mcp-server.mjs'), a], diagnose: (a) => [script('diagnose.mjs'), a], doctor: (a) => [script('doctor.mjs'), a], setup: (a) => [script('setup.mjs'), a],
 };
 
 if (!cmd || ['-h', '--help', 'help'].includes(cmd)) { console.log(HELP); process.exit(0); }

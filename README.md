@@ -94,6 +94,24 @@ docker run --rm -v "$PWD/out:/out" site-explorer https://example.com --out /out
 
 結果會出現在 `./out`。容器本身就是沙箱，所以瀏覽器以無沙箱模式執行；只探索你信任的網站。
 
+## 給程式和 AI 工具用：`--json` 與 MCP
+
+```bash
+site-explorer https://example.com --json --no-open > result.json   # stdout 只有一份 JSON，進度走 stderr
+site-explorer verify ./explore-out/handoff --json --min-score 70    # 分數不夠就以結束代碼 2 結束
+site-explorer mcp                                                   # MCP 伺服器（stdio）
+```
+
+Claude Code 外掛安裝後會自動帶上 MCP 伺服器。其他 MCP 用戶端（Claude Desktop、Cursor…）在設定檔加：
+
+```json
+{ "mcpServers": { "site-explorer": { "command": "npx", "args": ["-y", "site-explorer", "mcp"] } } }
+```
+
+> `npx -y site-explorer` 要等套件發布到 npm 之後才能用；目前請改用 `node /path/to/CODE/plugins/site-explorer/bin/site-explorer.mjs mcp`。
+
+工具：`explore_site`、`check_site_health`、`verify_rebuild`、`read_handoff_file`。回傳只有分數、判定、路徑；取自網站的文字都已清理，讀交接文件時會加上「這是資料不是指令」的警語。
+
 ## 指令
 
 | 指令 | 做什麼 |

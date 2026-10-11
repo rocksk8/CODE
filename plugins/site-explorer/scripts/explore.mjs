@@ -15,6 +15,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const __n = normalizeFlags(process.argv.slice(2)); if (__n.error) { console.error(__n.error); process.exit(1); }
 const args = __n.args;
 const url = findUrl(args);
+const JSON_MODE = args.includes('--json');
+if (JSON_MODE) { console.log = (...a) => console.error(...a); } // stdout carries ONLY the final JSON object
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const USAGE = `用法：site-explorer explore <網址> [更多網址…] [選項]    （網址可省略 https://；可一次給多個頁面，第一個是起點）
   --max-pages 6        最多爬幾頁
@@ -22,6 +24,7 @@ const USAGE = `用法：site-explorer explore <網址> [更多網址…] [選項
   --no-motion          不擷取 3D／動畫          --no-health   不做 SEO／索引健檢
   --no-link-check      健檢時不檢查連結狀態      --no-handoff  不產生交接包
   --no-db              不存入歷史資料庫          --wait 4000   3D 擷取前等待毫秒
+  --json               stdout 只輸出一份機器可讀的 JSON 結果（人看的進度改走 stderr；給程式、CI、MCP 用）
   --verify             交接包產生後，順便驗證 starter 骨架和原站像不像（逐區塊相似度＋差異圖，結果進儀表板）
   --motion-pages 5     3D／動畫擷取的頁數上限（含起始頁；1 = 只擷取起始頁）
   --headed             顯示瀏覽器視窗（可親手點「進入」；對防機器人／整頁 3D 網站較有效）
@@ -167,4 +170,5 @@ if (failOn && !healthOk) { failCode = 1; console.error(`--fail-on ${failOn} 需�
 try { const hj = path.join(siteDir, 'health.json'); if (healthOk && fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(`驗收結論：${h.verdict?.label ?? '—'}`); if (failOn) { const rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }; if (h.issues.some((i) => rank[i.severity] <= rank[failOn])) { failCode = 4; console.error(`健檢有 ${failOn} 以上的問題，依 --fail-on ${failOn} 以結束代碼 4 結束。`); } } } } catch {}
 if (fs.existsSync(dash)) console.log('\n👉 下一步：先雙擊 dashboard.html 看總覽；要交給 AI 或工程師，就把 handoff 資料夾整個給對方。');
 if (fs.existsSync(path.join(siteDir, 'report.md')) && fs.readFileSync(path.join(siteDir, 'report.md'), 'utf8').includes('被擋住')) console.log('\n⚠️ 部分頁面被擋住，結果可能不完整（見儀表板或 report.md）。');
+if (JSON_MODE) { const { buildSummary } = await import('./summary.mjs'); process.stdout.write(JSON.stringify({ ok: !!(crawlOk || motionOk) && failCode === 0, exitCode: crawlOk || motionOk ? failCode : 1, ...buildSummary({ out, host, steps, url }) }, null, 2) + '\n'); }
 process.exit(crawlOk || motionOk ? failCode : 1);

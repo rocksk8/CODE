@@ -6,6 +6,13 @@
         "-y",
         "@playwright/mcp@0.0.83"
       ]
+    },
+    "site-explorer": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/bin/site-explorer.mjs",
+        "mcp"
+      ]
     }
   }
 }

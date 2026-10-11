@@ -132,12 +132,13 @@ export function renderMd(r) {
 
 if (isMain(import.meta.url)) {
   const dir = args.find((a, i) => !a.startsWith('--') && !['--page', '--min-score', '--out'].includes(args[i - 1]));
-  if (!dir) { console.error('用法：site-explorer verify <交接包資料夾（handoff）> [--page home] [--min-score 60] [--out <資料夾>]'); process.exit(1); }
+  if (!dir) { console.error('用法：site-explorer verify <交接包資料夾（handoff）> [--page home] [--min-score 60] [--out <資料夾>] [--json]'); process.exit(1); }
   const min = Number(opt('min-score', 0));
   if (!Number.isFinite(min) || min < 0 || min > 100) { console.error('--min-score 必須是 0–100 的數字'); process.exit(1); }
   try {
     const r = await verifyHandoff(path.resolve(dir), { page: opt('page'), outDir: opt('out') && path.resolve(opt('out')), minScore: min });
-    console.log(renderMd(r)); console.log(`\n已寫入 ${r.outDir}/verify.md、verify.json 與 diff/`);
+    if (args.includes('--json')) { process.stdout.write(JSON.stringify({ ok: r.passed || !min, ...r }, null, 2) + '\n'); console.error(`已寫入 ${r.outDir}`); }
+    else { console.log(renderMd(r)); console.log(`\n已寫入 ${r.outDir}/verify.md、verify.json 與 diff/`); }
     process.exit(r.passed || !min ? 0 : 2);
   } catch (e) { console.error('✖ ' + e.message); process.exit(1); }
 }
