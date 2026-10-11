@@ -2,7 +2,7 @@
   "schemaVersion": 3,
   "aiDocument": "motion.md",
   "three": {
-    "revision": "186",
+    "revision": "170",
     "scene": {
       "objects": 5,
       "byType": {
@@ -64,7 +64,7 @@
       "drawCalls": 2,
       "trianglesPerFrame": 2060,
       "geometriesInMemory": 2,
-      "texturesInMemory": 1,
+      "texturesInMemory": 0,
       "pixelRatio": 1,
       "shadows": false,
       "toneMapping": 0,
@@ -75,28 +75,28 @@
         "name": "ProductCube",
         "type": "Mesh",
         "movedBy": 0,
-        "rotatedBy": 0.7603,
+        "rotatedBy": 0.7155,
         "scaledBy": 0
       },
       {
         "name": "HaloRing",
         "type": "Mesh",
         "movedBy": 0,
-        "rotatedBy": 0.51,
+        "rotatedBy": 0.48,
         "scaledBy": 0
       }
     ],
     "movingCount": 2
   },
   "scrollFilmstrip": "media/motion/scroll-filmstrip.png",
-  "url": "http://localhost:8793/",
-  "capturedAt": "2026-10-10T09:25:44.052Z",
+  "url": "http://127.0.0.1:4174/",
+  "capturedAt": "2026-10-11T14:18:18.433Z",
   "webglContexts": [
     "webgl2"
   ],
   "libs": {
     "three": true,
-    "threeRevision": "186",
+    "threeRevision": "170",
     "babylon": false,
     "gsap": false,
     "scrollTrigger": false,
@@ -110,12 +110,12 @@
     "framerMotion": false,
     "webgpu": false
   },
-  "raf": 92,
+  "raf": 76,
   "assets3d": [],
   "shaderSamples": [
-    "#version 300 es #define attribute in #define varying out #define texture2D texture precision highp float; precision highp int; precision highp sampler2D; precision highp samplerCube; precision highp sampler3D; precision highp sampler2DArray; precision highp sampler2DShadow; precision highp samplerCubeShadow; precision highp sampler2DArrayShadow; precision highp isampler2D; precision highp isampler3D; precision highp isamplerCube; precision highp isampler2DArray; precision highp usampler2D; precision highp usampler3D; precision highp usamplerCube; precision highp usampler2DArray; #define HIGH_PRECISION #define SHADER_TYPE MeshStandardMaterial #define SHADER_NAME #define STANDARD #define HAS_NORMAL uniform mat4 modelMatrix; uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix; uniform",
+    "#version 300 es #define attribute in #define varying out #define texture2D texture precision highp float; precision highp int; precision highp sampler2D; precision highp samplerCube; precision highp sampler3D; precision highp sampler2DArray; precision highp sampler2DShadow; precision highp samplerCubeShadow; precision highp sampler2DArrayShadow; precision highp isampler2D; precision highp isampler3D; precision highp isamplerCube; precision highp isampler2DArray; precision highp usampler2D; precision highp usampler3D; precision highp usamplerCube; precision highp usampler2DArray; #define HIGH_PRECISION #define SHADER_TYPE MeshStandardMaterial #define SHADER_NAME #define STANDARD uniform mat4 modelMatrix; uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix; uniform mat4 viewMatrix; u",
     "#version 300 es #define varying in layout(location = 0) out highp vec4 pc_fragColor; #define gl_FragColor pc_fragColor #define gl_FragDepthEXT gl_FragDepth #define texture2D texture #define textureCube texture #define texture2DProj textureProj #define texture2DLodEXT textureLod #define texture2DProjLodEXT textureProjLod #define textureCubeLodEXT textureLod #define texture2DGradEXT textureGrad #define texture2DProjGradEXT textureProjGrad #define textureCubeGradEXT textureGrad precision highp float; precision highp int; precision highp sampler2D; precision highp samplerCube; precision highp sampler3D; precision highp sampler2DArray; precision highp sampler2DShadow; precision highp samplerCubeShadow; precision highp sampler2DArrayShadow; precision highp isampler2D; precision highp isampler3D;",
-    "#version 300 es #define attribute in #define varying out #define texture2D texture precision highp float; precision highp int; precision highp sampler2D; precision highp samplerCube; precision highp sampler3D; precision highp sampler2DArray; precision highp sampler2DShadow; precision highp samplerCubeShadow; precision highp sampler2DArrayShadow; precision highp isampler2D; precision highp isampler3D; precision highp isamplerCube; precision highp isampler2DArray; precision highp usampler2D; precision highp usampler3D; precision highp usamplerCube; precision highp usampler2DArray; #define HIGH_PRECISION #define SHADER_TYPE MeshBasicMaterial #define SHADER_NAME #define HAS_NORMAL uniform mat4 modelMatrix; uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix; uniform mat4 viewMatrix; un",
+    "#version 300 es #define attribute in #define varying out #define texture2D texture precision highp float; precision highp int; precision highp sampler2D; precision highp samplerCube; precision highp sampler3D; precision highp sampler2DArray; precision highp sampler2DShadow; precision highp samplerCubeShadow; precision highp sampler2DArrayShadow; precision highp isampler2D; precision highp isampler3D; precision highp isamplerCube; precision highp isampler2DArray; precision highp usampler2D; precision highp usampler3D; precision highp usamplerCube; precision highp usampler2DArray; #define HIGH_PRECISION #define SHADER_TYPE MeshBasicMaterial #define SHADER_NAME uniform mat4 modelMatrix; uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix; uniform mat4 viewMatrix; uniform mat3 normalMa",
     "#version 300 es #define varying in layout(location = 0) out highp vec4 pc_fragColor; #define gl_FragColor pc_fragColor #define gl_FragDepthEXT gl_FragDepth #define texture2D texture #define textureCube texture #define texture2DProj textureProj #define texture2DLodEXT textureLod #define texture2DProjLodEXT textureProjLod #define textureCubeLodEXT textureLod #define texture2DGradEXT textureGrad #define texture2DProjGradEXT textureProjGrad #define textureCubeGradEXT textureGrad precision highp float; precision highp int; precision highp sampler2D; precision highp samplerCube; precision highp sampler3D; precision highp sampler2DArray; precision highp sampler2DShadow; precision highp samplerCubeShadow; precision highp sampler2DArrayShadow; precision highp isampler2D; precision highp isampler3D;"
   ],
   "cssKeyframes": [],
@@ -152,21 +152,21 @@
         "summary": "WebGL 3D 畫布 ʼcanvasʼ，640×400px，位於「Our product in 3D」區塊（約在頁面 12% 的位置）。",
         "description": [
           "WebGL 3D 畫布 ʼcanvasʼ，640×400px，位於「Our product in 3D」區塊（約在頁面 12% 的位置）。",
-          "靜置時會自己動：取樣期間沒有回到起點（可能週期更長、連續漂移，或非週期）；每 250 ms 畫面變化約 1.56%，變化細微（緩慢漂浮或小幅度）；變化集中在下方中央（約佔 18% 面積）。",
+          "靜置時會自己動：取樣期間沒有回到起點（可能週期更長、連續漂移，或非週期）；每 250 ms 畫面變化約 1.6%，變化細微（緩慢漂浮或小幅度）；變化集中在下方中央（約佔 18% 面積）。",
           "對滑鼠掃過與拖曳沒有偵測到反應。",
-          "視覺：主色 #181828（82%）、#280808（7.8%）、#68c8f8（3.1%）、#381818（1%），整體偏暗。",
-          "three.js r186 場景：共 5 個物件（Scene×1、DirectionalLight×1、AmbientLight×1、Mesh×2），1129 個頂點／約 2060 個三角形；幾何：BoxGeometry×1、TorusGeometry×1；材質：MeshStandardMaterial×1（色 #ff6633） metalness 0.30/roughness 0.40；MeshBasicMaterial×1（色 #66ccff）；光源：DirectionalLight×1、AmbientLight×1；背景：#101826。",
+          "視覺：主色 #181828（82.3%）、#280808（6%）、#68c8f8（3.2%）、#983828（1.2%），整體偏暗。",
+          "three.js r170 場景：共 5 個物件（Scene×1、DirectionalLight×1、AmbientLight×1、Mesh×2），1129 個頂點／約 2060 個三角形；幾何：BoxGeometry×1、TorusGeometry×1；材質：MeshStandardMaterial×1（色 #ff6633） metalness 0.30/roughness 0.40；MeshBasicMaterial×1（色 #66ccff）；光源：DirectionalLight×1、AmbientLight×1；背景：#101826。",
           "相機：PerspectiveCamera fov 50°，位置 (0, 0.5, 4)，近／遠裁切 0.1／100。渲染：每幀 2 次 draw call、2060 個三角形，pixelRatio 1。",
-          "取樣期間有 2 個物件在移動／旋轉：ProductCube（Mesh，旋轉 0.7603 rad）、HaloRing（Mesh，旋轉 0.51 rad）。"
+          "取樣期間有 2 個物件在移動／旋轉：ProductCube（Mesh，旋轉 0.7155 rad）、HaloRing（Mesh，旋轉 0.48 rad）。"
         ],
         "behavior": {
           "animatesOnItsOwn": true,
           "periodMs": null,
-          "changePerStepPercent": 1.56,
+          "changePerStepPercent": 1.6,
           "changedRegion": {
             "x": 0.31,
             "y": 0.31,
-            "w": 0.38,
+            "w": 0.4,
             "h": 0.67,
             "coverage": 18
           },
@@ -177,30 +177,30 @@
           "dominantColors": [
             {
               "hex": "#181828",
-              "share": 82
+              "share": 82.3
             },
             {
               "hex": "#280808",
-              "share": 7.8
+              "share": 6
             },
             {
               "hex": "#68c8f8",
-              "share": 3.1
+              "share": 3.2
             },
             {
-              "hex": "#381818",
-              "share": 1
+              "hex": "#983828",
+              "share": 1.2
             },
             {
-              "hex": "#682818",
-              "share": 0.9
+              "hex": "#481818",
+              "share": 1.2
             }
           ],
-          "brightness": 12.3
+          "brightness": 12.5
         },
         "technique": {
           "three": {
-            "revision": "186",
+            "revision": "170",
             "scene": {
               "objects": 5,
               "byType": {
@@ -262,7 +262,7 @@
               "drawCalls": 2,
               "trianglesPerFrame": 2060,
               "geometriesInMemory": 2,
-              "texturesInMemory": 1,
+              "texturesInMemory": 0,
               "pixelRatio": 1,
               "shadows": false,
               "toneMapping": 0,
@@ -273,14 +273,14 @@
                 "name": "ProductCube",
                 "type": "Mesh",
                 "movedBy": 0,
-                "rotatedBy": 0.7603,
+                "rotatedBy": 0.7155,
                 "scaledBy": 0
               },
               {
                 "name": "HaloRing",
                 "type": "Mesh",
                 "movedBy": 0,
-                "rotatedBy": 0.51,
+                "rotatedBy": 0.48,
                 "scaledBy": 0
               }
             ],
@@ -288,7 +288,7 @@
           }
         },
         "reproduce": [
-          "以 three.js r186 建立 PerspectiveCamera（fov 50） 與 BoxGeometry/TorusGeometry 幾何，材質用 MeshStandardMaterial/MeshBasicMaterial。",
+          "以 three.js r170 建立 PerspectiveCamera（fov 50） 與 BoxGeometry/TorusGeometry 幾何，材質用 MeshStandardMaterial/MeshBasicMaterial。",
           "在 requestAnimationFrame 中更新上述移動物件的 rotation／position（參考 moving 清單的方向與量級）。"
         ],
         "notes": [
@@ -314,10 +314,10 @@
         "position": 0.73
       },
       "video": {
-        "duration": 1.932859,
+        "duration": 1.940098,
         "videoWidth": 320,
         "videoHeight": 180,
-        "src": "http://localhost:8793/clip.webm",
+        "src": "http://127.0.0.1:4174/clip.webm",
         "poster": null,
         "autoplay": true,
         "loop": true,
@@ -325,12 +325,12 @@
         "controls": true,
         "readyState": 4
       },
-      "src": "http://localhost:8793/clip.webm",
+      "src": "http://127.0.0.1:4174/clip.webm",
       "autoplay": true,
       "loop": true,
       "intervalMs": 250,
       "idleFrames": 12,
-      "uniqueIdleFrames": 10,
+      "uniqueIdleFrames": 12,
       "animatesOnItsOwn": true,
       "scrollSamples": 5,
       "scrollUnique": 1,
@@ -340,15 +340,15 @@
         "summary": "影片 ʼ#reelʼ，320×180px，位於「Watch the reel」區塊（約在頁面 73% 的位置）。",
         "description": [
           "影片 ʼ#reelʼ，320×180px，位於「Watch the reel」區塊（約在頁面 73% 的位置）。",
-          "靜置時會自己動：取樣期間沒有回到起點（可能週期更長、連續漂移，或非週期）；每 250 ms 畫面變化約 28.71%，變化很大（接近畫面整體切換）；變化集中在中段中央（約佔 100% 面積）。",
+          "靜置時會自己動：取樣期間沒有回到起點（可能週期更長、連續漂移，或非週期）；每 250 ms 畫面變化約 29.32%，變化很大（接近畫面整體切換）；變化集中在中段中央（約佔 100% 面積）。",
           "對滑鼠掃過與拖曳沒有偵測到反應。",
-          "視覺：主色 #d83828（16.1%）、#3878d8（16.1%）、#48d848（8.1%）、#b8d828（8.1%），整體中等亮度。",
-          "影片規格：1.9 秒，320×180，自動播放、循環、靜音、顯示控制列；來源：http://localhost:8793/clip.webm。已在 0%、25%、50%、75% 位置各截一張畫格供檢視。"
+          "視覺：主色 #b838d8（8.1%）、#58d828（8.1%）、#78d828（8.1%）、#48d8d8（8.1%），整體中等亮度。",
+          "影片規格：1.9 秒，320×180，自動播放、循環、靜音、顯示控制列；來源：http://127.0.0.1:4174/clip.webm。已在 0%、25%、50%、75% 位置各截一張畫格供檢視。"
         ],
         "behavior": {
           "animatesOnItsOwn": true,
           "periodMs": null,
-          "changePerStepPercent": 28.71,
+          "changePerStepPercent": 29.32,
           "changedRegion": {
             "x": 0,
             "y": 0,
@@ -362,34 +362,34 @@
         "visual": {
           "dominantColors": [
             {
-              "hex": "#d83828",
-              "share": 16.1
-            },
-            {
-              "hex": "#3878d8",
-              "share": 16.1
-            },
-            {
-              "hex": "#48d848",
+              "hex": "#b838d8",
               "share": 8.1
             },
             {
-              "hex": "#b8d828",
+              "hex": "#58d828",
               "share": 8.1
             },
             {
-              "hex": "#d8d828",
+              "hex": "#78d828",
+              "share": 8.1
+            },
+            {
+              "hex": "#48d8d8",
+              "share": 8.1
+            },
+            {
+              "hex": "#3888d8",
               "share": 8.1
             }
           ],
-          "brightness": 49.2
+          "brightness": 52.9
         },
         "technique": {
           "video": {
-            "duration": 1.932859,
+            "duration": 1.940098,
             "videoWidth": 320,
             "videoHeight": 180,
-            "src": "http://localhost:8793/clip.webm",
+            "src": "http://127.0.0.1:4174/clip.webm",
             "poster": null,
             "autoplay": true,
             "loop": true,

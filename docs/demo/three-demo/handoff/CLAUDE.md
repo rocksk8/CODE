@@ -1,8 +1,8 @@
 # 工作指引（給在此資料夾工作的 AI）
 
-這是 localhost:8793 的設計與開發交接包。
+這是 127.0.0.1:4174 的設計與開發交接包。
 
-1. **先讀 `ai-brief.md`**，再依需要讀 `SPEC.md`。
+1. **先讀 `START-HERE.md`**（3 步驟與可直接貼的提示在 `PROMPT.md`），再讀 `ai-brief.md`，需要細節再讀 `SPEC.md`。要開始做頁面或動態，從 `starter/` 起手（頁面骨架）與 `starter/motion/index.html`（動態／3D 起手式），文案與圖片都是佔位。
 2. 圖片請直接檢視 `media/` 內的 PNG：優先看 `media/sections/`（區塊裁切圖）與 `media/motion/`（影格序列圖）。你無法觀看影片或 3D，請以 `motion.md` 的文字與數據為準。
 3. 這是**風格參考**：不要複製原站的文案、圖片、Logo、3D 模型；用佔位內容與授權素材。
 4. 遇到 SPEC 第 11 節列出的「未知」，不要臆測成事實：標註為假設，並寫進 `DECISIONS.md` 的「待確認問題」。

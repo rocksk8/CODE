@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "checkedAt": "2026-10-10T09:25:02.160Z",
-  "origin": "http://localhost:8791",
+  "checkedAt": "2026-10-11T14:17:13.865Z",
+  "origin": "http://127.0.0.1:4173",
   "pagesAnalyzed": 1,
-  "score": 78,
+  "score": 75,
   "grade": "C",
   "categories": {
     "indexability": {
       "label": "索引與爬取",
       "weight": 25,
-      "score": 71,
-      "issues": 3,
-      "passed": 2
+      "score": 49,
+      "issues": 4,
+      "passed": 1
     },
     "onpage": {
       "label": "頁面 SEO",
@@ -23,9 +23,9 @@
     "links": {
       "label": "連結",
       "weight": 10,
-      "score": 70,
-      "issues": 1,
-      "passed": 0
+      "score": 100,
+      "issues": 0,
+      "passed": 1
     },
     "performance": {
       "label": "效能（實驗室數據）",
@@ -37,16 +37,16 @@
     "mobile": {
       "label": "行動版",
       "weight": 10,
-      "score": 60,
-      "issues": 2,
-      "passed": 0
+      "score": 57,
+      "issues": 3,
+      "passed": 1
     },
     "security": {
       "label": "安全與傳輸",
       "weight": 10,
       "score": 90,
-      "issues": 5,
-      "passed": 0
+      "issues": 4,
+      "passed": 1
     },
     "structured": {
       "label": "結構化資料與社群",
@@ -59,34 +59,32 @@
       "label": "AI 爬蟲友善度",
       "weight": 5,
       "score": 100,
-      "issues": 1,
-      "passed": 1
+      "issues": 0,
+      "passed": 2
     }
   },
   "severity": {
     "critical": 0,
     "high": 2,
     "medium": 6,
-    "low": 6,
-    "info": 5
+    "low": 7,
+    "info": 3
   },
   "issues": [
     {
-      "id": "broken-internal",
-      "category": "links",
+      "id": "soft-404",
+      "category": "indexability",
       "severity": "high",
-      "title": "3 個內部連結壞掉（4xx／5xx）",
+      "title": "不存在的網址回應 200（soft 404）",
       "detail": "",
-      "affected": 3,
+      "affected": 1,
       "total": 1,
       "scope": "site",
       "examples": [
-        "404 http://localhost:8791/a（來自 http://localhost:8791/）",
-        "404 http://localhost:8791/b（來自 http://localhost:8791/）",
-        "404 http://localhost:8791/c（來自 http://localhost:8791/）"
+        "http://127.0.0.1:4173/__se-404-probe-vkaqj2"
       ],
-      "impact": "使用者與爬蟲都會碰壁，浪費抓取預算並傳遞負面訊號。",
-      "fix": "修正連結目標，或為搬移的頁面設定 301。"
+      "impact": "搜尋引擎會把大量無內容頁面當成真實頁面收錄，浪費抓取預算並拉低品質評價。",
+      "fix": "不存在的頁面必須回傳 404 或 410 狀態碼（即使畫面顯示「找不到頁面」）。"
     },
     {
       "id": "viewport-missing",
@@ -98,7 +96,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8791/"
+        "http://127.0.0.1:4173/"
       ],
       "impact": "手機會以桌機寬度渲染再縮小，Google 行動優先索引會判定為不友善。",
       "fix": "加入 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">。"
@@ -113,8 +111,8 @@
       "total": 1,
       "scope": "site",
       "examples": [
-        "http://localhost:8791/sitemap.xml → 404",
-        "http://localhost:8791/sitemap_index.xml → 404"
+        "http://127.0.0.1:4173/sitemap.xml 不是有效的 sitemap XML",
+        "http://127.0.0.1:4173/sitemap_index.xml 不是有效的 sitemap XML"
       ],
       "impact": "搜尋引擎較難發現深層或新頁面，收錄速度變慢。",
       "fix": "產生 sitemap.xml，並在 robots.txt 加上 `Sitemap:` 行，同時提交到 Google Search Console 與 Bing Webmaster。"
@@ -129,7 +127,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8791/"
+        "http://127.0.0.1:4173/"
       ],
       "impact": "網址帶參數、大小寫、結尾斜線等變體可能被視為重複內容。",
       "fix": "每頁加上指向自己最終網址的 <link rel=\"canonical\">。"
@@ -144,7 +142,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8791/"
+        "http://127.0.0.1:4173/"
       ],
       "impact": "搜尋結果的摘要由搜尋引擎隨機擷取，點擊率通常較低。",
       "fix": "撰寫 70–160 字元、含行動呼籲的獨特描述。"
@@ -159,7 +157,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "86 字：http://localhost:8791/"
+        "86 字：http://127.0.0.1:4173/"
       ],
       "impact": "內容稀薄的頁面較難排名，大量出現會拉低整站品質評價。",
       "fix": "補充實質內容，或合併、noindex 價值低的頁面。"
@@ -174,7 +172,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8791/"
+        "http://127.0.0.1:4173/"
       ],
       "impact": "內容超出螢幕，使用者需要左右滑動。",
       "fix": "檢查固定寬度元素；容器使用 max-width:100%、圖片 max-width:100%。"
@@ -221,6 +219,21 @@
       "fix": "加入主要關鍵字與品牌，描述頁面實際內容。"
     },
     {
+      "id": "mobile-columns",
+      "category": "mobile",
+      "severity": "low",
+      "title": "1 個頁面：手機寬度仍並排 3 欄以上",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "http://127.0.0.1:4173/：手機寬度仍並排 3 欄，內容會被擠壓"
+      ],
+      "impact": "欄位在窄螢幕被擠壓，文字換行過多、難以閱讀。",
+      "fix": "用 @media (max-width: 640px) 讓欄位改為單欄堆疊（grid-template-columns: 1fr）。"
+    },
+    {
       "id": "nosniff",
       "category": "security",
       "severity": "low",
@@ -256,7 +269,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8791/"
+        "http://127.0.0.1:4173/"
       ],
       "impact": "分享到 Facebook／LINE／Slack 時沒有預覽卡片。",
       "fix": "加入 og:title、og:description、og:image（建議 1200×630）、og:url。"
@@ -301,21 +314,6 @@
       "fix": "建議 `strict-origin-when-cross-origin`。"
     },
     {
-      "id": "version-disclosure",
-      "category": "security",
-      "severity": "info",
-      "title": "回應標頭洩漏伺服器版本資訊",
-      "detail": "",
-      "affected": 1,
-      "total": 1,
-      "scope": "site",
-      "examples": [
-        "SimpleHTTP/0.6 Python/3.13.16"
-      ],
-      "impact": "",
-      "fix": "隱藏 Server／X-Powered-By 的版本號。"
-    },
-    {
       "id": "twitter-card",
       "category": "structured",
       "severity": "info",
@@ -327,19 +325,6 @@
       "examples": [],
       "impact": "",
       "fix": "加入 twitter:card=summary_large_image。"
-    },
-    {
-      "id": "llms-txt",
-      "category": "ai",
-      "severity": "info",
-      "title": "沒有 /llms.txt",
-      "detail": "",
-      "affected": 1,
-      "total": 1,
-      "scope": "site",
-      "examples": [],
-      "impact": "llms.txt 是新興約定（非標準），用來給 AI 提供網站內容導覽；目前各家支援程度不一。",
-      "fix": "可選：提供 /llms.txt 摘要重點頁面與說明。"
     }
   ],
   "passed": [
@@ -348,8 +333,20 @@
       "title": "主要內容在原始 HTML 中即可讀取（不需執行 JavaScript）"
     },
     {
-      "category": "indexability",
-      "title": "不存在的網址正確回應 404／410"
+      "category": "links",
+      "title": "已檢查 4 個內部連結，沒有壞連結"
+    },
+    {
+      "category": "mobile",
+      "title": "平板寬度沒有橫向溢出"
+    },
+    {
+      "category": "security",
+      "title": "沒有辨識到追蹤／廣告類第三方服務"
+    },
+    {
+      "category": "ai",
+      "title": "有 /llms.txt"
     },
     {
       "category": "ai",
@@ -504,21 +501,23 @@
     "sitemap": {
       "found": [],
       "children": [],
+      "childrenTotal": 0,
       "urlCount": 0,
       "withLastmod": 0,
       "errors": [
-        "http://localhost:8791/sitemap.xml → 404",
-        "http://localhost:8791/sitemap_index.xml → 404"
+        "http://127.0.0.1:4173/sitemap.xml 不是有效的 sitemap XML",
+        "http://127.0.0.1:4173/sitemap_index.xml 不是有效的 sitemap XML"
       ]
     },
     "soft404": {
-      "status": 404
+      "status": 200
     },
+    "unreachable": false,
     "performance": {
-      "ttfbMs": 1,
-      "lcpMs": 448,
-      "cls": 0.001,
-      "totalBytes": 6469,
+      "ttfbMs": 2,
+      "lcpMs": 492,
+      "cls": 0,
+      "totalBytes": 14592,
       "requests": 4,
       "domNodes": 76,
       "thirdParty": 1,
@@ -533,45 +532,29 @@
         "x-frame-options": null,
         "referrer-policy": null,
         "permissions-policy": null,
-        "server": "SimpleHTTP/0.6 Python/3.13.16",
+        "server": null,
         "x-powered-by": null
       }
     },
-    "llmsTxt": false
+    "privacy": {
+      "trackers": [],
+      "vendors": 1,
+      "cookies": 0,
+      "consentBanner": false
+    },
+    "llmsTxt": true
   },
   "links": {
     "internalChecked": 3,
     "externalChecked": 0,
-    "broken": [
-      {
-        "url": "http://localhost:8791/a",
-        "status": 404,
-        "from": [
-          "http://localhost:8791/"
-        ]
-      },
-      {
-        "url": "http://localhost:8791/b",
-        "status": 404,
-        "from": [
-          "http://localhost:8791/"
-        ]
-      },
-      {
-        "url": "http://localhost:8791/c",
-        "status": 404,
-        "from": [
-          "http://localhost:8791/"
-        ]
-      }
-    ],
+    "broken": [],
     "redirects": 0,
     "externalBroken": [],
     "unreachable": 0
   },
   "pages": [
     {
-      "url": "http://localhost:8791/",
+      "url": "http://127.0.0.1:4173/",
       "status": 200,
       "title": "Acme Studio",
       "titleLen": 11,
@@ -581,10 +564,10 @@
       "rawWords": 86,
       "canonical": null,
       "indexable": true,
-      "ttfbMs": 1,
-      "lcpMs": 448,
-      "cls": 0.001,
-      "bytes": 6469,
+      "ttfbMs": 2,
+      "lcpMs": 492,
+      "cls": 0,
+      "bytes": 14592,
       "inlinks": 0
     }
   ],
@@ -592,5 +575,22 @@
     "僅分析本次爬取的頁面（抽樣），不代表全站；請以 Google Search Console 的涵蓋範圍與 Core Web Vitals 真實數據為準。",
     "效能為實驗室數據（無頭瀏覽器、無節流）。",
     "檢查只做讀取：未登入、未送出表單；額外請求僅限 robots.txt、sitemap、連結狀態（HEAD）與一次 404 探測，並限制併發。"
-  ]
+  ],
+  "verdict": {
+    "status": "conditional",
+    "label": "⚠️ 有條件通過",
+    "rule": "沒有嚴重問題且沒有高風險問題 = 通過；有高風險 = 有條件通過；有嚴重問題 = 不通過",
+    "blocking": [
+      {
+        "id": "soft-404",
+        "severity": "high",
+        "title": "不存在的網址回應 200（soft 404）"
+      },
+      {
+        "id": "viewport-missing",
+        "severity": "high",
+        "title": "1 個頁面沒有 viewport meta"
+      }
+    ]
+  }
 }

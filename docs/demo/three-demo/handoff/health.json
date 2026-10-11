@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "checkedAt": "2026-10-10T09:25:07.661Z",
-  "origin": "http://localhost:8793",
+  "checkedAt": "2026-10-11T14:17:38.141Z",
+  "origin": "http://127.0.0.1:4174",
   "pagesAnalyzed": 1,
-  "score": 75,
+  "score": 66,
   "grade": "C",
   "categories": {
     "indexability": {
       "label": "索引與爬取",
       "weight": 25,
-      "score": 71,
-      "issues": 3,
-      "passed": 2
+      "score": 34,
+      "issues": 5,
+      "passed": 0
     },
     "onpage": {
       "label": "頁面 SEO",
@@ -39,14 +39,14 @@
       "weight": 10,
       "score": 60,
       "issues": 2,
-      "passed": 0
+      "passed": 1
     },
     "security": {
       "label": "安全與傳輸",
       "weight": 10,
       "score": 90,
-      "issues": 5,
-      "passed": 0
+      "issues": 4,
+      "passed": 1
     },
     "structured": {
       "label": "結構化資料與社群",
@@ -59,18 +59,48 @@
       "label": "AI 爬蟲友善度",
       "weight": 5,
       "score": 100,
-      "issues": 1,
-      "passed": 1
+      "issues": 0,
+      "passed": 2
     }
   },
   "severity": {
     "critical": 0,
-    "high": 1,
+    "high": 3,
     "medium": 9,
     "low": 6,
-    "info": 5
+    "info": 3
   },
   "issues": [
+    {
+      "id": "no-text-anywhere",
+      "category": "indexability",
+      "severity": "high",
+      "title": "1 個頁面在原始 HTML 與渲染後都幾乎沒有文字",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "page",
+      "examples": [
+        "http://127.0.0.1:4174/：原始 7 字、渲染後 7 字"
+      ],
+      "impact": "搜尋引擎與 AI 爬蟲都讀不到這些頁面的內容，等於沒有可被索引的文字。常見原因：整頁由 WebGL／canvas 繪製，或腳本在爬蟲環境沒有執行成功。",
+      "fix": "為每個這類頁面提供可被讀取的文字替代：標題（h1）、簡介段落、影像／3D 的文字說明（alt、aria-label），或伺服器端預先渲染的 HTML。"
+    },
+    {
+      "id": "soft-404",
+      "category": "indexability",
+      "severity": "high",
+      "title": "不存在的網址回應 200（soft 404）",
+      "detail": "",
+      "affected": 1,
+      "total": 1,
+      "scope": "site",
+      "examples": [
+        "http://127.0.0.1:4174/__se-404-probe-tky18s"
+      ],
+      "impact": "搜尋引擎會把大量無內容頁面當成真實頁面收錄，浪費抓取預算並拉低品質評價。",
+      "fix": "不存在的頁面必須回傳 404 或 410 狀態碼（即使畫面顯示「找不到頁面」）。"
+    },
     {
       "id": "viewport-missing",
       "category": "mobile",
@@ -81,7 +111,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8793/"
+        "http://127.0.0.1:4174/"
       ],
       "impact": "手機會以桌機寬度渲染再縮小，Google 行動優先索引會判定為不友善。",
       "fix": "加入 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">。"
@@ -96,8 +126,8 @@
       "total": 1,
       "scope": "site",
       "examples": [
-        "http://localhost:8793/sitemap.xml → 404",
-        "http://localhost:8793/sitemap_index.xml → 404"
+        "http://127.0.0.1:4174/sitemap.xml 不是有效的 sitemap XML",
+        "http://127.0.0.1:4174/sitemap_index.xml 不是有效的 sitemap XML"
       ],
       "impact": "搜尋引擎較難發現深層或新頁面，收錄速度變慢。",
       "fix": "產生 sitemap.xml，並在 robots.txt 加上 `Sitemap:` 行，同時提交到 Google Search Console 與 Bing Webmaster。"
@@ -112,7 +142,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8793/"
+        "http://127.0.0.1:4174/"
       ],
       "impact": "網址帶參數、大小寫、結尾斜線等變體可能被視為重複內容。",
       "fix": "每頁加上指向自己最終網址的 <link rel=\"canonical\">。"
@@ -127,7 +157,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8793/"
+        "http://127.0.0.1:4174/"
       ],
       "impact": "搜尋結果的摘要由搜尋引擎隨機擷取，點擊率通常較低。",
       "fix": "撰寫 70–160 字元、含行動呼籲的獨特描述。"
@@ -142,7 +172,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8793/"
+        "http://127.0.0.1:4174/"
       ],
       "impact": "h1 是頁面主題的最強結構訊號，也是螢幕閱讀器的導覽點。",
       "fix": "每頁一個描述主題的 h1。"
@@ -157,7 +187,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "7 字：http://localhost:8793/"
+        "7 字：http://127.0.0.1:4174/"
       ],
       "impact": "內容稀薄的頁面較難排名，大量出現會拉低整站品質評價。",
       "fix": "補充實質內容，或合併、noindex 價值低的頁面。"
@@ -172,7 +202,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8793/"
+        "http://127.0.0.1:4174/"
       ],
       "impact": "影響語言判斷、翻譯提示與螢幕閱讀器發音。",
       "fix": "例如 <html lang=\"zh-Hant-TW\">。"
@@ -187,7 +217,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "CLS 0.206：http://localhost:8793/"
+        "CLS 0.206：http://127.0.0.1:4174/"
       ],
       "impact": "內容跳動讓使用者誤點，也是 Core Web Vitals 指標。",
       "fix": "為圖片／廣告／iframe 預留寬高，避免在內容上方動態插入元素。"
@@ -202,7 +232,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8793/"
+        "http://127.0.0.1:4174/"
       ],
       "impact": "內容超出螢幕，使用者需要左右滑動。",
       "fix": "檢查固定寬度元素；容器使用 max-width:100%、圖片 max-width:100%。"
@@ -284,7 +314,7 @@
       "total": 1,
       "scope": "page",
       "examples": [
-        "http://localhost:8793/"
+        "http://127.0.0.1:4174/"
       ],
       "impact": "分享到 Facebook／LINE／Slack 時沒有預覽卡片。",
       "fix": "加入 og:title、og:description、og:image（建議 1200×630）、og:url。"
@@ -329,21 +359,6 @@
       "fix": "建議 `strict-origin-when-cross-origin`。"
     },
     {
-      "id": "version-disclosure",
-      "category": "security",
-      "severity": "info",
-      "title": "回應標頭洩漏伺服器版本資訊",
-      "detail": "",
-      "affected": 1,
-      "total": 1,
-      "scope": "site",
-      "examples": [
-        "SimpleHTTP/0.6 Python/3.13.16"
-      ],
-      "impact": "",
-      "fix": "隱藏 Server／X-Powered-By 的版本號。"
-    },
-    {
       "id": "twitter-card",
       "category": "structured",
       "severity": "info",
@@ -355,33 +370,24 @@
       "examples": [],
       "impact": "",
       "fix": "加入 twitter:card=summary_large_image。"
-    },
-    {
-      "id": "llms-txt",
-      "category": "ai",
-      "severity": "info",
-      "title": "沒有 /llms.txt",
-      "detail": "",
-      "affected": 1,
-      "total": 1,
-      "scope": "site",
-      "examples": [],
-      "impact": "llms.txt 是新興約定（非標準），用來給 AI 提供網站內容導覽；目前各家支援程度不一。",
-      "fix": "可選：提供 /llms.txt 摘要重點頁面與說明。"
     }
   ],
   "passed": [
     {
-      "category": "indexability",
-      "title": "主要內容在原始 HTML 中即可讀取（不需執行 JavaScript）"
-    },
-    {
-      "category": "indexability",
-      "title": "不存在的網址正確回應 404／410"
-    },
-    {
       "category": "links",
       "title": "已檢查 1 個內部連結，沒有壞連結"
+    },
+    {
+      "category": "mobile",
+      "title": "平板寬度沒有橫向溢出"
+    },
+    {
+      "category": "security",
+      "title": "沒有辨識到追蹤／廣告類第三方服務"
+    },
+    {
+      "category": "ai",
+      "title": "有 /llms.txt"
     },
     {
       "category": "ai",
@@ -536,22 +542,24 @@
     "sitemap": {
       "found": [],
       "children": [],
+      "childrenTotal": 0,
       "urlCount": 0,
       "withLastmod": 0,
       "errors": [
-        "http://localhost:8793/sitemap.xml → 404",
-        "http://localhost:8793/sitemap_index.xml → 404"
+        "http://127.0.0.1:4174/sitemap.xml 不是有效的 sitemap XML",
+        "http://127.0.0.1:4174/sitemap_index.xml 不是有效的 sitemap XML"
       ]
     },
     "soft404": {
-      "status": 404
+      "status": 200
     },
+    "unreachable": false,
     "performance": {
       "ttfbMs": 1,
-      "lcpMs": 92,
+      "lcpMs": 328,
       "cls": 0.206,
-      "totalBytes": 2137602,
-      "requests": 5,
+      "totalBytes": 1332744,
+      "requests": 4,
       "domNodes": 15,
       "thirdParty": 0,
       "note": "實驗室數據：無頭瀏覽器、無節流、單次載入；僅供相對比較，真實使用者數據（CrUX）請看 Search Console／PageSpeed Insights。"
@@ -565,11 +573,17 @@
         "x-frame-options": null,
         "referrer-policy": null,
         "permissions-policy": null,
-        "server": "SimpleHTTP/0.6 Python/3.13.16",
+        "server": null,
         "x-powered-by": null
       }
     },
-    "llmsTxt": false
+    "privacy": {
+      "trackers": [],
+      "vendors": 0,
+      "cookies": 0,
+      "consentBanner": false
+    },
+    "llmsTxt": true
   },
   "links": {
     "internalChecked": 0,
@@ -581,7 +595,7 @@
   },
   "pages": [
     {
-      "url": "http://localhost:8793/",
+      "url": "http://127.0.0.1:4174/",
       "status": 200,
       "title": "Three demo",
       "titleLen": 10,
@@ -592,9 +606,9 @@
       "canonical": null,
       "indexable": true,
       "ttfbMs": 1,
-      "lcpMs": 92,
+      "lcpMs": 328,
       "cls": 0.206,
-      "bytes": 2137602,
+      "bytes": 1332744,
       "inlinks": 0
     }
   ],
@@ -602,5 +616,27 @@
     "僅分析本次爬取的頁面（抽樣），不代表全站；請以 Google Search Console 的涵蓋範圍與 Core Web Vitals 真實數據為準。",
     "效能為實驗室數據（無頭瀏覽器、無節流）。",
     "檢查只做讀取：未登入、未送出表單；額外請求僅限 robots.txt、sitemap、連結狀態（HEAD）與一次 404 探測，並限制併發。"
-  ]
+  ],
+  "verdict": {
+    "status": "conditional",
+    "label": "⚠️ 有條件通過",
+    "rule": "沒有嚴重問題且沒有高風險問題 = 通過；有高風險 = 有條件通過；有嚴重問題 = 不通過",
+    "blocking": [
+      {
+        "id": "no-text-anywhere",
+        "severity": "high",
+        "title": "1 個頁面在原始 HTML 與渲染後都幾乎沒有文字"
+      },
+      {
+        "id": "soft-404",
+        "severity": "high",
+        "title": "不存在的網址回應 200（soft 404）"
+      },
+      {
+        "id": "viewport-missing",
+        "severity": "high",
+        "title": "1 個頁面沒有 viewport meta"
+      }
+    ]
+  }
 }
