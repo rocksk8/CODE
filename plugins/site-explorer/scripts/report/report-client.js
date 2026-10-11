@@ -312,6 +312,22 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   ].join('');
   o.insertAdjacentHTML('beforeend','<div class="card" style="margin-top:14px"><h3>頁面實際載入了什麼</h3><div class="hint">'+esc(p.url)+'</div><ul>'+rows+'</ul></div>');
 })();
+// ---------- who watches the visitors: trackers, cookies, consent banner ----------
+(function(){
+  const o=$('#s-overview');if(!o||!S||!S.privacy||!S.privacy.pagesChecked)return;const v=S.privacy,CAT={analytics:'流量分析',ads:'廣告／再行銷','tag-manager':'標籤管理','session-replay':'行為錄影／熱圖',chat:'客服聊天',social:'社群',video:'影音嵌入',payments:'金流',maps:'地圖',security:'防機器人',fonts:'外部字型',cmp:'同意管理工具'};
+  const trk=new Set(['analytics','ads','tag-manager','session-replay']);
+  const banner=!v.consentChecked?'未檢查':v.consentBanner?'<b style="color:#16a34a">有</b>':'<b style="color:#dc2626">沒有偵測到</b>';
+  const vend=v.vendors.length?v.vendors.map(x=>'<span class="chip" style="'+(trk.has(x.cat)?'border-color:#dc2626':'')+'">'+esc(x.name)+'<small> · '+esc(CAT[x.cat]||x.cat)+'</small></span>').join(' '):'沒有辨識到已知的第三方追蹤／嵌入服務';
+  const ck=v.cookies.length?'<table class="t" style="width:100%;font-size:13px"><tr><th>Cookie</th><th>誰設的</th><th>有效期</th><th>Secure</th><th>HttpOnly</th></tr>'+v.cookies.slice(0,30).map(c=>'<tr><td><code>'+esc(c.name)+'</code>'+(c.thirdParty?' <small>第三方</small>':'')+'</td><td>'+esc(c.owner||'—')+(c.tracking?' ⚠️':'')+'</td><td>'+(c.days==null?'工作階段':c.days+' 天')+'</td><td>'+(c.secure?'是':'否')+'</td><td>'+(c.httpOnly?'是':'否')+'</td></tr>').join('')+'</table>':'頁面載入時沒有設定 Cookie。';
+  o.insertAdjacentHTML('beforeend','<div class="card" style="margin-top:14px"><h3>追蹤碼與 Cookie（誰在看訪客）</h3><div class="hint">第一頁在「還沒點任何同意按鈕」時的狀態；只記名稱與旗標，不記 Cookie 的值。</div><p>Cookie 橫幅：'+banner+'　追蹤／廣告類服務：<b>'+v.trackingVendors.length+'</b> 個</p><p>'+vend+'</p>'+ck+'</div>');
+})();
+// ---------- phone / tablet: measured behaviour at 1440 / 768 / 390 ----------
+(function(){
+  const o=$('#s-overview');if(!o||!S)return;const p=(S.pages||[]).find(x=>x.responsive&&x.responsive.desktop);if(!p)return;const r=p.responsive,ks=['desktop','tablet','mobile'].filter(k=>r[k]),N={desktop:'桌機',tablet:'平板',mobile:'手機'},NV={links:'連結直接顯示',toggle:'收進選單按鈕',hidden:'連結被隱藏、找不到選單按鈕',none:'沒有導覽列'};
+  const row=(l,f)=>'<tr><td>'+l+'</td>'+ks.map(k=>'<td>'+f(r[k])+'</td>').join('')+'</tr>';
+  const warn=[];const d=r.desktop,t=r.tablet,m=r.mobile;if(t&&t.overflowX)warn.push('平板寬度出現橫向捲動（+'+t.overflowPx+'px）');if(m&&d.navLinks>=3&&m.nav==='hidden')warn.push('手機寬度找不到導覽選單');if(m&&m.maxColumns>=3)warn.push('手機寬度仍並排 '+m.maxColumns+' 欄');if(m&&d.textChars>400&&m.textChars<d.textChars*0.6)warn.push('手機版文字量只有桌機的 '+Math.round(m.textChars/d.textChars*100)+'%');
+  o.insertAdjacentHTML('beforeend','<div class="card" style="margin-top:14px"><h3>手機／平板實測</h3><div class="hint">'+esc(p.url)+'　三種寬度各量一次，不是預設值。</div><table class="t" style="width:100%;font-size:13px"><tr><th></th>'+ks.map(k=>'<th>'+N[k]+' '+r[k].width+'px</th>').join('')+'</tr>'+row('導覽',x=>esc(NV[x.nav]||x.nav)+'（'+x.navLinks+' 個連結）')+row('並排欄數（最多）',x=>x.maxColumns>1?x.maxColumns:'單欄')+row('h1／內文字級 px',x=>(x.h1Px==null?'—':x.h1Px)+'／'+(x.bodyPx==null?'—':x.bodyPx))+row('橫向溢出',x=>x.overflowX?'<b style="color:#dc2626">是 +'+x.overflowPx+'px</b>':'否')+row('可見文字量',x=>x.textChars)+'</table>'+(warn.length?'<ul>'+warn.map(w=>'<li style="color:#dc2626">⚠️ '+esc(w)+'</li>').join('')+'</ul>':'<p>沒有發現明顯的響應式問題。</p>')+'</div>');
+})();
 // ---------- interaction states: what appeared after clicking / scrolling / pressing keys ----------
 (function(){
   const o=$('#s-overview');if(!o||!D.pages)return;const list=D.pages.filter(p=>p.states&&p.states.length>1);if(!list.length)return;

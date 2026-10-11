@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runChecks, printChecks } from './doctor.mjs';
-import { openDb, ingest, DB_PATH } from './db.mjs';
+import { openDb, ingest, runsForHost, renderChangesMd, DB_PATH } from './db.mjs';
 import { findUrl, findUrls, intOpt, sameSite } from './args.mjs';
 import { isInside, checkExploreOut, UnsafeOutputError } from './safe-out.mjs';
 
@@ -102,7 +102,11 @@ if (!args.includes('--no-db')) {
   try {
     const db = await openDb();
     if (!db) console.log('   ⚠️ Node < 22.13，略過資料庫（升級後即可累積歷史）');
-    else { const id = ingest(db, { siteDir: crawlOk ? siteDir : null, motionDir: motionOk ? motionDir : null }); console.log(`   ✔ run #${id} → ${DB_PATH}`); steps.push({ label: '存入資料庫', ok: true, s: '0' }); }
+    else { const id = ingest(db, { siteDir: crawlOk ? siteDir : null, motionDir: motionOk ? motionDir : null }); console.log(`   ✔ run #${id} → ${DB_PATH}`); steps.push({ label: '存入資料庫', ok: true, s: '0' });
+      try { // a previous run of this same site exists: write the before/after report next to the crawl (what a redesign lost, kept or changed)
+        const prev = crawlOk ? runsForHost(db, new URL(url).host).filter((r) => r.id < id && r.pages).pop() : null;
+        if (prev) { fs.writeFileSync(path.join(siteDir, 'changes.md'), renderChangesMd(db, prev.id, id)); console.log(`   ✔ 與上次（run #${prev.id}）的前後對照：${path.join(siteDir, 'changes.md')}`); }
+      } catch {} }
   } catch (e) { console.log('   ⚠️ 略過：' + e.message); }
 }
 
