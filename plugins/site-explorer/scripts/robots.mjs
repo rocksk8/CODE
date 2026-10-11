@@ -64,7 +64,9 @@ export async function fetchRobots(origin, ua = 'site-explorer-claude-plugin') {
     const r = await gfetch(origin + '/robots.txt', { headers: { 'user-agent': ua }, signal: AbortSignal.timeout(10000) });
     const text = r.ok ? await readCapped(r, 1_000_000) : '';
     // 4xx = no robots.txt (everything allowed); 5xx = cannot be verified, which crawlers must treat as "do not crawl"
-    return { status: r.status, finalUrl: r.url, contentType: r.headers.get('content-type') || '', text, parsed: r.ok ? parseRobots(text) : null, serverError: r.status >= 500 };
+    const ct = r.headers.get('content-type') || '';
+    const htmlFallback = r.ok && (/text\/html/i.test(ct) || /^\s*<(!doctype|html|head|body)/i.test(text)); // an SPA catch-all answering /robots.txt with its HTML shell is "no robots.txt", not a file full of syntax errors
+    return { status: r.status, finalUrl: r.url, contentType: ct, text: htmlFallback ? '' : text, parsed: r.ok && !htmlFallback ? parseRobots(text) : null, serverError: r.status >= 500, htmlFallback };
   } catch (e) { return { status: null, error: String(e.message).slice(0, 100), text: '', parsed: null }; }
 }
 

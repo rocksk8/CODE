@@ -183,7 +183,7 @@ module.exports = {
   },
 };
 `;
-fs.writeFileSync(path.join(out, 'tailwind.config.js'), tw);
+fs.writeFileSync(path.join(out, 'tailwind.config.js'), sanitizeDoc(tw, { markup: false, code: 'js' }));
 
 // ---- tokens.css ----
 const css = [':root {',
@@ -194,7 +194,7 @@ const css = [':root {',
   ...radii.slice(0, 4).map((r, i) => `  --radius-${i + 1}: ${r};`), ...shadows.slice(0, 3).map((s, i) => `  --shadow-${i + 1}: ${s};`),
   '}', ...(d.darkMode?.supported ? ['@media (prefers-color-scheme: dark) {', `  :root { --color-background: ${d.darkMode.dark.background}; --color-text: ${d.darkMode.dark.color}; }`, '}'] : []),
 ].filter(Boolean).join('\n');
-fs.writeFileSync(path.join(out, 'tokens.css'), sanitizeDoc(css, { markup: false }) + '\n');
+fs.writeFileSync(path.join(out, 'tokens.css'), sanitizeDoc(css, { markup: false, code: 'css' }) + '\n');
 
 // ---- components ----
 fs.writeFileSync(path.join(out, 'components.json'), JSON.stringify({ buttons: c.buttons, inputs: c.inputs, cards: c.cards, navigation: c.navigation, logo: c.logo, hover: d.buttonHover }, null, 2));

@@ -30,8 +30,8 @@ export function skipLink(href, { authed = false } = {}) {
   if (ASSET.test(href)) return true;
   if (authed) return DESTRUCTIVE_PATH.test(u.pathname) || /[?&](action|do|op)=(log-?out|sign-?out|delete|remove|destroy)/i.test(u.search);
   if (/(wp-admin|wp-login|\/ghost\/|(^|\/)(admin|administrator|login|logout|signin|sign-in)(\/|\.[a-z]+$|$))/i.test(u.pathname)) return true; // whole path segments: /administration and /login-help are ordinary pages
-  // links that change or destroy something when merely visited are never followed, logged in or not (whole path segments only: /cancellation-policy is a normal page)
-  return /(^|[\/_-])(log-?out|sign-?out|delete|remove|destroy|unsubscribe|deactivate|close-?account|revoke|disconnect|purge|wipe|trash)([\/_.-]|$)/i.test(u.pathname) || /[?&](action|do|op)=(log-?out|sign-?out|delete|remove|destroy|unsubscribe)/i.test(u.search);
+  // links that change or destroy something when merely visited are never followed, logged in or not (whole path segments only: /cancellation-policy and /blog/delete-your-data are normal pages)
+  return /(^|\/)(log-?out|sign-?out|delete|remove|destroy|unsubscribe|deactivate|close-?account|revoke|disconnect|purge|wipe|trash)([_-](account|user|me|all|profile|item|post|comment|order|id))?(\.[a-z]+)?(?=\/|$)/i.test(u.pathname) || /[?&](action|do|op)=(log-?out|sign-?out|delete|remove|destroy|unsubscribe)/i.test(u.search);
 }
 
 /** True for a URL that looks like it changes or destroys something when fetched (used by the link checker). */
