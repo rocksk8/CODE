@@ -6,8 +6,8 @@ Generated 2026-10-11 for version 0.4.0 (main plus the pull requests listed at th
 
 | Item | Result |
 |---|---|
-| Test files | @@FILES@@ (`plugins/site-explorer/test/*.test.mjs`, run with `npm test`) |
-| Tests (Node 22, local, with a real Chromium) | @@T22@@ |
+| Test files | 28 files (`plugins/site-explorer/test/*.test.mjs`, run with `npm test`) |
+| Tests (Node 22, local, with a real Chromium) | 201 tests: 200 pass, 0 fail, 1 skipped (the opt-in framework build test, run only on CI Node 22) |
 | Tests on CI (GitHub Actions) | Node 20 and Node 22 matrix plus a Docker image build, green on every merged pull request (#21–#28); two jobs failed once on timing and passed on a single re-run (see section 4) |
 | Node 20 specifics | no `node:sqlite`: history database and `changes.md` are skipped there by design; everything else runs |
 | Browser | Chromium via Playwright 1.64.0 (pinned); axe-core 4.14.0 (pinned) |
@@ -60,4 +60,4 @@ These could not be exercised in the build environment, so they are untested here
 
 ## 7. Pull requests behind this report
 
-#21 framework outputs · #22 English output · #23 review rounds 1–2 · #24 security fixes · #25 `--json` early failures and help · #26 round-3 fixes · #27 Chinese console lines · #28 round-4 fixes · #29 remaining audit items · and the follow-ups merged during the final stretch.
+#21 framework outputs · #22 English output · #23 review rounds 1–2 · #24 security fixes · #25 `--json` early failures and help · #26 round-3 fixes · #27 Chinese console lines · #28 round-4 fixes · #29 remaining audit items · #30 Tailwind v4 `@theme`, `DESIGN.md`, OKLCH, Action regression gates, this report and the comparison document.
