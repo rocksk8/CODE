@@ -102,7 +102,7 @@ if (checks.some((c) => c.level === 'fail')) {
 
 { // results of stages that do not run this time must not be shown as if they were fresh (an old health score, a11y report, verify result or changes.md)
   const rm = (f) => { try { fs.rmSync(f, { recursive: true, force: true }); } catch {} };
-  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); // a failed re-run must not report the previous run's pages
+  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); // a failed re-run must not report the previous run's pages
   if (args.includes('--no-health')) { rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); }
   if (!args.includes('--a11y')) rm(path.join(siteDir, 'a11y.json'));
   if (!args.includes('--verify')) rm(path.join(out, 'handoff', 'verify'));
@@ -196,7 +196,7 @@ if (!args.includes('--no-motion')) { // always say what happened to 3D / animati
 }
 const hasMotionLine = fs.existsSync(path.join(handoffDir, 'starter', 'motion')) ? _t('、B=做動態／3D') : '';
 if (handoffOk) console.log(_t`交接包：${handoffDir}\n  要交給 AI：把整個資料夾給它，再貼 PROMPT.md 裡的提示（A=做頁面${hasMotionLine}）；可直接開跑的骨架在 starter/（動態在 starter/motion/index.html）；沒辦法附檔就貼 AI-PACKAGE.md\n  人先看 START-HERE.md；完整規格 SPEC.md；決策紀錄 DECISIONS.md`);
-if (fs.existsSync(dash)) {
+if ((crawlOk || motionOk) && fs.existsSync(dash)) { // after a failed run an old dashboard is not this run's result
   const mb = (fs.statSync(dash).size / 1048576).toFixed(1);
   console.log(_t`儀表板：${dash}（${mb} MB${args.includes('--no-standalone') ? _t('，需連同資料夾一起搬移') : _t('，單一檔案，可直接寄送或丟進聊天室')}）\n  開啟：${process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start ""' : 'xdg-open'} "${dash}"`);
   // open it for humans at a terminal; never when driven by another program (e.g. Claude Code)
@@ -208,7 +208,7 @@ if (fs.existsSync(dash)) {
 let failCode = 0;
 if (failOn && !healthOk) { failCode = 1; console.error(_t`--fail-on ${failOn} 需要這次健檢成功，但健檢${args.includes('--no-health') ? _t('被 --no-health 略過') : _t('沒有完成')}；為避免用舊結果誤判，以結束代碼 1 結束。`); }
 try { const hj = path.join(siteDir, 'health.json'); if (healthOk && fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(_t`驗收結論：${h.verdict?.label ?? '—'}`); if (failOn) { const rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }; if (h.issues.some((i) => rank[i.severity] <= rank[failOn])) { failCode = 4; console.error(_t`健檢有 ${failOn} 以上的問題，依 --fail-on ${failOn} 以結束代碼 4 結束。`); } } } } catch {}
-if (fs.existsSync(dash)) console.log(_t('\n👉 下一步：先雙擊 dashboard.html 看總覽；要交給 AI 或工程師，就把 handoff 資料夾整個給對方。'));
+if ((crawlOk || motionOk) && fs.existsSync(dash)) console.log(_t('\n👉 下一步：先雙擊 dashboard.html 看總覽；要交給 AI 或工程師，就把 handoff 資料夾整個給對方。'));
 if (fs.existsSync(path.join(siteDir, 'report.md')) && fs.readFileSync(path.join(siteDir, 'report.md'), 'utf8').includes(_t('被擋住'))) console.log(_t('\n⚠️ 部分頁面被擋住，結果可能不完整（見儀表板或 report.md）。'));
 if (JSON_MODE) { __jsonDone = true; const { buildSummary } = await import('./summary.mjs'); process.stdout.write(JSON.stringify({ ok: !!(crawlOk || motionOk) && failCode === 0, exitCode: crawlOk || motionOk ? failCode : 1, ...buildSummary({ out, host, steps, url, fresh: !!(crawlOk || motionOk) }), runId }, null, 2) + '\n'); }
 process.exit(crawlOk || motionOk ? failCode : 1);

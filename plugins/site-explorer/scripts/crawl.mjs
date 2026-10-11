@@ -7,7 +7,7 @@ import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
 import { BANNER, sanitizeDoc } from './untrusted.mjs';
-import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch, isInternalHost, resolvesInternal, stripMarkup } from './util.mjs';
+import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch, isInternalHost, resolvesInternal, stripMarkup, tagList, attrValue } from './util.mjs';
 import { parseSitemap } from './health-check.mjs';
 import { attachNetworkRecorder, deepContent, ariaTree } from './observe.mjs';
 import { exploreStates } from './interact.mjs';
@@ -304,12 +304,19 @@ async function fetchRaw(u) {
     const body = bi >= 0 ? html.slice(bi, be > bi ? be + 7 : undefined) : html;
     const text = stripMarkup(body).replace(/&[a-z#0-9]+;/gi, ' ');
     const latin = (text.match(/[A-Za-z0-9À-ɏ']+/g) || []).length, cjk = (text.match(/[㐀-鿿぀-ヿ가-힯]/g) || []).length;
+    const tags = tagList(html); const first = (n) => tags.find((t) => t.name === n);
+    const ti = html.search(/<title[\s>]/i); let title = '';
+    if (ti >= 0) { const o = html.indexOf('>', ti), c = html.toLowerCase().indexOf('</title', o); if (o >= 0 && c > o) title = html.slice(o + 1, c); }
+    const metaRobots = tags.find((t) => t.name === 'meta' && /^robots$/i.test(attrValue(t.attrs, 'name') || ''));
     return {
-      htmlTag: ((html.match(/<html[^>]{0,3000}>/i) || [''])[0]).slice(0, 200), metaCount: (html.match(/<meta\s/gi) || []).length,
+      htmlTag: first('html') ? `<html${first('html').attrs}>`.slice(0, 200) : '', metaCount: tags.filter((t) => t.name === 'meta').length,
       status: r.status, finalUrl: r.url, bytes: html.length, contentType: r.headers.get('content-type') || '',
-      title: ((html.match(/<title[^>]{0,3000}>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim(), h1Count: (html.match(/<h1[\s>]/gi) || []).length,
-      words: latin + Math.round(cjk / 1.8), links: (html.match(/<a\s[^>]{0,3000}href=/gi) || []).length, canonical: /<link[^>]{1,3000}rel=["']?canonical/i.test(html), jsonld: (html.match(/<script[^>]{1,3000}type=["']?application\/ld\+json/gi) || []).length,
-      metaRobots: ((html.match(/<meta[^>]{1,3000}name=["']robots["'][^>]{0,3000}content=["']([^"']*)/i) || [])[1] || null), csrShell: /<div[^>]{1,3000}id=["'](root|app|__next|__nuxt)["'][^>]{0,3000}>\s*<\/div>/i.test(html),
+      title: title.replace(/\s+/g, ' ').trim(), h1Count: tags.filter((t) => t.name === 'h1').length,
+      words: latin + Math.round(cjk / 1.8), links: tags.filter((t) => t.name === 'a' && attrValue(t.attrs, 'href') !== null).length,
+      canonical: tags.some((t) => t.name === 'link' && /canonical/i.test(attrValue(t.attrs, 'rel') || '')),
+      jsonld: tags.filter((t) => t.name === 'script' && /application\/ld\+json/i.test(attrValue(t.attrs, 'type') || '')).length,
+      metaRobots: metaRobots ? (attrValue(metaRobots.attrs, 'content') || '') : null,
+      csrShell: tags.some((t) => t.name === 'div' && /^(root|app|__next|__nuxt)$/i.test(attrValue(t.attrs, 'id') || '') && /^\s*<\/div>/i.test(html.slice(t.end, t.end + 40))),
     };
   } catch (e) { return { error: String(e.message).slice(0, 100) }; }
 }
@@ -320,7 +327,7 @@ async function discoverMore(fromUrl) {
   const found = new Map(); const add = (href, why) => { try { const u = new URL(href, fromUrl); if (!/^https?:$/.test(u.protocol) || !sameSite(u.href, origin)) return; u.hash = ''; if (!found.has(norm(u.href))) found.set(norm(u.href), { url: u.href, why }); } catch {} };
   const text = async (u, max = 2_000_000) => { try { if (!mayFetch(u, fromUrl)) return ''; const r = await gfetch(u, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(12000) }); return r.ok ? await readCapped(r, max) : ''; } catch { return ''; } };
   const html = await text(fromUrl, 3_000_000); let n = 0;
-  for (const m of html.matchAll(/<a\s[^>]{0,3000}?href=["']([^"'#][^"']{0,2000})["']/gi)) { if (++n > 400) break; add(m[1], _t('HTML 連結')); }
+  for (const t of tagList(html)) { if (t.name !== 'a') continue; const h = attrValue(t.attrs, 'href'); if (!h || h.startsWith('#')) continue; if (++n > 400) break; add(h.slice(0, 2000), _t('HTML 連結')); }
   const sitemapUrls = new Set([...(robotsInfo.parsed?.sitemaps || []), origin + '/sitemap.xml', origin + '/sitemap_index.xml']);
   let children = 0;
   for (const sm of [...sitemapUrls].slice(0, 6)) {
@@ -514,6 +521,7 @@ while (pages.length < maxPages) {
           const st = await exploreStates(page, { outDir: path.join(dir, 'states'), maxSteps: 6, allowed, log: (m) => console.log(m) });
           data.network = net.summary(startPageUrl); // refresh: what the clicked / scrolled states fetched (APIs, 3D assets) belongs in the picture too
           data.states = st.states; data.statesStopped = st.stoppedBecause;
+          if (st.blockedWrites) console.log(_t`   （互動時拒絕了 ${st.blockedWrites} 個會改資料的請求（POST／PUT／DELETE）；依賴它們的畫面可能看起來不完整）`);
           if (st.states.length > 1) console.log(_t`   互動探索：${st.states.length} 個畫面狀態（${st.stoppedBecause === 'maxSteps' ? _t('達步數上限') : st.stoppedBecause === 'timeBudget' ? _t('達時間上限') : _t('之後沒有變化')}）`);
           else console.log(_t('   互動探索：點擊、滾動、按鍵後畫面都沒有變化'));
         } catch (e) { console.log(_t('   (互動探索略過：') + String(e.message).split('\n')[0] + ')'); }

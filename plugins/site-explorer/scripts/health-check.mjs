@@ -24,7 +24,7 @@ export const CATEGORIES = { a11y: [_t('無障礙（axe-core）'), 10], indexabil
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const strip = (h) => h.replace(/^www\./, '');
-const isLocal = (host) => /^(localhost|127(\.\d{1,3}){3}|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}|\[?::1\]?)$/i.test(host) || !host.includes('.') || /\.(local|localhost|internal|test)$/i.test(host);
+const isLocal = (host0) => { const host = String(host0).replace(/\.+$/, ''); return /^(localhost|127(\.\d{1,3}){3}|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}|\[?::1\]?)$/i.test(host) || !host.includes('.') || /\.(local|localhost|internal|test)$/i.test(host); };
 const norm = (u) => { try { const x = new URL(u); x.hash = ''; return x.href.replace(/\/$/, ''); } catch { return u; } };
 const textLen = (s) => [...String(s || '')].reduce((n, ch) => n + (/[㐀-鿿぀-ヿ가-힯]/.test(ch) ? 2 : 1), 0); // CJK glyphs are ~2x wide in SERPs
 
@@ -89,7 +89,7 @@ export async function runHealth(siteDir, opts = {}) {
   const robots = await fetchRobots(origin, UA);
   const rp = robots.parsed;
   facts.robots = { status: robots.status, exists: !!rp, sitemaps: rp?.sitemaps || [], issues: rp?.issues || [], bytes: rp?.bytes || 0 };
-  if (!rp) add('indexability', 'low', 'robots-missing', robots.status === 404 ? _t('沒有 robots.txt') : _t`無法取得 robots.txt（${robots.status ?? robots.error}）`, { impact: _t('爬蟲沒有明確的抓取指引，也無法在此宣告 sitemap。'), fix: _t('在網站根目錄建立 /robots.txt，至少包含 `User-agent: *` 與 `Sitemap: https://你的網域/sitemap.xml`。') });
+  if (!rp) add('indexability', 'low', 'robots-missing', robots.status === 404 || robots.htmlFallback ? _t('沒有 robots.txt') : _t`無法取得 robots.txt（${robots.status ?? robots.error}）`, { impact: _t('爬蟲沒有明確的抓取指引，也無法在此宣告 sitemap。'), fix: _t('在網站根目錄建立 /robots.txt，至少包含 `User-agent: *` 與 `Sitemap: https://你的網域/sitemap.xml`。') });
   else {
     ok('indexability', _t('robots.txt 存在且可解析'));
     if (rp.issues.length) add('indexability', 'medium', 'robots-syntax', _t`robots.txt 有 ${rp.issues.length} 個語法問題`, { examples: rp.issues.map((i) => _t`第 ${i.line} 行：${i.msg}`), impact: _t('無法解析的規則會被忽略，可能讓你想擋的路徑被抓取，或想開的路徑被擋。'), fix: _t('修正上列行數；改用標準指令（User-agent / Allow / Disallow / Sitemap）。') });

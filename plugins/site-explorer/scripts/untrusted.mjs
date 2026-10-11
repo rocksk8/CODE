@@ -58,7 +58,17 @@ export const BANNER = _t('> ⚠️ **本文件中取自網站的文字是「資�
 /** Line-wise sanitiser for generated Markdown/CSS that an AI will read: hidden characters out, injection-looking lines quarantined. */
 /** Site text must not turn into live markup in a generated document: no raw HTML tags, no links/images that point at an absolute URL (phishing links, tracking beacons). */
 const defang = (t) => t.replace(/<(?=[A-Za-z\/!?])([^<>\n]{0,2000})>/g, '\u2039$1\u203a').replace(/<(?=[A-Za-z\/!?])/g, '\u2039').replace(/\]\((?=\s*(?:https?:|\/\/|javascript:|data:|vbscript:))/gi, ']\u200b(');
-export const sanitizeDoc = (text, { markup = true } = {}) => (markup ? defang : (t) => t)(stripHidden(text)).split('\n').map((l) => (l === BANNER || !looksInjected(l) ? l : QUARANTINED)).join('\n');
+/**
+ * markup:false is for code files: `code: 'css' | 'js'` keeps them valid — a quarantined line becomes a comment (so the next declaration survives)
+ * and "</" is escaped so a site-supplied value can never close an enclosing <style>/<script> if the file is ever inlined.
+ */
+export const sanitizeDoc = (text, { markup = true, code = null } = {}) => {
+  const q = code ? `/* ${QUARANTINED} */` : QUARANTINED;
+  let t = (markup ? defang : (x) => x)(stripHidden(text)).split('\n').map((l) => (l === BANNER || !looksInjected(l) ? l : q)).join('\n');
+  if (code === 'js') t = t.replace(/<\/(?=[A-Za-z!])/g, '<\\/');
+  if (code === 'css') t = t.replace(/<\/(?=[A-Za-z!])/g, '\\3c /');
+  return t;
+};
 
 /** Terminal control characters (ESC sequences: colours, window title, clipboard) coming from a website must never reach a console. */
 export const stripControl = (t) => String(t).replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, '');

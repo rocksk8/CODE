@@ -124,3 +124,31 @@ export function stripMarkup(src) {
   }
   return out;
 }
+
+/**
+ * Linear-time list of the start tags in an HTML string: [{ name, attrs, end }] (name lower-cased, attrs = text up to the closing ">", capped; end = index after ">").
+ * Used instead of regexes with unbounded gaps between tag name and attribute, which go quadratic on pages made of thousands of unclosed tags.
+ */
+export function tagList(html, maxTags = 60000, attrCap = 4000) {
+  const out = []; let i = 0, gt = -2, lower; const noClose = new Set();
+  while (out.length < maxTags) {
+    const lt = html.indexOf('<', i); if (lt < 0) break;
+    const m = /^[A-Za-z][A-Za-z0-9-]{0,30}/.exec(html.slice(lt + 1, lt + 33));
+    if (!m) { i = lt + 1; continue; }
+    if (gt !== -1 && gt < lt) gt = html.indexOf('>', lt);
+    if (gt < 0) break; // no further ">" anywhere: nothing else can be a complete tag
+    const name = m[0].toLowerCase();
+    out.push({ name, attrs: html.slice(lt + 1 + m[0].length, Math.min(gt, lt + 1 + m[0].length + attrCap)), end: gt + 1 });
+    i = lt + 1 + m[0].length;
+    if (name === 'script' || name === 'style') { // raw-text elements: what looks like a tag inside a script string is not markup
+      lower ??= html.toLowerCase();
+      if (!noClose.has(name)) { const c = lower.indexOf('</' + name, gt + 1); if (c >= 0) i = c; else noClose.add(name); }
+    }
+  }
+  return out;
+}
+/** Value of an attribute inside the attrs text of one tag (quoted or bare), or null. */
+export function attrValue(attrs, name) {
+  const m = new RegExp(`(?:^|[\\s"'/])${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(attrs);
+  return m ? (m[1] ?? m[2] ?? m[3] ?? '') : null;
+}

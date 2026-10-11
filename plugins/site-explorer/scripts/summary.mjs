@@ -11,11 +11,12 @@ const sev = ['critical', 'high', 'medium', 'low'];
 /** Summarise an output folder written by `explore`. Safe to call on partial results: missing parts are null. */
 export function buildSummary({ out, host, steps = [], url = null, fresh = true }) {
   const siteDir = path.join(out, 'site', host), motionDir = path.join(out, 'motion', host), handoff = path.join(out, 'handoff');
-  const health = readJSON(path.join(siteDir, 'health.json'));
-  const verify = readJSON(path.join(handoff, 'verify', 'verify.json'));
-  const site = readJSON(path.join(siteDir, 'site.json'));
-  const motionPages = readJSON(path.join(motionDir, 'pages.json'));
-  const a11y = readJSON(path.join(siteDir, 'a11y.json'));
+  const rd = (f) => (fresh ? readJSON(f) : null); // after a failed run nothing on disk is this run's result
+  const health = rd(path.join(siteDir, 'health.json'));
+  const verify = rd(path.join(handoff, 'verify', 'verify.json'));
+  const site = rd(path.join(siteDir, 'site.json'));
+  const motionPages = rd(path.join(motionDir, 'pages.json'));
+  const a11y = rd(path.join(siteDir, 'a11y.json'));
   const has = (f) => fresh && fs.existsSync(f); // after a failed crawl, files from an earlier run are not this run's results
   const raw = {
     schemaVersion: 1, url, host, authenticated: !!site?.authenticated,
