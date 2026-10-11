@@ -12,6 +12,8 @@ import { isMain, readCappedBuffer, mayFetch, gfetch } from './util.mjs';
 import { fetchRobots, isAllowed, groupFor, AI_BOTS, SEARCH_BOTS } from './robots.mjs';
 import { intOpt } from './args.mjs';
 import { cleanDeep, clean, safe, BANNER, sanitizeDoc } from './untrusted.mjs';
+import { validateNodes, hasContextOk } from './structured.mjs';
+import { responsiveFindings } from './responsive.mjs';
 
 const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
 const SEV = { critical: 40, high: 20, medium: 8, low: 3, info: 0 };
@@ -71,7 +73,7 @@ async function fetchSitemapText(url, timeout = 15000) {
 export async function runHealth(siteDir, opts = {}) {
   const site = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8'));
   const injection = []; // site text that looks like instructions aimed at an AI
-  const pages = site.pages.map((p) => { const f = path.join(siteDir, 'pages', p.slug, 'page.json'); if (!fs.existsSync(f)) return null; const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (!j.seo) return null; return { slug: p.slug, url: p.url, status: p.status, blocked: p.blocked, /* perf = numbers + resource URLs; URLs only reach the report via add(), which sanitises */ seo: { ...cleanDeep({ ...j.seo, perf: undefined }, `page[${p.slug}].seo`, injection, { max: 400, quarantine: false }), perf: j.seo?.perf }, links: cleanDeep(j.content?.links || [], `page[${p.slug}].links`, injection, { quarantine: false }), title: clean(j.title), pageErrors: cleanDeep(j.pageErrors || [], `page[${p.slug}].errors`, injection, { quarantine: false }) }; }).filter((p) => p && p.seo);
+  const pages = site.pages.map((p) => { const f = path.join(siteDir, 'pages', p.slug, 'page.json'); if (!fs.existsSync(f)) return null; const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (!j.seo) return null; return { slug: p.slug, url: p.url, status: p.status, blocked: p.blocked, /* perf = numbers + resource URLs; URLs only reach the report via add(), which sanitises */ seo: { ...cleanDeep({ ...j.seo, perf: undefined }, `page[${p.slug}].seo`, injection, { max: 400, quarantine: false }), perf: j.seo?.perf }, links: cleanDeep(j.content?.links || [], `page[${p.slug}].links`, injection, { quarantine: false }), title: clean(j.title), responsive: j.responsive || null, pageErrors: cleanDeep(j.pageErrors || [], `page[${p.slug}].errors`, injection, { quarantine: false }) }; }).filter((p) => p && p.seo);
   const origin = new URL(site.finalOrigin || site.startUrl).origin, host = new URL(origin).hostname, https = origin.startsWith('https:');
   const live = pages.filter((p) => !p.status || p.status < 400); // error pages are reported once (status-errors), not scored as content
   const total = live.length || 1;
@@ -287,6 +289,12 @@ export async function runHealth(siteDir, opts = {}) {
   const tap = mob.filter((p) => p.seo.mobile.tapChecked && p.seo.mobile.smallTapTargets / p.seo.mobile.tapChecked > 0.25); if (tap.length) add('mobile', 'low', 'tap-targets', `${tap.length} 個頁面有超過 25% 的可點元素小於 24px`, { affected: tap.length, scope: 'page', examples: urls(tap), fix: '可點區域至少 44×44px（含 padding），相鄰目標保持間距。' });
   if (!over.length && !noVp.length && mob.length) ok('mobile', '手機寬度沒有橫向溢出');
 
+  // measured at 1440 / 768 / 390: tablet and phone behaviour, not just a phone overflow flag
+  { const RS = { 'tablet-overflow': ['medium', '平板寬度出現橫向捲動', '平板（768px）使用者需要左右滑動，常見於固定寬度的表格、圖片或元件。', '檢查固定寬度元素；容器 max-width:100%；表格外層加 overflow-x:auto。'], 'mobile-nav-missing': ['medium', '手機寬度找不到導覽選單', '手機訪客與爬蟲看不到主要導覽連結，也找不到可展開的選單按鈕，網站幾乎無法瀏覽。', '在小螢幕提供漢堡選單按鈕（button 加 aria-label／aria-expanded）。'], 'mobile-columns': ['low', '手機寬度仍並排 3 欄以上', '欄位在窄螢幕被擠壓，文字換行過多、難以閱讀。', '用 @media (max-width: 640px) 讓欄位改為單欄堆疊（grid-template-columns: 1fr）。'], 'mobile-wide-images': ['low', '有圖片比手機螢幕還寬', '圖片被切掉或造成橫向捲動。', '圖片加 max-width:100%; height:auto。'], 'mobile-content-hidden': ['medium', '手機版隱藏了大量文字內容', 'Google 以手機版內容為主要索引依據（mobile-first indexing）；手機版少掉的文字，搜尋引擎等於沒看到。', '讓手機版與桌機版提供相同的主要內容（可折疊，但不要移除）。'] };
+    const byId = {}; for (const p of live) for (const f of responsiveFindings(p.responsive)) (byId[f.id] ||= []).push(`${p.url}：${f.text}`);
+    for (const [id, ex] of Object.entries(byId)) { const [sev, title, impact, fix] = RS[id]; add('mobile', sev, id, `${ex.length} 個頁面：${title}`, { affected: ex.length, scope: 'page', examples: ex, impact, fix }); }
+    if (live.some((p) => p.responsive && p.responsive.tablet) && !byId['tablet-overflow']) ok('mobile', '平板寬度沒有橫向溢出'); }
+
   // ---------------------------------------------------------------- security & transport
   const main = (live[0] || pages[0])?.seo.http, H = main?.headers || {};
   facts.security = { https, headers: Object.fromEntries(['strict-transport-security', 'content-security-policy', 'x-content-type-options', 'x-frame-options', 'referrer-policy', 'permissions-policy', 'server', 'x-powered-by'].map((k) => [k, H[k] || null])) };
@@ -308,11 +316,41 @@ export async function runHealth(siteDir, opts = {}) {
     if (/\d/.test(H['server'] || '') || H['x-powered-by']) add('security', 'info', 'version-disclosure', '回應標頭洩漏伺服器版本資訊', { examples: [H['server'], H['x-powered-by']].filter(Boolean), fix: '隱藏 Server／X-Powered-By 的版本號。' });
   }
 
+  // ---------------------------------------------------------------- trackers, cookies, consent (observed BEFORE any consent click; names and flags only)
+  const pv = site.privacy; if (pv && pv.pagesChecked) {
+    facts.privacy = { trackers: pv.trackingVendors.map((v) => v.name), vendors: pv.vendors.length, cookies: pv.cookies.length, consentBanner: pv.consentBanner };
+    const trk = pv.trackingVendors.map((v) => v.name);
+    if (trk.length && pv.consentChecked && !pv.consentBanner) add('security', 'medium', 'trackers-no-banner', `載入了 ${trk.length} 個追蹤／廣告服務，但沒有偵測到 Cookie 同意橫幅`, { examples: trk, impact: '在歐盟（GDPR／ePrivacy）等地區，分析與廣告類追蹤通常要在訪客同意「之後」才能啟動；台灣個資法也要求事前告知蒐集目的。被投訴或稽核時，這是最常被點名的一項。', fix: '導入同意管理工具（如 Cookiebot、OneTrust、Termly），讓追蹤碼在同意後才載入；並在隱私權政策列出這些服務。若你只服務法規寬鬆的市場，請由負責人確認後忽略。' });
+    else if (trk.length) add('security', 'info', 'trackers-present', `使用 ${trk.length} 個追蹤／廣告服務：${trk.join('、')}`, { impact: (pv.consentBanner ? '已偵測到 Cookie 橫幅。' : '') + '本工具無法驗證追蹤碼是否真的等到同意後才啟動——這些服務在爬蟲尚未同意時就已經載入。', fix: '用瀏覽器開發者工具（Network 分頁）拒絕 Cookie 後重新整理，確認這些請求不再出現。' });
+    else ok('security', '沒有辨識到追蹤／廣告類第三方服務');
+    const replay = pv.vendors.filter((v) => v.cat === 'session-replay'); if (replay.length) add('security', 'info', 'session-replay', `使用行為錄影／熱圖工具：${replay.map((v) => v.name).join('、')}`, { impact: '這類工具會錄下訪客的滑鼠與畫面，可能錄到表單輸入的個資。', fix: '確認已遮蔽輸入欄位與敏感頁面，並在隱私權政策中揭露。' });
+    if (https && pv.weakCookies.length) add('security', 'low', 'cookies-insecure', `${pv.weakCookies.length} 個 Cookie 沒有 Secure 旗標（網站是 HTTPS）`, { affected: pv.weakCookies.length, examples: pv.weakCookies.map((c) => `${c.name}（${c.domain}）`), impact: 'Cookie 可能在不加密的連線上被送出。', fix: '由設定它的程式加上 Secure（與適當的 SameSite、HttpOnly）。' });
+    if (pv.thirdPartyCookies.length) add('security', 'info', 'third-party-cookies', `${pv.thirdPartyCookies.length} 個第三方 Cookie`, { examples: pv.thirdPartyCookies.map((c) => `${c.name}（${c.domain}${c.owner ? '，' + c.owner : ''}）`), impact: '第三方 Cookie 正被瀏覽器逐步淘汰，也是隱私政策必須揭露的項目。', fix: '評估是否還需要；保留者列入隱私權政策。' });
+  }
+
   // ---------------------------------------------------------------- structured data & social
   const noLd = perPage((p) => !p.seo.structuredData.jsonld.length && !p.seo.structuredData.microdata && p.status === 200);
   const ldBad = perPage((p) => p.seo.structuredData.jsonld.some((j) => j.error)); if (ldBad.length) add('structured', 'high', 'jsonld-invalid', `${ldBad.length} 個頁面的 JSON-LD 無法解析`, { affected: ldBad.length, scope: 'page', examples: ldBad.map((p) => `${p.url}：${p.seo.structuredData.jsonld.find((j) => j.error).error}`), impact: '結構化資料失效，無法取得豐富搜尋結果。', fix: '用 Rich Results Test 驗證並修正 JSON 語法。' });
   if (noLd.length === live.length && live.length) add('structured', 'medium', 'jsonld-none', '全站沒有結構化資料（JSON-LD／microdata）', { impact: '搜尋引擎與 AI 較難確定頁面實體（組織、商品、文章），也失去豐富搜尋結果資格。', fix: '至少加入 Organization／WebSite；內容頁加 Article，商品頁加 Product，並用 Rich Results Test 驗證。' });
   else if (live.some((p) => p.seo.structuredData.jsonld.length)) ok('structured', `偵測到結構化資料：${[...new Set(pages.flatMap((p) => p.seo.structuredData.jsonld.flatMap((j) => j.types || [])))].slice(0, 6).join('、')}`);
+  { // what each item must contain for its type; context; whether the markup exists without running JavaScript
+    const allNodes = (p) => p.seo.structuredData.jsonld.filter((j) => !j.error);
+    const bad = [], rec = [], noCtx = [], untyped = [];
+    for (const p of live) {
+      const nodes = allNodes(p); if (!nodes.length) continue;
+      const found = validateNodes(nodes);
+      for (const f of found) { if (f.untyped) { untyped.push(p); continue; } if (f.missing.length) bad.push(`${p.url}：${f.type} 缺少 ${f.missing.join('、')}`); else if (f.recommended.length) rec.push(`${p.url}：${f.type} 建議補 ${f.recommended.slice(0, 4).join('、')}`); }
+      if (nodes.some((j) => j.types.length && !hasContextOk(j.context))) noCtx.push(p);
+    }
+    if (bad.length) add('structured', 'high', 'jsonld-missing-required', `${bad.length} 個結構化資料項目缺少必填欄位`, { affected: new Set(bad.map((b) => b.split('：')[0])).size, scope: 'page', examples: bad, impact: '缺必填欄位的標記不會取得豐富搜尋結果（星等、價格、FAQ 摺疊等），Search Console 也會回報錯誤。', fix: '依類型補上欄位（範例：Product 要有 name 與 offers／review／aggregateRating；Article 要有 headline、datePublished、author）；用 Rich Results Test 驗證。' });
+    if (noCtx.length) add('structured', 'medium', 'jsonld-no-context', `${noCtx.length} 個頁面的 JSON-LD 缺少 @context: "https://schema.org"`, { affected: noCtx.length, scope: 'page', examples: urls(noCtx), impact: '沒有 @context，解析器不知道這些欄位的定義，整段標記會被忽略。', fix: '在每個 JSON-LD 加上 "@context": "https://schema.org"。' });
+    if (untyped.length) add('structured', 'medium', 'jsonld-no-type', `${untyped.length} 個頁面有沒有 @type 的 JSON-LD 項目`, { affected: untyped.length, scope: 'page', examples: urls(untyped), fix: '每個項目都要宣告 "@type"（例如 Organization、Product、Article）。' });
+    if (rec.length) add('structured', 'low', 'jsonld-recommended', `${rec.length} 個結構化資料項目缺少建議欄位`, { examples: rec, impact: '不影響資格，但欄位越完整，搜尋結果呈現越豐富。', fix: '有資料的話補上建議欄位。' });
+    const jsOnly = perPage((p) => p.seo.raw && !p.seo.raw.error && p.seo.structuredData.jsonld.length > 0 && p.seo.raw.jsonld === 0);
+    if (jsOnly.length) add('structured', 'medium', 'jsonld-js-only', `${jsOnly.length} 個頁面的結構化資料要執行 JavaScript 才出現`, { affected: jsOnly.length, scope: 'page', examples: urls(jsOnly), impact: 'Google 通常看得到，但多數 AI 爬蟲、社群預覽與其他搜尋引擎不執行 JS，等於沒有標記。', fix: '把 JSON-LD 直接輸出在伺服器回傳的 HTML 中（SSR／SSG／模板），不要靠前端腳本注入。' });
+    const kinds = new Set(live.flatMap((p) => allNodes(p).flatMap((j) => j.types)));
+    if (kinds.size && ![...kinds].some((t) => /^(Organization|LocalBusiness|WebSite|Corporation|Person)$/.test(t) || /Business|Store|Restaurant/.test(t))) add('structured', 'low', 'jsonld-no-entity', '有結構化資料，但沒有任何 Organization／WebSite／LocalBusiness', { examples: [...kinds], impact: '搜尋引擎與 AI 較難確定「這個網站是誰」，影響知識面板與品牌辨識。', fix: '在首頁加上 Organization（或 LocalBusiness）與 WebSite。' });
+  }
   const noOg = perPage((p) => !p.seo.social.ogTitle || !p.seo.social.ogImage); if (noOg.length) add('structured', 'low', 'og-missing', `${noOg.length} 個頁面缺少 Open Graph 標題或圖片`, { affected: noOg.length, scope: 'page', examples: urls(noOg), impact: '分享到 Facebook／LINE／Slack 時沒有預覽卡片。', fix: '加入 og:title、og:description、og:image（建議 1200×630）、og:url。' });
   const noTw = perPage((p) => !p.seo.social.twitterCard); if (noTw.length === live.length && live.length) add('structured', 'info', 'twitter-card', '沒有 Twitter／X Card 標籤', { fix: '加入 twitter:card=summary_large_image。' });
   const hrefBad = perPage((p) => p.seo.hreflang.some((h) => !/^(x-default|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$/.test(h.lang))); if (hrefBad.length) add('structured', 'medium', 'hreflang-invalid', `${hrefBad.length} 個頁面有無效的 hreflang 代碼`, { affected: hrefBad.length, scope: 'page', examples: hrefBad.map((p) => `${p.url}：${p.seo.hreflang.filter((h) => !/^(x-default|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$/.test(h.lang)).map((h) => h.lang).join(',')}`), fix: '使用 ISO 639-1 語言（可加 ISO 3166-1 地區），如 zh-TW、en-US。' });

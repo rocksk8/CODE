@@ -10,6 +10,8 @@ import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch } from '.
 import { parseSitemap } from './health-check.mjs';
 import { attachNetworkRecorder, deepContent, ariaTree } from './observe.mjs';
 import { exploreStates } from './interact.mjs';
+import { extractResponsiveInPage, responsiveMarkdown } from './responsive.mjs';
+import { classifyUrls, analyzeCookies, detectConsentInPage, resourceUrlsInPage, summarizePrivacy, privacyMarkdown } from './trackers.mjs';
 import { probe } from './diagnose.mjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -231,6 +233,14 @@ async function detect(pages, headers, fetchStatus) {
 }
 
 // ---- friction handling: cookie banners and bot walls ----
+// What the page loads and sets by itself. Run for the first page BEFORE the crawler touches a cookie banner (dismissConsent), so cookies and the banner are seen as a new visitor sees them.
+async function snapshotPrivacy(page, ctx, net) {
+  try {
+    const dom = await page.evaluate(resourceUrlsInPage).catch(() => []); const n = net.summary(page.url());
+    const urls = [...dom, ...(n.hostList || []).map((h) => `https://${h}/`), ...(n.failedUrls || [])];
+    return { vendors: classifyUrls(urls), cookies: analyzeCookies(await ctx.cookies(), new URL(page.url()).hostname, { https: page.url().startsWith('https:') }), consent: await page.evaluate(detectConsentInPage).catch(() => ({ detected: false, kind: null })) };
+  } catch { return null; }
+}
 async function dismissConsent(page) {
   try {
     return await page.evaluate(() => {
@@ -294,7 +304,7 @@ async function fetchRaw(u) {
       htmlTag: ((html.match(/<html[^>]*>/i) || [''])[0]).slice(0, 200), metaCount: (html.match(/<meta\s/gi) || []).length,
       status: r.status, finalUrl: r.url, bytes: html.length, contentType: r.headers.get('content-type') || '',
       title: ((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim(), h1Count: (html.match(/<h1[\s>]/gi) || []).length,
-      words: latin + Math.round(cjk / 1.8), links: (html.match(/<a\s[^>]*href=/gi) || []).length, canonical: /<link[^>]+rel=["']?canonical/i.test(html), jsonld: (html.match(/application\/ld\+json/gi) || []).length,
+      words: latin + Math.round(cjk / 1.8), links: (html.match(/<a\s[^>]*href=/gi) || []).length, canonical: /<link[^>]+rel=["']?canonical/i.test(html), jsonld: (html.match(/<script[^>]+type=["']?application\/ld\+json/gi) || []).length,
       metaRobots: ((html.match(/<meta[^>]+name=["']robots["'][^>]*content=["']([^"']*)/i) || [])[1] || null), csrShell: /<div[^>]+id=["'](root|app|__next|__nuxt)["'][^>]*>\s*<\/div>/i.test(html),
     };
   } catch (e) { return { error: String(e.message).slice(0, 100) }; }
@@ -388,7 +398,8 @@ while (pages.length < maxPages) {
     }
     crawledFinal.add(finalKey); crawledFinal.add(norm(url));
     if (pages.length === 0 && resp) headers.main = resp.headers();
-    if (pages.length === 0) { consentAction = await dismissConsent(page); if (consentAction) await page.waitForTimeout(600); }
+    let preConsent = null;
+    if (pages.length === 0) { preConsent = await snapshotPrivacy(page, ctx, net); consentAction = await dismissConsent(page); if (consentAction) await page.waitForTimeout(600); }
     let contentReady = await waitForContent(page, contentWaitMs);
     // trigger lazy content
     // bounded: infinite-scroll pages grow forever while you scroll
@@ -399,6 +410,12 @@ while (pages.length < maxPages) {
     const data = await page.evaluate(extractInPage);
     data.deep = await deepContent(page).catch(() => null);
     data.network = net.summary(page.url());
+    { // first page: cookies + banner as a NEW visitor sees them (snapshot taken before the crawler touched the banner); later pages: only the services they load
+      const now = await snapshotPrivacy(page, ctx, net);
+      if (!now) data.privacy = null;
+      else if (preConsent) { const names = new Set(preConsent.vendors.map((v) => v.name)); data.privacy = { stage: 'before', vendors: [...preConsent.vendors, ...now.vendors.filter((v) => !names.has(v.name))], cookies: preConsent.cookies, consent: preConsent.consent }; }
+      else data.privacy = { stage: 'after', vendors: now.vendors, cookies: [], consent: { detected: false, kind: null } };
+    }
     const aria = await ariaTree(page);
     data.aria = aria ? { lines: aria.lines, headings: aria.headings, links: aria.links, buttons: aria.buttons, images: aria.images, landmarks: aria.landmarks, head: aria.text.split('\n').slice(0, 40).join('\n').slice(0, 3500) } : null;
     data._ariaText = aria?.text || null; // written to aria.yml below, not kept in page.json
@@ -447,9 +464,12 @@ while (pages.length < maxPages) {
     }
     const dir = path.join(outDir, 'pages', slugOf(url)); fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'page.html'), await page.content());
+    data.responsive = {};
     if (shots) {
       for (const [name, [w, h]] of Object.entries(VIEWPORTS)) {
         await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250);
+        data.responsive[name] = await page.evaluate(extractResponsiveInPage).catch(() => null);
+        if (name === 'tablet' && data.seo) data.seo.tablet = await page.evaluate(extractMobileInPage).catch(() => null);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
         data.layout[`${name}Overflow`] = overflow;
         await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true });
@@ -463,9 +483,13 @@ while (pages.length < maxPages) {
         }
         if (name === 'mobile' && data.seo) data.seo.mobile = await page.evaluate(extractMobileInPage).catch(() => null);
       }
-    } else if (data.seo) {
-      await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(250);
-      data.seo.mobile = await page.evaluate(extractMobileInPage).catch(() => null);
+    } else {
+      for (const [name, [w, h]] of Object.entries(VIEWPORTS)) {
+        await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250);
+        data.responsive[name] = await page.evaluate(extractResponsiveInPage).catch(() => null);
+        if (data.seo && name === 'tablet') data.seo.tablet = await page.evaluate(extractMobileInPage).catch(() => null);
+        if (data.seo && name === 'mobile') data.seo.mobile = await page.evaluate(extractMobileInPage).catch(() => null);
+      }
     }
     // Experience pages hide content behind "enter", scrolling or keys: walk through those states last, so nothing above was measured on a changed page
     { const canv = await page.evaluate(() => document.querySelectorAll('canvas').length).catch(() => 0);
@@ -559,7 +583,8 @@ const site = {
   editing: { platforms, contenteditablePages: pages.filter((p) => p.editing.contenteditable).map((p) => p.url), loginOrAdminLinks: [...new Map(pages.flatMap((p) => p.editing.editLinks).map((l) => [l.href, l])).values()].slice(0, 15) },
   design: { textColors: merge('textColors'), backgrounds: merge('backgrounds'), fontFamilies: merge('fontFamilies', 6), fontSizes: merge('fontSizes'), radii: merge('radii', 6), shadows: merge('shadows', 5), spacing: merge('spacing'), cssVars: pages[0]?.design.cssVars || {}, webFonts: [...new Set(pages.flatMap((p) => p.design.webFonts))], typography: pages[0]?.design.typography, breakpoints: (() => { const m = {}; for (const p of pages) for (const b of p.breakpoints) m[b.px] = (m[b.px] || 0) + b.uses; return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([px, uses]) => ({ px: Number(px), uses })); })(), darkMode: pages[0]?.darkMode, buttonHover: pages[0]?.buttonHover },
   components: pages[0]?.components, assets, designer,
-  pages: pages.map((p) => ({ states: p.states || null, network: p.network || null, aria: p.aria || null, deep: p.deep || null, emptyPage: !!p.emptyPage, emptyDiag: p.emptyDiag || null, slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
+  privacy: summarizePrivacy(pages.map((p) => p.privacy)),
+  pages: pages.map((p) => ({ responsive: p.responsive || null, privacy: p.privacy || null, states: p.states || null, network: p.network || null, aria: p.aria || null, deep: p.deep || null, emptyPage: !!p.emptyPage, emptyDiag: p.emptyDiag || null, slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
 };
 fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
 
@@ -584,6 +609,8 @@ const md = [
   '## 頁面', ...site.pages.map((p) => `- [${p.status}] ${p.title || '(無標題)'} — ${p.url}（高 ${p.docHeight}px${p.mobileOverflow ? '，手機版橫向溢出' : ''}；${p.slug}/）`), '',
   '## 網路與內容來源（頁面實際載入了什麼）', ...pages.slice(0, 3).flatMap((p) => { const n = p.network; if (!n) return []; return [`### ${p.url}`, `- 請求 ${n.total} 個（${Object.entries(n.byType).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${v}`).join('、')}）；第三方網域 ${n.thirdParty.length} 個${n.errorCount ? `；**錯誤回應 ${n.errorCount} 個**（403/429 共 ${n.blockedLike} 個）` : ''}${n.failedCount ? `；失敗請求 ${n.failedCount} 個` : ''}`, ...(n.assets3d.length ? [`- 3D 資源：${n.assets3d.map((a) => `${a.url}（${a.status}）`).join('、')}`] : []), ...(n.media.length ? [`- 影音：${n.media.map((a) => a.url).join('、')}`] : []), ...(n.fonts.length ? [`- 字型檔：${n.fonts.slice(0, 6).join('、')}`] : []), ...(n.apis.length ? [`- API／JSON：${n.apis.slice(0, 8).map((a) => `${a.url}（${a.status}）`).join('、')}`] : []), ...(n.errors.length ? [`- 失敗的請求：${n.errors.slice(0, 6).map((e) => `${e.status} ${e.url}`).join('、')}`] : []), ...(n.apiTextSamples.length ? ['- API 回應裡的文字（頁面上看不到時，內容常在這裡）：', ...n.apiTextSamples.slice(0, 12).map((t) => `  - ${t}`)] : []), ...(p.deep ? [`- 含 shadow DOM 與 iframe 的可見文字：${p.deep.textChars} 字（主文件 ${p.deep.mainTextChars} 字；iframe ${p.deep.frameCount} 個、shadow root ${p.deep.shadowHosts} 個）`] : []), ...(p.aria && p.aria.lines > 0 ? [`- 無障礙樹：${p.aria.lines} 行，標題 ${p.aria.headings}、連結 ${p.aria.links}、按鈕 ${p.aria.buttons}、圖片 ${p.aria.images}、地標 ${p.aria.landmarks}（完整內容見 pages/${p.slug}/aria.yml）`, '```yaml', p.aria.head, '```'] : (p.aria ? ['- 無障礙樹：空的（頁面上沒有任何可讀的語意結構）'] : [])), '']; }),
   ...(pages.some((p) => p.states && p.states.length > 1) ? ['## 互動狀態（自動點擊／滾動／按鍵後出現的畫面）', ...pages.filter((p) => p.states && p.states.length > 1).slice(0, 4).flatMap((p) => [`### ${p.url}`, ...p.states.map((s) => `- 狀態 ${s.index}：${s.action}${s.label ? '「' + s.label + '」' : ''}　可見文字 ${s.textChars} 字　截圖 pages/${p.slug}/states/${s.screenshot}${s.text ? '\n  - 文字開頭：' + s.text.slice(0, 160) : ''}`), '']), ] : []),
+  ...privacyMarkdown(summarizePrivacy(pages.map((p) => p.privacy))),
+  ...(pages.some((p) => p.responsive && p.responsive.desktop) ? ['## 手機／平板實測（不是猜的：在三種寬度各量一次）', '', ...pages.filter((p) => p.responsive && p.responsive.desktop).slice(0, 3).flatMap((p) => [`### ${p.url}`, ...responsiveMarkdown(p.responsive), '']),] : []),
   '## 排版', ...(() => {
     // pick the pages that actually HAVE a layout (the first ones you typed may be empty script-built pages); say so for the empty ones
     const rich = (p) => (p.layout.sections || []).length + (p.designer?.blocks || []).length;

@@ -50,10 +50,11 @@ export async function extractSeoInPage() {
 
   // structured data
   const jsonld = [];
+  const filled = (v) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0);
   for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
     try {
-      const data = JSON.parse(s.textContent); const nodes = Array.isArray(data) ? data : data['@graph'] ? data['@graph'] : [data];
-      for (const n of nodes) { const t = n && n['@type']; jsonld.push({ types: [].concat(t || []).map(String), props: Object.keys(n || {}).filter((k) => !k.startsWith('@')).slice(0, 25), name: n && (n.name || n.headline || '') ? String(n.name || n.headline).slice(0, 60) : '' }); }
+      const data = JSON.parse(s.textContent); const topCtx = Array.isArray(data) ? null : data['@context']; const nodes = Array.isArray(data) ? data : data['@graph'] ? data['@graph'] : [data];
+      for (const n of nodes) { const t = n && n['@type']; const ctx = (n && n['@context']) || topCtx || (Array.isArray(data) && data[0] && data[0]['@context']) || null; jsonld.push({ types: [].concat(t || []).map(String), props: Object.keys(n || {}).filter((k) => !k.startsWith('@') && filled(n[k])).slice(0, 60), context: ctx ? (typeof ctx === 'string' ? ctx : JSON.stringify(ctx)).slice(0, 80) : null, name: n && (n.name || n.headline || '') ? String(n.name || n.headline).slice(0, 60) : '' }); }
     } catch (e) { jsonld.push({ error: String(e.message).slice(0, 80) }); }
   }
   const microdata = document.querySelectorAll('[itemscope]').length;

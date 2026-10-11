@@ -44,6 +44,8 @@ export async function openDb(file = DB_PATH) {
   // lightweight migration: older databases get the new columns
   const have = new Set(db.prepare("PRAGMA table_info(runs)").all().map((c) => c.name));
   for (const [col, type] of [['health_score', 'INTEGER'], ['health_grade', 'TEXT'], ['health_json', 'TEXT'], ['issues_critical', 'INTEGER'], ['issues_high', 'INTEGER']]) if (!have.has(col)) db.exec(`ALTER TABLE runs ADD COLUMN ${col} ${type}`);
+  const havePages = new Set(db.prepare("PRAGMA table_info(pages)").all().map((c) => c.name));
+  for (const [col, type] of [['description', 'TEXT'], ['words', 'INTEGER'], ['canonical', 'TEXT'], ['noindex', 'INTEGER'], ['jsonld_types', 'TEXT']]) if (!havePages.has(col)) db.exec(`ALTER TABLE pages ADD COLUMN ${col} ${type}`);
   db.prepare('INSERT OR IGNORE INTO meta VALUES(?,?)').run('schema_version', String(SCHEMA_VERSION));
   return db;
 }
@@ -73,7 +75,11 @@ export function ingest(db, { siteDir, motionDir }) {
   const q = (sql) => db.prepare(sql);
   for (const [role, hex] of Object.entries(t.color || {})) q('INSERT INTO colors VALUES(?,?,?,?)').run(id, hex, role, null);
   for (const p of t.palette || []) q('INSERT INTO colors VALUES(?,?,?,?)').run(id, p.hex, p.kind, p.uses);
-  for (const p of site?.pages || []) q('INSERT INTO pages VALUES(?,?,?,?,?,?,?)').run(id, p.url, p.title ?? null, p.status ?? null, p.blocked ?? null, (p.h1 || []).join(' / '), p.docHeight ?? null);
+  for (const p of site?.pages || []) {
+    let seo = null; try { const f = path.join(siteDir, 'pages', p.slug || '', 'page.json'); if (p.slug && fs.existsSync(f)) seo = readJSON(f).seo || null; } catch {}
+    const noindex = seo ? (/noindex/i.test(seo.robotsMeta || '') || /noindex/i.test(seo.http?.headers?.['x-robots-tag'] || '') ? 1 : 0) : null;
+    q('INSERT INTO pages(run_id,url,title,status,blocked,h1,doc_height,description,words,canonical,noindex,jsonld_types) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(id, p.url, p.title ?? null, p.status ?? null, p.blocked ?? null, (p.h1 || []).join(' / '), p.docHeight ?? null, seo?.description ?? null, seo?.words ?? null, seo?.canonical ?? null, noindex, seo ? [...new Set((seo.structuredData?.jsonld || []).flatMap((j) => j.types || []))].join(',') : null);
+  }
   for (const p of site?.editing?.platforms || []) q('INSERT INTO platforms VALUES(?,?,?)').run(id, p.platform, p.howToEdit);
   if (motion) for (const [k, v] of Object.entries(motion.libs || {})) if (v && k !== 'threeRevision') q('INSERT INTO libs VALUES(?,?)').run(id, k.replace(/Script$/, ''));
   for (const m of targets) q('INSERT INTO motion VALUES(?,?,?,?,?,?,?)').run(id, m.kind, m.selector, m.animatesOnItsOwn ? 1 : 0, m.reactsToMouse ? 1 : 0, m.box?.w ?? null, m.box?.h ?? null);
@@ -119,6 +125,53 @@ export function diffRuns(db, a, b) {
   return changes;
 }
 
+const pathKey = (u) => { try { const x = new URL(u); return (x.pathname.replace(/\/+$/, '') || '/') + x.search; } catch { return String(u); } };
+/**
+ * Page-by-page before/after for a redesign. Pages are matched by PATH, so it also works when the new site
+ * lives on another host (staging) — a removed path is a URL that needs a 301 or it becomes a 404.
+ */
+export function diffPages(db, a, b) {
+  const rows = (id) => new Map(db.prepare('SELECT * FROM pages WHERE run_id=?').all(id).map((r) => [pathKey(r.url), r]));
+  const A = rows(a), B = rows(b); const out = { added: [], removed: [], changed: [], unchanged: 0 };
+  const live = (r) => r.status == null || r.status < 400;
+  for (const [k, ra] of A) {
+    const rb = B.get(k);
+    if (!rb) { if (live(ra)) out.removed.push({ path: k, title: ra.title }); continue; }
+    const ch = [];
+    const text = (label, x, y) => { if (String(x ?? '').trim() !== String(y ?? '').trim()) ch.push({ field: label, from: x ?? '', to: y ?? '' }); };
+    text('標題', ra.title, rb.title); text('h1', ra.h1, rb.h1); text('描述', ra.description, rb.description); text('canonical', pathKey(ra.canonical || ''), pathKey(rb.canonical || ''));
+    if (ra.status !== rb.status) ch.push({ field: '狀態碼', from: ra.status ?? '', to: rb.status ?? '' });
+    if (ra.noindex != null && rb.noindex != null && ra.noindex !== rb.noindex) ch.push({ field: 'noindex', from: ra.noindex ? '是' : '否', to: rb.noindex ? '是' : '否' });
+    if (ra.words > 0 && rb.words != null && Math.abs(rb.words - ra.words) / ra.words >= 0.3) ch.push({ field: '字數', from: ra.words, to: rb.words });
+    if (ra.jsonld_types && ra.jsonld_types !== (rb.jsonld_types ?? '')) ch.push({ field: '結構化資料', from: ra.jsonld_types, to: rb.jsonld_types || '（無）' });
+    if (ch.length) out.changed.push({ path: k, changes: ch }); else out.unchanged++;
+  }
+  for (const [k, rb] of B) if (!A.has(k) && live(rb)) out.added.push({ path: k, title: rb.title });
+  return out;
+}
+
+/** Plain-language before/after report: what a redesign lost, kept or changed — SEO risks first. */
+export function renderChangesMd(db, a, b) {
+  const A = db.prepare('SELECT * FROM runs WHERE id=?').get(a), B = db.prepare('SELECT * FROM runs WHERE id=?').get(b);
+  const d = diffPages(db, a, b), settings = diffRuns(db, a, b);
+  const L = [`# 改版前後對照`, '', `- 之前：run #${a}　${A.host}　${String(A.crawled_at || '').slice(0, 10)}`, `- 之後：run #${b}　${B.host}　${String(B.crawled_at || '').slice(0, 10)}`, '', '> 頁面以「路徑」對應，所以舊站與新站在不同網域（例如測試站）也能比。只比較兩次都有爬到的頁面。', ''];
+  const risk = [];
+  if (d.removed.length) risk.push(`**${d.removed.length} 個舊網址在新版消失** — 沒有設定 301 就會變 404，搜尋排名與外部連結會流失。`);
+  const lostDesc = d.changed.filter((c) => c.changes.some((x) => x.field === '描述' && x.from && !x.to)); if (lostDesc.length) risk.push(`${lostDesc.length} 頁的 meta description 被拿掉了。`);
+  const noidx = d.changed.filter((c) => c.changes.some((x) => x.field === 'noindex' && x.to === '是')); if (noidx.length) risk.push(`**${noidx.length} 頁在新版變成 noindex**（不會被搜尋引擎收錄）。`);
+  const errs = d.changed.filter((c) => c.changes.some((x) => x.field === '狀態碼' && Number(x.to) >= 400)); if (errs.length) risk.push(`${errs.length} 頁在新版回應錯誤狀態碼。`);
+  const shrunk = d.changed.filter((c) => c.changes.some((x) => x.field === '字數' && x.to < x.from)); if (shrunk.length) risk.push(`${shrunk.length} 頁的文字量減少 30% 以上。`);
+  const lostLd = d.changed.filter((c) => c.changes.some((x) => x.field === '結構化資料' && x.to === '（無）')); if (lostLd.length) risk.push(`${lostLd.length} 頁的結構化資料不見了。`);
+  L.push('## 要先處理的風險', ...(risk.length ? risk.map((r) => '- ' + r) : ['- 沒有發現明顯的 SEO 風險。']), '');
+  if (A.health_score != null && B.health_score != null) L.push(`健檢分數：${A.health_score}（${A.health_grade}）→ ${B.health_score}（${B.health_grade}）`, '');
+  L.push(`## 舊網址消失（${d.removed.length}）— 需要 301 轉址`, ...(d.removed.length ? d.removed.slice(0, 200).map((r) => `- \`${r.path}\`　${r.title ? '（' + r.title + '）' : ''}`) : ['- 無']), '');
+  L.push(`## 新增的頁面（${d.added.length}）`, ...(d.added.length ? d.added.slice(0, 200).map((r) => `- \`${r.path}\`　${r.title ? '（' + r.title + '）' : ''}`) : ['- 無']), '');
+  L.push(`## 內容有變的頁面（${d.changed.length}；沒變 ${d.unchanged}）`);
+  for (const c of d.changed.slice(0, 100)) { L.push(`### \`${c.path}\``); for (const x of c.changes) L.push(`- ${x.field}：「${String(x.from).slice(0, 80)}」→「${String(x.to).slice(0, 80)}」`); }
+  L.push('', `## 設計與技術的變化`, ...(settings.length ? settings.map((c) => `- ${c.label}：${c.from} → ${c.to}`) : ['- 沒有明顯差異']), '');
+  return L.join('\n');
+}
+
 export function search(db, f) {
   let rows = db.prepare('SELECT r.* FROM runs r WHERE r.id IN (SELECT MAX(id) FROM runs GROUP BY host) ORDER BY r.host').all();
   const has = (sql, ...p) => new Set(db.prepare(sql).all(...p).map((r) => r.run_id));
@@ -153,7 +206,13 @@ if (isMain(import.meta.url)) {
     case 'compare': {
       const [a, b] = rest.map(Number); const A = describeRun(db, a), B = describeRun(db, b); if (!A || !B) { console.error('找不到 run'); process.exit(1); }
       console.log(`A: ${fmt(A.run)}\nB: ${fmt(B.run)}\n`);
-      const ch = diffRuns(db, a, b); console.log(ch.length ? ch.map((c) => `- ${c.label}: ${c.from} → ${c.to}`).join('\n') : '兩者沒有明顯差異'); break;
+      const ch = diffRuns(db, a, b); const pd = diffPages(db, a, b);
+      console.log(ch.length ? ch.map((c) => `- ${c.label}: ${c.from} → ${c.to}`).join('\n') : '設計／技術沒有明顯差異');
+      console.log(`\n頁面：消失 ${pd.removed.length}・新增 ${pd.added.length}・內容有變 ${pd.changed.length}・沒變 ${pd.unchanged}`);
+      for (const r of pd.removed.slice(0, 10)) console.log(`  ✖ ${r.path}（需要 301）`);
+      for (const c of pd.changed.slice(0, 10)) console.log(`  ✎ ${c.path}：${c.changes.map((x) => x.field).join('、')}`);
+      const md = opt('md'); if (md) { fs.writeFileSync(md, renderChangesMd(db, a, b)); console.log('已寫入改版前後對照：' + md); }
+      break;
     }
     case 'export': {
       const dump = Object.fromEntries(['runs', 'colors', 'pages', 'platforms', 'libs', 'motion'].map((t) => [t, db.prepare(`SELECT * FROM ${t}`).all()]));
