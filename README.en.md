@@ -156,6 +156,18 @@ site-explorer https://example.com --a11y
 
 Runs the industry-standard axe-core against WCAG 2.2 AA: missing alt text, buttons without names, insufficient contrast, unlabeled form fields, missing language… The result becomes a health category "Accessibility" (counted in the total score only when you pass `--a11y`; without it scores are exactly as before) and is written to `site/<site>/a11y.json`, each violation with a fix link and where it occurs. Automated checks catch only part of the problems and do not replace manual review. In the GitHub Action the option is `a11y: true`.
 
+## Turn the starter into a React / Vue / Astro project or a shadcn/ui theme
+
+```bash
+site-explorer https://example.com --framework react       # react | vue | astro | shadcn | all
+site-explorer framework ./explore-out/handoff --to all    # convert an existing handoff afterwards
+cd explore-out/handoff/frameworks/react && npm install && npm run dev
+```
+
+Every section of every page becomes a component (`src/components/<page>/<section>`); text and images stay placeholders, spacing and colours are the measured values, and the design tokens travel with the project. React and Vue use Vite, Astro is Astro 4; versions are pinned to the ones that were actually run. `shadcn` writes `globals-theme.css` (the HSL variables shadcn/ui reads, brand colour as `primary`) plus a Tailwind config snippet; the dark palette is derived, so check it by eye.
+
+All three projects were really installed and built, then compared section by section in a browser: they render **identically** to the plain-HTML starter (CI re-runs this check on Node 22). On regeneration, a project you edited is moved to `<name>.backup-<time>` instead of being overwritten.
+
 ## Commands
 
 | Command | What it does |

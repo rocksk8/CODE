@@ -16,3 +16,6 @@ jobs:
       - run: npm install --no-save three@0.170.0   # only the 3D tests need it
       - run: npx playwright-core install --with-deps chromium
       - run: npm test
+      - name: Framework projects really install, build and render like the starter (network; once is enough)
+        if: matrix.node == 22
+        run: SITE_EXPLORER_BUILD_TEST=1 node --test test/frameworks.test.mjs
