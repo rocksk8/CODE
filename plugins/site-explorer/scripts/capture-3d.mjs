@@ -119,7 +119,7 @@ const detected = await page.evaluate(() => {
   for (const [k, re] of [['three', /three(\.module)?(\.min)?\.js|three@/i], ['gsap', /gsap/i], ['babylon', /babylon/i], ['spline', /spline/i], ['rive', /rive/i], ['lottie', /lottie|bodymovin/i], ['r3f', /react-three/i], ['theatre', /theatre/i]]) if (re.test(scripts)) libs[k + 'Script'] = true;
   return { targets, keyframes: keyframes.slice(0, 20), libs, contexts: W.contexts || [], shaders: W.shaders || [], rafCount: W.rafCount || 0, docHeight: document.documentElement.scrollHeight };
 });
-console.log(`Detected ${detected.targets.length} target(s); libs: ${Object.entries(detected.libs).filter(([, v]) => v).map(([k]) => k).join(', ') || 'none'}`);
+console.log(_t`偵測到 ${detected.targets.length} 個目標；函式庫：${Object.entries(detected.libs).filter(([, v]) => v).map(([k]) => k).join(', ') || _t('無')}`);
 
 // prioritise real 3D over generic css-animation
 const order = { webgl: 0, webgpu: 0, 'model-viewer': 0, 'spline-viewer': 0, 'a-scene': 0, 'css-3d': 1, canvas: 2, canvas2d: 3, 'lottie-player': 3, 'dotlottie-player': 3, 'rive-canvas': 3, video: 4, 'svg-smil': 5, 'css-animation': 6 };
@@ -223,5 +223,5 @@ ${targets.map((t) => `<h2>${t.kind} <code>${String(t.selector).replace(/[&<>"]/g
 <h2>Scroll sequence</h2><div class=row>${imgs(scrollDir).map((f) => `<img src="frames/scroll/${f}">`).join('')}</div>`;
 fs.writeFileSync(path.join(out, 'contact-sheet.html'), html);
 
-console.log(`Targets captured: ${targets.map((t) => `${t.kind}${t.animatesOnItsOwn ? '*' : ''}`).join(', ') || 'none'}   (* = animates by itself)`);
-console.log(`AI-readable: ${path.join(out, 'motion.md')}\nReport: ${path.join(out, 'motion.json')}\nContact sheet: ${path.join(out, 'contact-sheet.html')}${videoFile ? '\nVideo: ' + videoFile : ''}`);
+console.log(_t`已擷取目標：${targets.map((t) => `${t.kind}${t.animatesOnItsOwn ? '*' : ''}`).join(', ') || _t('無')}   （* = 自己會動）`);
+console.log(_t`AI 可讀：${path.join(out, 'motion.md')}\n報告：${path.join(out, 'motion.json')}\n縮圖總覽：${path.join(out, 'contact-sheet.html')}${videoFile ? _t('\n影片：') + videoFile : ''}`);

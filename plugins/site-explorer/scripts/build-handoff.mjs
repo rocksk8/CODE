@@ -364,4 +364,4 @@ fs.writeFileSync(path.join(out, 'README.md'), [_t`# ${host} 交接包`, '', _t`�
 
 const handoff = { schemaVersion: 1, generatedAt: new Date().toISOString(), site: host, files: fs.readdirSync(out), counts: { pages: live.length, sections: Object.values(media.sections).flat().length, motionImages: media.motion.length } };
 fs.writeFileSync(path.join(out, 'handoff.json'), JSON.stringify(handoff, null, 2));
-console.log(`Handoff package: ${out}\n  ai-brief.md (${Math.round(fs.statSync(path.join(out, 'ai-brief.md')).size / 1024)} KB)  SPEC.md (${Math.round(fs.statSync(path.join(out, 'SPEC.md')).size / 1024)} KB)  ${handoff.counts.sections} section images  ${media.motion.length} motion images`);
+console.log(_t`交接包：${out}\n  ai-brief.md（${Math.round(fs.statSync(path.join(out, 'ai-brief.md')).size / 1024)} KB）  SPEC.md（${Math.round(fs.statSync(path.join(out, 'SPEC.md')).size / 1024)} KB）  ${handoff.counts.sections} 張區塊圖  ${media.motion.length} 張動態圖`);
