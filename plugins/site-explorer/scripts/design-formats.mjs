@@ -58,7 +58,7 @@ export function designMd(t, { source = '', crawledAt = '' } = {}) {
   const fs = t.typography?.fontStack || {};
   y.push('typography:'); for (const k of ['heading', 'body', 'mono']) { const n = fontName(fs[k]); if (n) y.push(`  ${k}: ${q(n)}`); }
   const scale = t.typography?.scale || {};
-  for (const [tag, v] of Object.entries(scale)) if (/^(h[1-6]|p)$/.test(tag)) { const size = lenOk(v?.size ?? v?.fontSize); if (size) y.push(`  ${tag}: { size: ${q(size)}, weight: ${q(String(v.weight ?? v.fontWeight ?? '').replace(/[^\d]/g, ''))} }`); }
+  for (const [tag, v] of Object.entries(scale)) if (/^(h[1-6]|p)$/.test(tag)) { const size = lenOk(v?.size ?? v?.fontSize); if (size) { const w = String(v.weight ?? v.fontWeight ?? '').replace(/[^\d]/g, ''); y.push(`  ${tag}: { size: ${q(size)}${w ? `, weight: ${q(w)}` : ''} }`); } }
   const base = Number(t.spacing?.baseUnit); if (base > 0 && base <= 16) y.push('spacing:', `  base_unit_px: ${base}`);
   const radii = (t.radius || []).map(lenOk).filter(Boolean).slice(0, 4); if (radii.length) { y.push('rounded:'); radii.forEach((r, i) => y.push(`  ${['sm', 'md', 'lg', 'xl'][i]}: ${q(r)}`)); }
   y.push('---', '');
