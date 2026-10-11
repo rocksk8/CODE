@@ -46,7 +46,9 @@ test('a full English run (accessibility, verify, React, two runs for the before/
     assert.ok(files.length > 30);
     const bad = files.map((f) => [path.relative(out, f), cjkIn(fs.readFileSync(f, 'utf8'))]).filter(([, c]) => c.length);
     assert.deepEqual(bad, [], 'Chinese left in: ' + JSON.stringify(bad).slice(0, 600));
-    assert.ok(files.some((f) => /changes\.md$/.test(f)), 'the second run wrote the before/after report');
+    let sqlite = true; try { await import('node:sqlite'); } catch { sqlite = false; } // the history database (and so changes.md) needs Node >= 22.13
+    if (sqlite) assert.ok(files.some((f) => /changes\.md$/.test(f)), 'the second run wrote the before/after report');
+    else assert.match(first.o, /Node < 22\.13|database skipped/, 'Node 20 says (in English) that the database was skipped');
     const spec = fs.readFileSync(path.join(out, 'handoff', 'SPEC.md'), 'utf8'); assert.match(spec, /^# .* — design and development spec/m); assert.match(spec, /## 5\. Page specs/);
     const health = fs.readFileSync(path.join(out, 'site', fs.readdirSync(path.join(out, 'site'))[0], 'health.md'), 'utf8'); assert.match(health, /## Verdict:/); assert.match(health, /Accessibility \(axe-core\)/);
     const dash = fs.readFileSync(path.join(out, 'dashboard.html'), 'utf8'); assert.match(dash, /<html lang="en">/); assert.match(dash, /<title>Site Explorer report<\/title>/);
