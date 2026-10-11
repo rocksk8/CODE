@@ -20,7 +20,8 @@ const body = '<p>' + 'A calm, well written paragraph about the shop and what it 
 const shell = (title, head, extra = '') => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title><meta name="description" content="${title} — a description long enough to be real and useful to searchers."><meta name="viewport" content="width=device-width,initial-scale=1">${head}</head><body><h1>${title}</h1>${body}${extra}</body></html>`;
 const ld = (o) => `<script type="application/ld+json">${JSON.stringify(o)}</script>`;
 const PAGES = {
-  '/': shell('Shop home', ld({ '@context': 'https://schema.org', '@graph': [{ '@type': 'Organization', name: 'Shop' }, { '@type': 'Product', name: 'Teapot', image: 'x.png' }] }), '<a href="/nocontext">a</a> <a href="/jsonly">b</a>'),
+  '/': shell('Shop home', ld({ '@context': 'https://schema.org', '@graph': [{ '@type': 'Organization', name: 'Shop' }, { '@type': 'Product', name: 'Teapot', image: 'x.png' }] }), '<a href="/nocontext">a</a> <a href="/jsonly">b</a> <a href="/untyped">c</a>'),
+  '/untyped': shell('Untyped items', ld([{ name: 'First', description: 'a thing' }, { name: 'Second', description: 'another thing' }])),
   '/nocontext': shell('No context page', ld({ '@type': 'Article', headline: 'Hi', datePublished: '2026-01-01', author: { name: 'A' } })),
   '/jsonly': shell('Script made markup', '', `<script>document.head.insertAdjacentHTML('beforeend', ${JSON.stringify(ld({ '@context': 'https://schema.org', '@type': 'Organization', name: 'Late', url: 'https://x.test/' })).replace(/<\//g, '<\\/')})</script>`),
 };
@@ -57,5 +58,6 @@ test('health reports missing required fields, missing @context and JS-only marku
   const noCtx = m.get('jsonld-no-context'); assert.ok(noCtx && noCtx.examples.some((e) => /nocontext/.test(e)));
   const js = m.get('jsonld-js-only'); assert.ok(js, 'no js-only issue; have: ' + [...m.keys()].join());
   assert.ok(js.examples.length === 1 && /jsonly/.test(js.examples[0]), js.examples.join('|'));
+  const nt = m.get('jsonld-no-type'); assert.ok(nt, 'untyped items are reported'); assert.equal(nt.affected, 1, 'one page with two untyped items is one page'); assert.equal(nt.examples.length, 1);
   assert.ok(!m.has('jsonld-none'));
 });

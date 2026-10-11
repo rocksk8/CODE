@@ -8,9 +8,9 @@ export const VENDORS = [
   { name: 'Google Analytics', cat: 'analytics', host: /(^|\.)(google-analytics\.com|analytics\.google\.com)$/ },
   { name: 'Google Ads / DoubleClick', cat: 'ads', host: /(^|\.)(doubleclick\.net|googleadservices\.com|googlesyndication\.com|adservice\.google\.[a-z.]+)$/ },
   { name: 'Meta (Facebook) Pixel', cat: 'ads', host: /(^|\.)(connect\.facebook\.net|facebook\.com)$/, path: /(fbevents|\/tr\b|signals)/ },
-  { name: 'TikTok Pixel', cat: 'ads', host: /(^|\.)(analytics\.tiktok\.com|tiktok\.com)$/ },
+  { name: 'TikTok Pixel', cat: 'ads', host: /(^|\.)(analytics\.tiktok\.com|tiktok\.com)$/, path: /(pixel|events|i18n)/ }, // a plain tiktok.com address is just a link (e.g. sameAs), not a pixel
   { name: 'LinkedIn Insight', cat: 'ads', host: /(^|\.)(snap\.licdn\.com|px\.ads\.linkedin\.com)$/ },
-  { name: 'X (Twitter) Pixel', cat: 'ads', host: /(^|\.)(static\.ads-twitter\.com|analytics\.twitter\.com|t\.co)$/ },
+  { name: 'X (Twitter) Pixel', cat: 'ads', host: /(^|\.)(static\.ads-twitter\.com|analytics\.twitter\.com)$/ },
   { name: 'Pinterest Tag', cat: 'ads', host: /(^|\.)(ct\.pinterest\.com|s\.pinimg\.com)$/, path: /(ct|pintrk|tag)/ },
   { name: 'Criteo', cat: 'ads', host: /(^|\.)criteo\.(com|net)$/ },
   { name: 'Hotjar', cat: 'session-replay', host: /(^|\.)(hotjar\.com|hotjar\.io)$/ },
@@ -25,13 +25,13 @@ export const VENDORS = [
   { name: 'Mixpanel', cat: 'analytics', host: /(^|\.)mixpanel\.com$/ },
   { name: 'Amplitude', cat: 'analytics', host: /(^|\.)amplitude\.com$/ },
   { name: 'Heap', cat: 'analytics', host: /(^|\.)heap(analytics)?\.com$/ },
-  { name: 'HubSpot', cat: 'analytics', host: /(^|\.)(hs-scripts\.com|hs-analytics\.net|hsforms\.(net|com)|hubspot\.com|hs-banner\.com)$/ },
+  { name: 'HubSpot', cat: 'analytics', host: /(^|\.)(hs-scripts\.com|hs-analytics\.net|hsforms\.(net|com)|hs-banner\.com|hubspot\.com)$/, path: /(\.js|\/embed|collected|forms)/ },
   { name: 'Intercom', cat: 'chat', host: /(^|\.)(intercom\.io|intercomcdn\.com)$/ },
   { name: 'Drift', cat: 'chat', host: /(^|\.)drift\.com$/ },
-  { name: 'Zendesk', cat: 'chat', host: /(^|\.)(zdassets\.com|zendesk\.com)$/ },
+  { name: 'Zendesk', cat: 'chat', host: /(^|\.)(zdassets\.com|zendesk\.com)$/, path: /(\.js|embeddable|ekr|web_widget)/ },
   { name: 'Crisp', cat: 'chat', host: /(^|\.)crisp\.chat$/ },
   { name: 'Tawk.to', cat: 'chat', host: /(^|\.)tawk\.to$/ },
-  { name: 'LINE（官方帳號／分享）', cat: 'social', host: /(^|\.)(line-scdn\.net|line\.me)$/ },
+  { name: 'LINE（官方帳號／分享）', cat: 'social', host: /(^|\.)line-scdn\.net$/ },
   { name: 'YouTube', cat: 'video', host: /(^|\.)(youtube\.com|youtube-nocookie\.com|ytimg\.com)$/ },
   { name: 'Vimeo', cat: 'video', host: /(^|\.)(vimeo\.com|vimeocdn\.com)$/ },
   { name: 'Stripe', cat: 'payments', host: /(^|\.)stripe\.(com|network)$/ },
@@ -99,7 +99,7 @@ export function detectConsentInPage() {
   const words = /(cookie|cookies|餅乾|隱私權政策|同意.{0,6}(使用|追蹤)|consent)/i;
   for (const el of document.querySelectorAll('div,section,aside,dialog')) {
     const cs = getComputedStyle(el); if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
-    const t = (el.innerText || '').slice(0, 400); if (t.length > 20 && words.test(t) && /(accept|agree|allow|ok|同意|接受|確定|了解|拒絕|reject|decline)/i.test(t) && vis(el)) return { detected: true, kind: 'fixed-banner' };
+    const t = (el.innerText || '').slice(0, 400); if (t.length > 20 && words.test(t) && /(\baccept\b|\bagree\b|\ballow\b|\bok\b|\bgot it\b|同意|接受|確定|了解|拒絕|\breject\b|\bdecline\b)/i.test(t) && vis(el)) return { detected: true, kind: 'fixed-banner' };
   }
   return { detected: false, kind: null };
 }
@@ -107,8 +107,9 @@ export function detectConsentInPage() {
 /** Everything a page loads that could be a tracker: network URLs + DOM resource attributes. */
 export function resourceUrlsInPage() {
   const out = new Set();
-  for (const el of document.querySelectorAll('script[src],iframe[src],img[src],link[href],source[src],embed[src]')) { const v = el.src || el.href; if (v) out.add(v); }
-  for (const s of document.querySelectorAll('script:not([src])')) { const m = (s.textContent || '').match(/https?:\/\/[a-z0-9.-]+\.[a-z]{2,}[^\s'"`)<]*/gi); if (m) for (const u of m.slice(0, 20)) out.add(u); } // inline snippets that build the script address (gtag, fbq, hj)
+  for (const el of document.querySelectorAll('script[src],iframe[src],img[src],link[href],source[src],embed[src]')) { if (el.tagName === 'LINK' && !/(preload|prefetch|preconnect|dns-prefetch|stylesheet|modulepreload)/i.test(el.rel)) continue; const v = el.src || el.href; if (v) out.add(v); } // <link rel=canonical/alternate/me> are references, not loads
+  for (const s of document.querySelectorAll('script:not([src])')) { if (/json/i.test(s.type)) continue; // JSON-LD sameAs lists are links to profiles, not trackers
+     const m = (s.textContent || '').match(/https?:\/\/[a-z0-9.-]+\.[a-z]{2,}[^\s'"`)<]*/gi); if (m) for (const u of m.slice(0, 20)) out.add(u); } // inline snippets that build the script address (gtag, fbq, hj)
   return [...out].slice(0, 400);
 }
 
@@ -126,6 +127,7 @@ export function summarizePrivacy(perPage) {
   return { pagesChecked: list.length, vendors: v, cookies: ck, trackingVendors, trackingCookies: ck.filter((c) => c.tracking), thirdPartyCookies: ck.filter((c) => c.thirdParty), weakCookies: ck.filter((c) => c.weak), hasCmpVendor: v.some((x) => x.cat === 'cmp'), consentBanner: consentPages > 0, consentChecked };
 }
 
+const md = (x) => String(x ?? '').replace(/[|`\r\n]+/g, ' ').slice(0, 80);
 export function privacyMarkdown(sum) {
   if (!sum || !sum.pagesChecked) return [];
   const L = ['## 追蹤碼與 Cookie（誰在看訪客）', '',
@@ -134,7 +136,7 @@ export function privacyMarkdown(sum) {
     `- 追蹤／廣告類服務：${sum.trackingVendors.length ? sum.trackingVendors.map((v) => v.name).join('、') : '無'}`, ''];
   if (sum.vendors.length) L.push('| 服務 | 類別 | 出現頁數 | 載入來源 |', '|---|---|---|---|', ...sum.vendors.map((v) => `| ${v.name} | ${CAT_LABEL[v.cat] || v.cat}${TRACKING_CATS.has(v.cat) ? ' ⚠️' : ''} | ${v.pages} | ${v.hosts.join('、')} |`), '');
   else L.push('沒有辨識到已知的第三方追蹤／嵌入服務。', '');
-  if (sum.cookies.length) L.push(`### Cookie（${sum.cookies.length} 個；名稱與旗標）`, '| 名稱 | 網域 | 誰設的 | 有效期 | Secure | HttpOnly | SameSite |', '|---|---|---|---|---|---|---|', ...sum.cookies.slice(0, 40).map((c) => `| ${c.name} | ${c.domain}${c.thirdParty ? '（第三方）' : ''} | ${c.owner || '—'}${c.tracking ? ' ⚠️追蹤' : ''} | ${c.days == null ? '工作階段' : c.days + ' 天'} | ${c.secure ? '是' : '否'} | ${c.httpOnly ? '是' : '否'} | ${c.sameSite} |`), '');
+  if (sum.cookies.length) L.push(`### Cookie（${sum.cookies.length} 個；名稱與旗標）`, '| 名稱 | 網域 | 誰設的 | 有效期 | Secure | HttpOnly | SameSite |', '|---|---|---|---|---|---|---|', ...sum.cookies.slice(0, 40).map((c) => `| ${md(c.name)} | ${md(c.domain)}${c.thirdParty ? '（第三方）' : ''} | ${c.owner || '—'}${c.tracking ? ' ⚠️追蹤' : ''} | ${c.days == null ? '工作階段' : c.days + ' 天'} | ${c.secure ? '是' : '否'} | ${c.httpOnly ? '是' : '否'} | ${md(c.sameSite)} |`), '');
   else L.push('頁面載入時沒有設定 Cookie。', '');
   return L;
 }
