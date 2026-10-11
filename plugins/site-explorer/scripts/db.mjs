@@ -6,6 +6,7 @@
 //   db.mjs history <host>                        runs of one site + what changed
 //   db.mjs compare <runId> <runId>               side-by-side diff
 //   db.mjs export [--out file.json]              dump everything as JSON
+import { _t } from './i18n.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -58,7 +59,7 @@ export function ingest(db, { siteDir, motionDir }) {
   const tokPath = siteDir && path.join(siteDir, 'design-bundle', 'tokens.json');
   const tok = tokPath && fs.existsSync(tokPath) ? readJSON(tokPath) : null;
   const motion = motionDir && fs.existsSync(path.join(motionDir, 'motion.json')) ? readJSON(path.join(motionDir, 'motion.json')) : null;
-  if (!site && !motion) throw new Error('找不到 site.json 或 motion.json');
+  if (!site && !motion) throw new Error(_t('找不到 site.json 或 motion.json'));
   const url = site?.startUrl || motion.url;
   const host = new URL(url).host;
   const t = tok || {};
@@ -108,21 +109,21 @@ export function describeRun(db, id) {
 
 export function diffRuns(db, a, b) {
   const A = describeRun(db, a), B = describeRun(db, b);
-  if (!A || !B) throw new Error('找不到指定的 run');
+  if (!A || !B) throw new Error(_t('找不到指定的 run'));
   const changes = [];
   const cmp = (label, x, y) => { if (String(x ?? '') !== String(y ?? '')) changes.push({ label, from: x ?? '—', to: y ?? '—' }); };
   for (const role of new Set([...Object.keys(A.roles), ...Object.keys(B.roles)])) {
     const x = A.roles[role], y = B.roles[role];
     if (x && y && dist(x, y) < 12) continue; // visually identical
-    cmp('色彩 ' + role, x, y);
+    cmp(_t('色彩 ') + role, x, y);
   }
-  cmp('標題字型', A.run.heading_font, B.run.heading_font); cmp('內文字型', A.run.body_font, B.run.body_font);
-  cmp('間距基準', A.run.base_unit, B.run.base_unit); cmp('深色模式', A.run.dark_mode ? '有' : '無', B.run.dark_mode ? '有' : '無');
-  cmp('斷點', A.run.breakpoints, B.run.breakpoints); cmp('頁數', A.run.pages, B.run.pages);
-  cmp('平台', A.platforms.join(', '), B.platforms.join(', ')); cmp('對比不足項', A.run.contrast_fail, B.run.contrast_fail);
-  if (A.run.health_score != null && B.run.health_score != null) { cmp('健檢分數', `${A.run.health_score}（${A.run.health_grade}）`, `${B.run.health_score}（${B.run.health_grade}）`); cmp('嚴重／高優先問題', (A.run.issues_critical ?? 0) + (A.run.issues_high ?? 0), (B.run.issues_critical ?? 0) + (B.run.issues_high ?? 0)); }
+  cmp(_t('標題字型'), A.run.heading_font, B.run.heading_font); cmp(_t('內文字型'), A.run.body_font, B.run.body_font);
+  cmp(_t('間距基準'), A.run.base_unit, B.run.base_unit); cmp(_t('深色模式'), A.run.dark_mode ? _t('有') : _t('無'), B.run.dark_mode ? _t('有') : _t('無'));
+  cmp(_t('斷點'), A.run.breakpoints, B.run.breakpoints); cmp(_t('頁數'), A.run.pages, B.run.pages);
+  cmp(_t('平台'), A.platforms.join(', '), B.platforms.join(', ')); cmp(_t('對比不足項'), A.run.contrast_fail, B.run.contrast_fail);
+  if (A.run.health_score != null && B.run.health_score != null) { cmp(_t('健檢分數'), _t`${A.run.health_score}（${A.run.health_grade}）`, _t`${B.run.health_score}（${B.run.health_grade}）`); cmp(_t('嚴重／高優先問題'), (A.run.issues_critical ?? 0) + (A.run.issues_high ?? 0), (B.run.issues_critical ?? 0) + (B.run.issues_high ?? 0)); }
   // only compare motion when both runs actually measured it (a --no-motion run is "unknown", not "zero")
-  if (A.run.motion_dir && B.run.motion_dir) { cmp('3D／動畫元素數', A.run.motion_targets, B.run.motion_targets); cmp('3D 函式庫', A.libs.join(', '), B.libs.join(', ')); }
+  if (A.run.motion_dir && B.run.motion_dir) { cmp(_t('3D／動畫元素數'), A.run.motion_targets, B.run.motion_targets); cmp(_t('3D 函式庫'), A.libs.join(', '), B.libs.join(', ')); }
   return changes;
 }
 
@@ -140,13 +141,13 @@ export function diffPages(db, a, b) {
     if (!rb) { if (live(ra)) out.removed.push({ path: k, title: ra.title }); continue; }
     const ch = [];
     const text = (label, x, y) => { if (String(x ?? '').trim() !== String(y ?? '').trim()) ch.push({ field: label, from: x ?? '', to: y ?? '' }); };
-    text('標題', ra.title, rb.title); text('h1', ra.h1, rb.h1);
-    if (ra.description != null && rb.description != null) text('描述', ra.description, rb.description); // NULL = a run stored before this column existed: unknown, not "empty"
+    text(_t('標題'), ra.title, rb.title); text('h1', ra.h1, rb.h1);
+    if (ra.description != null && rb.description != null) text(_t('描述'), ra.description, rb.description); // NULL = a run stored before this column existed: unknown, not "empty"
     if (ra.canonical != null && rb.canonical != null) text('canonical', pathKey(ra.canonical || ''), pathKey(rb.canonical || ''));
-    if (ra.status !== rb.status) ch.push({ field: '狀態碼', from: ra.status ?? '', to: rb.status ?? '' });
-    if (ra.noindex != null && rb.noindex != null && ra.noindex !== rb.noindex) ch.push({ field: 'noindex', from: ra.noindex ? '是' : '否', to: rb.noindex ? '是' : '否' });
-    if (ra.words > 0 && rb.words != null && Math.abs(rb.words - ra.words) / ra.words >= 0.3) ch.push({ field: '字數', from: ra.words, to: rb.words });
-    if (ra.jsonld_types && ra.jsonld_types !== (rb.jsonld_types ?? '')) ch.push({ field: '結構化資料', from: ra.jsonld_types, to: rb.jsonld_types || '（無）' });
+    if (ra.status !== rb.status) ch.push({ field: _t('狀態碼'), from: ra.status ?? '', to: rb.status ?? '' });
+    if (ra.noindex != null && rb.noindex != null && ra.noindex !== rb.noindex) ch.push({ field: 'noindex', from: ra.noindex ? _t('是') : _t('否'), to: rb.noindex ? _t('是') : _t('否') });
+    if (ra.words > 0 && rb.words != null && Math.abs(rb.words - ra.words) / ra.words >= 0.3) ch.push({ field: _t('字數'), from: ra.words, to: rb.words });
+    if (ra.jsonld_types && ra.jsonld_types !== (rb.jsonld_types ?? '')) ch.push({ field: _t('結構化資料'), from: ra.jsonld_types, to: rb.jsonld_types || _t('（無）') });
     if (ch.length) out.changed.push({ path: k, changes: ch }); else out.unchanged++;
   }
   for (const [k, rb] of B) if (!A.has(k) && live(rb)) out.added.push({ path: k, title: rb.title });
@@ -158,21 +159,21 @@ export function renderChangesMd(db, a, b) {
   const A = db.prepare('SELECT * FROM runs WHERE id=?').get(a), B = db.prepare('SELECT * FROM runs WHERE id=?').get(b);
   const d = diffPages(db, a, b), settings = diffRuns(db, a, b);
   const q = (x) => String(x ?? '').replace(/[`\r\n]+/g, ' '); // page text is third-party data: one line, no markdown breakout
-  const L = [`# 改版前後對照`, '', BANNER, '', `- 之前：run #${a}　${A.host}　${String(A.crawled_at || '').slice(0, 10)}`, `- 之後：run #${b}　${B.host}　${String(B.crawled_at || '').slice(0, 10)}`, '', '> 頁面以「路徑」對應，所以舊站與新站在不同網域（例如測試站）也能比。只比較兩次都有爬到的頁面。', ''];
+  const L = [_t`# 改版前後對照`, '', BANNER, '', _t`- 之前：run #${a}　${A.host}　${String(A.crawled_at || '').slice(0, 10)}`, _t`- 之後：run #${b}　${B.host}　${String(B.crawled_at || '').slice(0, 10)}`, '', _t('> 頁面以「路徑」對應，所以舊站與新站在不同網域（例如測試站）也能比。只比較兩次都有爬到的頁面。'), ''];
   const risk = [];
-  if (d.removed.length) risk.push(`**${d.removed.length} 個舊網址在新版消失** — 沒有設定 301 就會變 404，搜尋排名與外部連結會流失。`);
-  const lostDesc = d.changed.filter((c) => c.changes.some((x) => x.field === '描述' && x.from && !x.to)); if (lostDesc.length) risk.push(`${lostDesc.length} 頁的 meta description 被拿掉了。`);
-  const noidx = d.changed.filter((c) => c.changes.some((x) => x.field === 'noindex' && x.to === '是')); if (noidx.length) risk.push(`**${noidx.length} 頁在新版變成 noindex**（不會被搜尋引擎收錄）。`);
-  const errs = d.changed.filter((c) => c.changes.some((x) => x.field === '狀態碼' && Number(x.to) >= 400)); if (errs.length) risk.push(`${errs.length} 頁在新版回應錯誤狀態碼。`);
-  const shrunk = d.changed.filter((c) => c.changes.some((x) => x.field === '字數' && x.to < x.from)); if (shrunk.length) risk.push(`${shrunk.length} 頁的文字量減少 30% 以上。`);
-  const lostLd = d.changed.filter((c) => c.changes.some((x) => x.field === '結構化資料' && x.to === '（無）')); if (lostLd.length) risk.push(`${lostLd.length} 頁的結構化資料不見了。`);
-  L.push('## 要先處理的風險', ...(risk.length ? risk.map((r) => '- ' + r) : ['- 沒有發現明顯的 SEO 風險。']), '');
-  if (A.health_score != null && B.health_score != null) L.push(`健檢分數：${A.health_score}（${A.health_grade}）→ ${B.health_score}（${B.health_grade}）`, '');
-  L.push(`## 舊網址消失（${d.removed.length}）— 需要 301 轉址`, ...(d.removed.length ? d.removed.slice(0, 200).map((r) => `- \`${q(r.path)}\`　${r.title ? '（' + q(r.title).slice(0, 120) + '）' : ''}`) : ['- 無']), '');
-  L.push(`## 新增的頁面（${d.added.length}）`, ...(d.added.length ? d.added.slice(0, 200).map((r) => `- \`${q(r.path)}\`　${r.title ? '（' + q(r.title).slice(0, 120) + '）' : ''}`) : ['- 無']), '');
-  L.push(`## 內容有變的頁面（${d.changed.length}；沒變 ${d.unchanged}）`);
-  for (const c of d.changed.slice(0, 100)) { L.push(`### \`${q(c.path)}\``); for (const x of c.changes) L.push(`- ${x.field}：「${q(x.from).slice(0, 80)}」→「${q(x.to).slice(0, 80)}」`); }
-  L.push('', `## 設計與技術的變化`, ...(settings.length ? settings.map((c) => `- ${c.label}：${c.from} → ${c.to}`) : ['- 沒有明顯差異']), '');
+  if (d.removed.length) risk.push(_t`**${d.removed.length} 個舊網址在新版消失** — 沒有設定 301 就會變 404，搜尋排名與外部連結會流失。`);
+  const lostDesc = d.changed.filter((c) => c.changes.some((x) => x.field === _t('描述') && x.from && !x.to)); if (lostDesc.length) risk.push(_t`${lostDesc.length} 頁的 meta description 被拿掉了。`);
+  const noidx = d.changed.filter((c) => c.changes.some((x) => x.field === 'noindex' && x.to === _t('是'))); if (noidx.length) risk.push(_t`**${noidx.length} 頁在新版變成 noindex**（不會被搜尋引擎收錄）。`);
+  const errs = d.changed.filter((c) => c.changes.some((x) => x.field === _t('狀態碼') && Number(x.to) >= 400)); if (errs.length) risk.push(_t`${errs.length} 頁在新版回應錯誤狀態碼。`);
+  const shrunk = d.changed.filter((c) => c.changes.some((x) => x.field === _t('字數') && x.to < x.from)); if (shrunk.length) risk.push(_t`${shrunk.length} 頁的文字量減少 30% 以上。`);
+  const lostLd = d.changed.filter((c) => c.changes.some((x) => x.field === _t('結構化資料') && x.to === _t('（無）'))); if (lostLd.length) risk.push(_t`${lostLd.length} 頁的結構化資料不見了。`);
+  L.push(_t('## 要先處理的風險'), ...(risk.length ? risk.map((r) => '- ' + r) : [_t('- 沒有發現明顯的 SEO 風險。')]), '');
+  if (A.health_score != null && B.health_score != null) L.push(_t`健檢分數：${A.health_score}（${A.health_grade}）→ ${B.health_score}（${B.health_grade}）`, '');
+  L.push(_t`## 舊網址消失（${d.removed.length}）— 需要 301 轉址`, ...(d.removed.length ? d.removed.slice(0, 200).map((r) => _t`- \`${q(r.path)}\`　${r.title ? _t('（') + q(r.title).slice(0, 120) + _t('）') : ''}`) : [_t('- 無')]), '');
+  L.push(_t`## 新增的頁面（${d.added.length}）`, ...(d.added.length ? d.added.slice(0, 200).map((r) => _t`- \`${q(r.path)}\`　${r.title ? _t('（') + q(r.title).slice(0, 120) + _t('）') : ''}`) : [_t('- 無')]), '');
+  L.push(_t`## 內容有變的頁面（${d.changed.length}；沒變 ${d.unchanged}）`);
+  for (const c of d.changed.slice(0, 100)) { L.push(`### \`${q(c.path)}\``); for (const x of c.changes) L.push(_t`- ${x.field}：「${q(x.from).slice(0, 80)}」→「${q(x.to).slice(0, 80)}」`); }
+  L.push('', _t`## 設計與技術的變化`, ...(settings.length ? settings.map((c) => _t`- ${c.label}：${c.from} → ${c.to}`) : [_t('- 沒有明顯差異')]), '');
   return sanitizeDoc(L.join('\n'));
 }
 
@@ -193,34 +194,34 @@ if (isMain(import.meta.url)) {
   const [cmd, ...rest] = process.argv.slice(2);
   const opt = (n) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : undefined; };
   const db = await openDb();
-  if (!db) { console.error('此功能需要 Node ≥ 22.13（內建 node:sqlite）。目前版本：' + process.version + '。請升級：brew install node'); process.exit(2); }
-  const fmt = (r) => `#${String(r.id).padEnd(3)} ${r.host.padEnd(30)} ${String(r.crawled_at || '').slice(0, 10)}  頁${r.pages ?? '-'}  健檢 ${r.health_score ?? '-'}  主色 ${r.brand || '-'}  字型 ${r.heading_font || '-'}  3D/動畫 ${r.motion_targets}`;
+  if (!db) { console.error(_t('此功能需要 Node ≥ 22.13（內建 node:sqlite）。目前版本：') + process.version + _t('。請升級：brew install node')); process.exit(2); }
+  const fmt = (r) => _t`#${String(r.id).padEnd(3)} ${r.host.padEnd(30)} ${String(r.crawled_at || '').slice(0, 10)}  頁${r.pages ?? '-'}  健檢 ${r.health_score ?? '-'}  主色 ${r.brand || '-'}  字型 ${r.heading_font || '-'}  3D/動畫 ${r.motion_targets}`;
   switch (cmd) {
-    case 'ingest': { const id = ingest(db, { siteDir: opt('site'), motionDir: opt('motion') }); console.log(`已存入資料庫 run #${id}  (${DB_PATH})`); break; }
-    case 'list': { const rows = db.prepare('SELECT * FROM runs ORDER BY id DESC').all(); console.log(rows.length ? rows.map(fmt).join('\n') : '（資料庫是空的）'); break; }
+    case 'ingest': { const id = ingest(db, { siteDir: opt('site'), motionDir: opt('motion') }); console.log(_t`已存入資料庫 run #${id}  (${DB_PATH})`); break; }
+    case 'list': { const rows = db.prepare('SELECT * FROM runs ORDER BY id DESC').all(); console.log(rows.length ? rows.map(fmt).join('\n') : _t('（資料庫是空的）')); break; }
     case 'search': {
-      let color = opt('color'); if (color !== undefined) { color = normalizeHex(color); if (!color) { console.error('--color 需要像 #e4572e、e4572e 或 #f60 這樣的色碼'); process.exit(1); } }
+      let color = opt('color'); if (color !== undefined) { color = normalizeHex(color); if (!color) { console.error(_t('--color 需要像 #e4572e、e4572e 或 #f60 這樣的色碼')); process.exit(1); } }
       const rows = search(db, { lib: opt('lib'), platform: opt('platform'), font: opt('font'), color, has3d: rest.includes('--has-3d'), healthBelow: opt('health-below') != null ? Number(opt('health-below')) : undefined });
-      console.log(rows.length ? rows.map(fmt).join('\n') : '沒有符合的網站'); break;
+      console.log(rows.length ? rows.map(fmt).join('\n') : _t('沒有符合的網站')); break;
     }
     case 'history': {
-      const runs = runsForHost(db, rest[0]); if (!runs.length) { console.log('沒有此網站的紀錄'); break; }
+      const runs = runsForHost(db, rest[0]); if (!runs.length) { console.log(_t('沒有此網站的紀錄')); break; }
       runs.forEach((r, i) => { console.log(fmt(r)); if (i) for (const c of diffRuns(db, runs[i - 1].id, r.id)) console.log(`    ↳ ${c.label}: ${c.from} → ${c.to}`); }); break;
     }
     case 'compare': {
-      const [a, b] = rest.map(Number); const A = describeRun(db, a), B = describeRun(db, b); if (!A || !B) { console.error('找不到 run'); process.exit(1); }
+      const [a, b] = rest.map(Number); const A = describeRun(db, a), B = describeRun(db, b); if (!A || !B) { console.error(_t('找不到 run')); process.exit(1); }
       console.log(`A: ${fmt(A.run)}\nB: ${fmt(B.run)}\n`);
       const ch = diffRuns(db, a, b); const pd = diffPages(db, a, b);
-      console.log(ch.length ? ch.map((c) => `- ${c.label}: ${c.from} → ${c.to}`).join('\n') : '設計／技術沒有明顯差異');
-      console.log(`\n頁面：消失 ${pd.removed.length}・新增 ${pd.added.length}・內容有變 ${pd.changed.length}・沒變 ${pd.unchanged}`);
-      for (const r of pd.removed.slice(0, 10)) console.log(`  ✖ ${r.path}（需要 301）`);
-      for (const c of pd.changed.slice(0, 10)) console.log(`  ✎ ${c.path}：${c.changes.map((x) => x.field).join('、')}`);
-      const md = opt('md'); if (md) { fs.writeFileSync(md, renderChangesMd(db, a, b)); console.log('已寫入改版前後對照：' + md); }
+      console.log(ch.length ? ch.map((c) => `- ${c.label}: ${c.from} → ${c.to}`).join('\n') : _t('設計／技術沒有明顯差異'));
+      console.log(_t`\n頁面：消失 ${pd.removed.length}・新增 ${pd.added.length}・內容有變 ${pd.changed.length}・沒變 ${pd.unchanged}`);
+      for (const r of pd.removed.slice(0, 10)) console.log(_t`  ✖ ${r.path}（需要 301）`);
+      for (const c of pd.changed.slice(0, 10)) console.log(_t`  ✎ ${c.path}：${c.changes.map((x) => x.field).join(_t('、'))}`);
+      const md = opt('md'); if (md) { fs.writeFileSync(md, renderChangesMd(db, a, b)); console.log(_t('已寫入改版前後對照：') + md); }
       break;
     }
     case 'export': {
       const dump = Object.fromEntries(['runs', 'colors', 'pages', 'platforms', 'libs', 'motion'].map((t) => [t, db.prepare(`SELECT * FROM ${t}`).all()]));
-      const out = opt('out'); if (out) { fs.writeFileSync(out, JSON.stringify(dump, null, 2)); console.log('已匯出', out); } else console.log(JSON.stringify(dump, null, 2)); break;
+      const out = opt('out'); if (out) { fs.writeFileSync(out, JSON.stringify(dump, null, 2)); console.log(_t('已匯出'), out); } else console.log(JSON.stringify(dump, null, 2)); break;
     }
     default: console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1).filter((l) => l.startsWith('//')).slice(0, 8).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
   }

@@ -13,9 +13,10 @@ import { renderPrComment } from './pr-comment.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const bin = path.join(here, '..', 'bin', 'site-explorer.mjs');
 const RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+let lang = 'en'; // the language of the PR comment and the reports (action input `lang`, default English)
 
 const cli = (args, env) => new Promise((resolve) => {
-  const p = spawn(process.execPath, [bin, ...args], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const p = spawn(process.execPath, [bin, ...args], { env: { ...process.env, SITE_EXPLORER_LANG: lang, ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
   let out = ''; p.stdout.on('data', (d) => (out += d));
   p.on('close', (status) => { let json = null; try { json = JSON.parse(out.slice(out.indexOf('{'))); } catch {} resolve({ status, json }); });
 });
@@ -31,6 +32,7 @@ export function gateResult(result, { failOn, minHealth }) {
 const SEV_ORDER = ['critical', 'high', 'medium', 'low'];
 
 export async function main(env = process.env) {
+  lang = /^zh/i.test(env.INPUT_LANG || '') ? 'zh' : 'en';
   const url = normalizeUrl(env.INPUT_URL); if (!url) throw new Error('input "url" must be a website address such as https://preview.example.com');
   const baselineUrl = env.INPUT_BASELINE_URL ? normalizeUrl(env.INPUT_BASELINE_URL) : null; if (env.INPUT_BASELINE_URL && !baselineUrl) throw new Error('input "baseline-url" is not a valid website address');
   const maxPages = Number(env.INPUT_MAX_PAGES || 6); if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 50) throw new Error('input "max-pages" must be 1–50');

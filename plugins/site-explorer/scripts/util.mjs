@@ -1,4 +1,5 @@
 // Small shared helpers.
+import { _t } from './i18n.mjs';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -12,7 +13,7 @@ export const MIN_NODE = 20;
 export function assertNode(min = MIN_NODE) {
   const major = Number(process.versions.node.split('.')[0]);
   if (major < min) {
-    console.error(`site-explorer 需要 Node.js ${min} 以上（目前是 ${process.version}）。\n請升級：https://nodejs.org（建議 22 LTS）；macOS 可用：brew install node`);
+    console.error(_t`site-explorer 需要 Node.js ${min} 以上（目前是 ${process.version}）。\n請升級：https://nodejs.org（建議 22 LTS）；macOS 可用：brew install node`);
     process.exit(1);
   }
 }

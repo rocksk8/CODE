@@ -1,5 +1,6 @@
 // Machine-readable result of an exploration (for --json, the MCP server and CI). Counts, scores, verdicts and file paths only —
 // every string that came from the website is sanitised, and no page text, cookie value or secret is ever included.
+import { _t } from './i18n.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { cleanDeep, BANNER } from './untrusted.mjs';
@@ -40,7 +41,7 @@ export function buildSummary({ out, host, steps = [], url = null }) {
   const suspects = [];
   const safe = cleanDeep(raw, 'summary', suspects, { max: 300, skip: ['files'] }); // file paths are ours; everything from the site is cleaned
   safe.files = raw.files;
-  safe.untrustedNotice = suspects.length ? `${suspects.length} 段取自網站的文字疑似針對 AI 的指令，已隔離。` : null;
+  safe.untrustedNotice = suspects.length ? _t`${suspects.length} 段取自網站的文字疑似針對 AI 的指令，已隔離。` : null;
   safe.note = BANNER.replace(/^> /, '').replace(/\*\*/g, '');
   return safe;
 }

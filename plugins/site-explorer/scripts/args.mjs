@@ -1,4 +1,5 @@
 // Shared CLI helpers: forgiving URL input and validated numeric options.
+import { _t } from './i18n.mjs';
 
 /** "example.com" / "  https://x.com/a b " -> absolute http(s) URL, or null when it cannot be one. */
 export function normalizeUrl(input) {
@@ -36,7 +37,7 @@ export function normalizeFlags(argv, valueFlags = VALUE_FLAGS) {
     out.push(a);
   }
   for (let i = 0; i < out.length; i++) {
-    if (valueFlags.has(out[i]) && (out[i + 1] === undefined || /^--[a-z]/i.test(out[i + 1]))) return { args: out, error: `${out[i]} 需要一個值（例如 ${out[i]} <值>，或 ${out[i]}=<值>）` };
+    if (valueFlags.has(out[i]) && (out[i + 1] === undefined || /^--[a-z]/i.test(out[i + 1]))) return { args: out, error: _t`${out[i]} 需要一個值（例如 ${out[i]} <值>，或 ${out[i]}=<值>）` };
     if (valueFlags.has(out[i])) i++;
   }
   return { args: out, error: null };
@@ -67,7 +68,7 @@ export function intOpt(args, name, def, { min = 0, max = Infinity } = {}) {
   if (i < 0 || args[i + 1] === undefined) return def;
   const n = Number(args[i + 1]);
   if (!Number.isFinite(n) || n < min || n > max) {
-    console.error(`--${name} 需要 ${min}${Number.isFinite(max) ? '–' + max : ' 以上'} 的數字，收到「${args[i + 1]}」`);
+    console.error(_t`--${name} 需要 ${min}${Number.isFinite(max) ? '–' + max : _t(' 以上')} 的數字，收到「${args[i + 1]}」`);
     process.exit(1);
   }
   return Math.floor(n);

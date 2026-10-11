@@ -24,7 +24,7 @@ site-explorer https://example.com
 
 You get a folder: double-click `dashboard.html` for the overview; give the whole `handoff/` folder to an AI and paste the prompt from `PROMPT.md` — it can start building pages and motion without you writing any briefing.
 
-> **Language note.** The generated reports (`report.md`, `health.md`, the dashboard, `SPEC.md`) are currently written in Traditional Chinese; the handoff entry points (`START-HERE.md`, `PROMPT.md`, `AI-PACKAGE.md`, the starter code) are in English, and everything is plain text/JSON that any LLM reads fine. English report output is on the roadmap.
+> **Language note.** Output defaults to Traditional Chinese; add `--lang en` (or `SITE_EXPLORER_LANG=en`) and the console, reports, dashboard, handoff documents and PR comments are all English. The handoff entry points (`START-HERE.md`, `PROMPT.md`, `AI-PACKAGE.md`, the starter code) are English either way, and everything is plain text / JSON that any LLM reads fine.
 
 ## What it does
 
@@ -133,7 +133,7 @@ jobs:
           min-health: 70                  # optional: fail below this health score
 ```
 
-A comment appears on the PR (and is updated in place on later pushes) with the score, the verdict, the difference from production, the top issues and their fixes; the dashboard and AI handoff are attached to the run as Artifacts. PRs from forks have a read-only token, so the comment is skipped and the result stays in the job summary. Issue descriptions are currently in Traditional Chinese (English arrives with `--lang en`).
+A comment appears on the PR (and is updated in place on later pushes) with the score, the verdict, the difference from production, the top issues and their fixes; the dashboard and AI handoff are attached to the run as Artifacts. PRs from forks have a read-only token, so the comment is skipped and the result stays in the job summary. The comment is in English by default; set `lang: zh` for Traditional Chinese.
 
 ## Exploring pages behind a login
 
@@ -167,6 +167,14 @@ cd explore-out/handoff/frameworks/react && npm install && npm run dev
 Every section of every page becomes a component (`src/components/<page>/<section>`); text and images stay placeholders, spacing and colours are the measured values, and the design tokens travel with the project. React and Vue use Vite, Astro is Astro 4; versions are pinned to the ones that were actually run. `shadcn` writes `globals-theme.css` (the HSL variables shadcn/ui reads, brand colour as `primary`) plus a Tailwind config snippet; the dark palette is derived, so check it by eye.
 
 All three projects were really installed and built, then compared section by section in a browser: they render **identically** to the plain-HTML starter (CI re-runs this check on Node 22). On regeneration, a project you edited is moved to `<name>.backup-<time>` instead of being overwritten.
+
+## English output: `--lang en`
+
+```bash
+site-explorer https://example.com --lang en     # or set SITE_EXPLORER_LANG=en
+```
+
+Console messages, the health report, the exploration report, the handoff documents, the before/after report, the dashboard UI and the PR comment all come out in English (Traditional Chinese is still the default). The test suite runs the full pipeline in English and checks that no Chinese and no untranslated string is left; text that belongs to the website itself (titles, copy) is of course left as it is. The GitHub Action's `lang` input defaults to `en`.
 
 ## Commands
 

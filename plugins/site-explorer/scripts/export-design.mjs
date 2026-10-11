@@ -2,6 +2,7 @@
 // Convert a crawl result (site.json) into a design-system bundle that Claude Design can ingest:
 //   tokens.json (colors by role, type scale, spacing scale, radius, shadow, breakpoints),
 //   tokens.css, components.json, README.md (brand brief), assets/
+import { _t } from './i18n.mjs';
 import { BANNER, sanitizeDoc } from './untrusted.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -123,7 +124,7 @@ const fontSources = fontNames.map((family) => {
   const out = { family, provider, weights: [...new Set(faces.filter((f) => f.family.toLowerCase() === key).map((f) => f.weight))] };
   if (provider === 'google') out.url = gUrl(family);
   if (provider !== 'google' && provider !== 'system') { const sub = SUBSTITUTES[key] || SUBSTITUTES[key.replace(/\s*(pro|std|next|display|text|ui)$/i, '')]; if (sub) { out.substitute = sub; out.substituteUrl = gUrl(sub); } }
-  if (provider === 'system') { const sub = SUBSTITUTES[key]; if (sub) { out.substitute = sub; out.substituteUrl = gUrl(sub); out.note = '系統字體，各平台外觀不同；要跨平台一致可改用此替代'; } }
+  if (provider === 'system') { const sub = SUBSTITUTES[key]; if (sub) { out.substitute = sub; out.substituteUrl = gUrl(sub); out.note = _t('系統字體，各平台外觀不同；要跨平台一致可改用此替代'); } }
   return out;
 });
 tokens.typography.sources = fontSources;
@@ -213,7 +214,7 @@ const readme = [
   '## Components', c.navigation ? `- Nav: ${c.navigation.height}px, ${c.navigation.position}, bg ${c.navigation.backgroundColor}, links: ${c.navigation.links.join(' / ')}` : '',
   ...(c.buttons || []).slice(0, 3).map((b) => `- Button "${b.text}": bg ${b.backgroundColor}, text ${b.color}, radius ${b.borderRadius}, padding ${b.padding}`),
   d.buttonHover ? `- Button hover: ${d.buttonHover.before.backgroundColor} → ${d.buttonHover.after.backgroundColor}` : '', '',
-  '## Font sources', ...fontSources.map((f) => `- ${f.family} — ${({ google: 'Google Fonts（可免費使用）', system: '系統字體', adobe: 'Adobe Fonts（需授權）', 'self-hosted': '自架字型檔（可能需授權）', unknown: '來源不明' })[f.provider]}${f.substitute ? `；替代建議：${f.substitute}` : ''}`), '',
+  '## Font sources', ...fontSources.map((f) => `- ${f.family} — ${({ google: _t('Google Fonts（可免費使用）'), system: _t('系統字體'), adobe: _t('Adobe Fonts（需授權）'), 'self-hosted': _t('自架字型檔（可能需授權）'), unknown: _t('來源不明') })[f.provider]}${f.substitute ? _t`；替代建議：${f.substitute}` : ''}`), '',
   '## Layout grid & motion', dz.grid ? `- Container: ${(dz.grid.containerWidths || []).map((x) => x.px + 'px').join(', ') || '?'} · columns: ${(dz.grid.columns || []).map((x) => x.columns).join(', ') || '?'} · gutter: ${(dz.grid.gaps || []).map((x) => x.value).join(', ') || '?'}` : '', ...((dz.motion?.transitions || []).slice(0, 4).map((m) => `- Transition ${m.token} ×${m.count}`)), '',
   ...(dz.contrast?.failing?.length ? ['## Real-background contrast issues', ...dz.contrast.failing.slice(0, 6).map((c) => `- ${c.fg} on ${c.bg} = ${c.ratio}:1 (needs ${c.need}) ×${c.count} — "${c.sample}"${c.uncertain ? ' (background image: verify manually)' : ''}`), ''] : []),
   '## Accessibility', ...audit.map((a) => `- ${a.pass ? '✅' : '⚠️'} ${a.name}: ${a.ratio}:1`), '',

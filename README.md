@@ -131,7 +131,7 @@ jobs:
           min-health: 70                  # 選填：健檢分數低於 70 就失敗
 ```
 
-PR 底下會出現（並在之後更新同一則）留言：分數、判定、與正式站的差異、前幾名問題與修法；儀表板和交接包會附在該次執行的 Artifacts。fork 來的 PR 沒有寫入權限，留言會略過，結果仍在 job summary。目前留言的問題說明是繁體中文（英文版在 `--lang en` 完成後提供）。
+PR 底下會出現（並在之後更新同一則）留言：分數、判定、與正式站的差異、前幾名問題與修法；儀表板和交接包會附在該次執行的 Artifacts。fork 來的 PR 沒有寫入權限，留言會略過，結果仍在 job summary。留言預設為英文，設 `lang: zh` 可改成繁體中文。
 
 ## 探索登入後的頁面
 
@@ -165,6 +165,14 @@ cd explore-out/handoff/frameworks/react && npm install && npm run dev
 每個頁面的每個區塊會變成一個元件（`src/components/<頁面>/<區塊>`），文字與圖片仍是佔位內容，間距與顏色是量到的數值；設計 token 一併帶入專案。React／Vue 專案用 Vite，Astro 用 Astro 4；版本都固定在實測過的版本。`shadcn` 會產生 `globals-theme.css`（shadcn/ui 讀的 HSL 變數，品牌色成為 primary）與 Tailwind 設定片段，深色配色是推算的，請目視確認。
 
 我們實際安裝並建置過三種專案，再用瀏覽器逐區塊比對，畫面與純 HTML 的 starter **完全一致**（CI 的 Node 22 會重跑這項檢查）。再次產生時，你改過的專案會被搬到 `<名稱>.backup-<時間>`，不會被覆蓋。
+
+## 英文輸出：`--lang en`
+
+```bash
+site-explorer https://example.com --lang en     # 或設環境變數 SITE_EXPLORER_LANG=en
+```
+
+主控台訊息、健檢報告、探索報告、交接包文件、前後對照、儀表板介面、PR 留言全部輸出英文（預設仍是繁體中文）。測試會用英文跑完整流程，確認沒有殘留中文、也沒有漏翻的字串；網站本身的文字（標題、文案）當然維持原樣。GitHub Action 的 `lang` 選項預設為 `en`。
 
 ## 指令
 
