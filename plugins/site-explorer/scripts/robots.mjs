@@ -26,7 +26,17 @@ export function parseRobots(text) {
 }
 
 const encodeNonAscii = (s) => s.replace(/[^\x00-\x7F]/g, (ch) => encodeURIComponent(ch));
-const toRegex = (pat) => new RegExp('^' + encodeNonAscii(pat).replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\\\$$/, '$'));
+// linear-time wildcard matcher ("*" = any run, trailing "$" = end anchor); a regex here backtracks catastrophically on rules like /*a*a*a*b
+function ruleMatches(pat, target) {
+  let p = encodeNonAscii(pat).slice(0, 2000); const end = p.endsWith('$'); if (end) p = p.slice(0, -1);
+  const parts = p.split('*'); let pos = 0;
+  if (!target.startsWith(parts[0])) return false; pos = parts[0].length;
+  if (parts.length === 1) return !end || target.length === parts[0].length;
+  for (let k = 1; k < parts.length - 1; k++) { const i = target.indexOf(parts[k], pos); if (i < 0) return false; pos = i + parts[k].length; }
+  const last = parts[parts.length - 1];
+  if (!end) { return last === '' || target.indexOf(last, pos) >= 0; }
+  return target.length - pos >= last.length && target.endsWith(last);
+}
 
 /** The rules that apply to this crawler: every group naming exactly this product token (merged, as Google does), else every "*" group. */
 export function groupFor(parsed, ua) {
@@ -43,7 +53,7 @@ export function isAllowed(parsed, ua, pathAndQuery) {
   let best = null;
   for (const r of g.rules) {
     if (r.path === '') continue; // "Disallow:" (empty) allows everything
-    if (!toRegex(r.path).test(encodeNonAscii(pathAndQuery))) continue;
+    if (!ruleMatches(r.path, encodeNonAscii(pathAndQuery))) continue;
     if (!best || r.path.length > best.path.length || (r.path.length === best.path.length && r.type === 'allow')) best = r;
   }
   return best ? { allowed: best.type === 'allow', rule: `${best.type === 'allow' ? 'Allow' : 'Disallow'}: ${best.path}` } : { allowed: true, rule: null };

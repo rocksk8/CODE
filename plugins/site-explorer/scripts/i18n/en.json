@@ -1915,5 +1915,10 @@
 "憑證不受信任（簽發者或憑證鏈無法驗證）": "Certificate is not trusted (issuer or chain cannot be verified)",
 "安裝完整憑證鏈，或改用受信任的憑證機構簽發的憑證。": "Install the full certificate chain, or use a certificate from a trusted authority.",
 "{} 個網址不夠乾淨（過長、含大寫、底線或過多參數）": "{} URLs are not clean (too long, uppercase, underscores or too many parameters)",
-"使用小寫、連字號、簡短且有意義的路徑。": "Use lowercase, hyphens and short, meaningful paths."
+"使用小寫、連字號、簡短且有意義的路徑。": "Use lowercase, hyphens and short, meaningful paths.",
+"不認得的選項：{}{}\n執行 site-explorer explore --help 看全部選項。": "Unknown option: {}{}\nRun site-explorer explore --help to see every option.",
+"（是不是 {}？）": " (did you mean {}?)",
+"選項的值不能是空的。": "An option value cannot be empty.",
+"找不到頁面「{}」。可用的頁面：{}": "Page \"{}\" not found. Available pages: {}",
+"starter 頁面裡找不到可比對的區塊（缺少「reference image」註解），沒有東西可驗證。": "No comparable sections were found in the starter pages (the \"reference image\" comments are missing), so there is nothing to verify."
 }

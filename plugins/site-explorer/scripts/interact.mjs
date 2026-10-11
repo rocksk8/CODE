@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { deepContent, ariaTree } from './observe.mjs';
 
 const GO = /^(enter|start|begin|explore|discover|continue|next|skip|play|launch|let'?s go|get started|learn more|accept( all)?|ok|got it|agree|i agree|close|dismiss|進入|開始|探索|發現|繼續|下一步|跳過|播放|了解更多|接受|同意|知道了|關閉)\b/i;
-const NO = /(buy|purchase|checkout|pay|order|delete|remove|unsubscribe|subscribe|sign ?up|sign ?in|log ?in|log ?out|register|submit|send|download|install|donate|購買|結帳|付款|訂購|刪除|移除|訂閱|註冊|登入|登出|送出|提交|下載|捐款)/i;
+const NO = /(deactivat|confirm|transfer|cancel|terminate|close (my )?account|reset|erase|wipe|clear all|yes,|buy|purchase|checkout|pay|order|delete|remove|unsubscribe|subscribe|sign ?up|sign ?in|log ?in|log ?out|register|submit|send|download|install|donate|購買|結帳|付款|訂購|刪除|移除|訂閱|註冊|登入|登出|送出|提交|下載|捐款)/i;
 
 async function candidates(page, origin) {
   return page.evaluate((originStr) => {
@@ -47,9 +47,12 @@ export async function exploreStates(page, { outDir, maxSteps = 6, settleMs = 700
   const startOrigin = new URL(page.url()).origin; let blockedNav = 0;
   const guard = (route) => { const rq = route.request(); if (rq.isNavigationRequest() && rq.frame() === page.mainFrame()) { let ok = false; try { ok = new URL(rq.url()).origin === startOrigin && allowed(rq.url()); } catch {} if (!ok) { blockedNav++; return route.abort('blockedbyclient'); } } return route.fallback(); };
   await page.route('**/*', guard);
+  // a click must never change anything on the server: anything but a read is dropped while we interact
+  const readOnly = (route) => (['GET', 'HEAD', 'OPTIONS'].includes(route.request().method()) ? route.fallback() : route.abort('blockedbyclient'));
+  await page.route('**/*', readOnly);
   try {
     return await run();
-  } finally { await page.unroute('**/*', guard).catch(() => {}); }
+  } finally { await page.unroute('**/*', readOnly).catch(() => {}); await page.unroute('**/*', guard).catch(() => {}); }
   async function run() {
   const origin = new URL(page.url()).origin; const clicked = new Set(); const states = []; let stalls = 0; let stopped = 'maxSteps';
   let cur = await signature(page); const seenIds = new Set([cur.id]);
@@ -63,7 +66,7 @@ export async function exploreStates(page, { outDir, maxSteps = 6, settleMs = 700
     if (Date.now() - t0 > budgetMs) { stopped = 'timeBudget'; break; }
     let action = null, label = '';
     const cands = (await candidates(page, origin)).filter((c) => !clicked.has(c.label) && !NO.test(c.label));
-    const best = cands.filter((c) => GO.test(c.label)).sort((a, b) => b.area - a.area)[0] || (cur.textChars < 40 ? cands.sort((a, b) => b.area - a.area)[0] : null);
+    const best = cands.filter((c) => GO.test(c.label)).sort((a, b) => b.area - a.area)[0] ; // no "click the biggest button" fallback: only labels that clearly mean enter/accept/continue are ever clicked
     try {
       if (best) { clicked.add(best.label); action = _t('點擊'); label = best.label; await page.locator(`[data-se-i="${best.i}"]`).first().click({ timeout: 3000 }); }
       else if (stalls === 0) { action = _t('滾輪向下'); await page.mouse.move(640, 400); await page.mouse.wheel(0, 900); }

@@ -484,7 +484,8 @@ while (pages.length < maxPages) {
         if (name === 'tablet' && data.seo) data.seo.tablet = await page.evaluate(extractMobileInPage).catch(() => null);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth).catch(() => false);
         data.layout[`${name}Overflow`] = overflow;
-        await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true });
+        try { await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true, timeout: 20000 }); }
+        catch { await page.screenshot({ path: path.join(dir, `${name}.png`), timeout: 10000 }).catch(() => {}); } // huge pages: keep the data, fall back to the visible area
         if (name === 'desktop') {
           // Per-section crops: a 1440x9000 full-page image gets downscaled until it is unreadable (for people and for AI)
           const secDir = path.join(dir, 'sections'); fs.mkdirSync(secDir, { recursive: true });

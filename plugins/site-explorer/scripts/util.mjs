@@ -27,7 +27,15 @@ export async function readCapped(res, maxBytes = 3_000_000) {
     n += value.length; chunks.push(value);
     if (n >= maxBytes) { try { await reader.cancel(); } catch {} break; }
   }
-  return Buffer.concat(chunks).subarray(0, maxBytes).toString('utf8');
+  const buf = Buffer.concat(chunks).subarray(0, maxBytes);
+  return decodeBody(buf, res.headers?.get?.('content-type') || '');
+}
+/** Decode with the declared charset (Content-Type, then <meta charset> in the first 2 KB); UTF-8 when absent or unknown, so Big5 / Shift_JIS / Latin-1 pages are not turned into garbage. */
+export function decodeBody(buf, contentType = '') {
+  let cs = /charset=["']?([\w-]+)/i.exec(contentType)?.[1];
+  if (!cs) { const head = buf.subarray(0, 2048).toString('latin1'); cs = /<meta[^>]+charset=["']?([\w-]+)/i.exec(head)?.[1]; }
+  if (cs && !/^utf-?8$/i.test(cs)) { try { return new TextDecoder(cs.toLowerCase()).decode(buf); } catch {} }
+  return buf.toString('utf8');
 }
 export async function readCappedBuffer(res, maxBytes = 5_000_000) {
   if (!res.body) return Buffer.alloc(0);

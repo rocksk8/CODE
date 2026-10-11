@@ -17,13 +17,14 @@ export function normalizeUrl(input) {
     // a file name or path is not a site: './out', 'index.html', 'report.md' would otherwise parse as hosts
     if (u.hostname.startsWith('.') || (!hadScheme && /\.(html?|json|md|txt|png|jpe?g|gif|svg|css|m?js|xml|pdf|zip|csv|ya?ml|log|webp|mp4|db)$/i.test(u.hostname))) return null;
     if (!/^https?:$/.test(u.protocol) || !u.hostname.includes('.') && u.hostname !== 'localhost' && !/^[\d.]+$|^\[/.test(u.hostname)) return null;
+    u.username = ''; u.password = ''; // a password typed into the address must never end up in reports or history (use `login` / --storage-state)
     return u.href;
   } catch { return null; }
 }
 
 /** First CLI argument that looks like a URL (with or without scheme). */
 // options that take a value (so the value is never mistaken for a URL); boolean flags such as --open must not swallow the URL after them
-const VALUE_FLAGS = new Set(['--max-pages', '--depth', '--out', '--wait', '--motion-pages', '--frames', '--interval', '--max-targets', '--max-links', '--site', '--motion', '--embed-mb', '--a', '--b', '--lib', '--platform', '--font', '--color', '--health-below', '--fail-on', '--handoff', '--storage-state', '--framework']);
+export const VALUE_FLAGS = new Set(['--max-pages', '--depth', '--out', '--wait', '--motion-pages', '--frames', '--interval', '--max-targets', '--max-links', '--site', '--motion', '--embed-mb', '--a', '--b', '--lib', '--platform', '--font', '--color', '--health-below', '--fail-on', '--handoff', '--storage-state', '--framework']);
 /**
  * `--flag=value` becomes `--flag value`; a value flag with no value (end of line, or followed by another flag) is an ERROR — never a silent default
  * (a CI gate such as `--fail-on=high` must not quietly turn into "no gate").
