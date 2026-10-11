@@ -2,6 +2,7 @@
 // generated from what was MEASURED — section structure, columns, tokens, responsive behaviour, animation facts.
 // Nothing from the source site's copy is reproduced: every text is a neutral placeholder, and every value that ends up in code is
 // validated (numbers, enums, hex colours, whitelisted CSS) so a hostile page cannot smuggle markup or script into the starter files.
+import { _t } from './i18n.mjs';
 
 const num = (v, d = 0, lo = -1e6, hi = 1e6) => { if (v == null || v === '') return d; const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
 const hex = (v, d = '#888888') => (/^#[0-9a-f]{3,8}$/i.test(String(v || '')) ? String(v) : d);
@@ -268,7 +269,7 @@ function threeStage(id, cls, t, three) {
 // ------------------------------------------------------------------ the documents that tell the next AI what to do
 export function promptMd({ host, hasMotion, pageFiles = [], base = 'handoff' }) {
   const pages = pageFiles.slice(0, 12).map((f) => `starter/${f}`).join(', ');
-  return `# Prompts to paste into an AI
+  return _t`# Prompts to paste into an AI
 
 Give the AI this whole folder (\`${base}/\`). If it cannot read files, paste \`AI-PACKAGE.md\` instead and attach the images listed at its end.
 

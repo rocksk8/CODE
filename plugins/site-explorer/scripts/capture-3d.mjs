@@ -2,6 +2,7 @@
 // Detect and visually capture 3D / animated elements (WebGL canvas, three.js, model-viewer,
 // CSS 3D transforms, Lottie, video): frame sequences over time, on scroll, and on mouse interaction,
 // plus a screen recording, a motion report and an HTML contact sheet.
+import { _t } from './i18n.mjs';
 import { loadAuthState } from './auth-state.mjs';
 import { guardInternal } from './util.mjs';
 import { launchBrowser } from './launch.mjs';
@@ -17,7 +18,7 @@ const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[
 if (!url) { console.error('Usage: capture-3d.mjs <url> [--out DIR] [--frames 12] [--interval 250] [--max-targets 6] [--wait 2500] [--no-video]'); process.exit(1); }
 const FRAMES = intOpt(args, 'frames', 12, { min: 1, max: 60 }), INTERVAL = intOpt(args, 'interval', 250, { min: 16, max: 5000 }), MAX = intOpt(args, 'max-targets', 6, { min: 1, max: 20 }), WAIT = intOpt(args, 'wait', 2500, { min: 0, max: 60000 });
 const blockedBy = await robotsBlocks(url);
-if (blockedBy) { console.error(`robots.txt 不允許存取此頁面（Disallow: ${blockedBy}），已依網站設定停止。`); process.exit(3); }
+if (blockedBy) { console.error(_t`robots.txt 不允許存取此頁面（Disallow: ${blockedBy}），已依網站設定停止。`); process.exit(3); }
 const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const out = path.join(opt('out', './motion-report'), host);
 fs.mkdirSync(out, { recursive: true });
@@ -199,9 +200,9 @@ const mainWebgl = targets.find((t) => t.kind === 'webgl' || t.kind === 'webgpu')
 for (const t of targets) {
   t.ai = describeTarget(t, stats[t.id], threeInfo && t === mainWebgl ? threeInfo : null);
   const B = buffers[t.id];
-  if (B && (await buildFilmstrip(browser, [{ label: '靜置', files: B.idle }, { label: '滑鼠掃過', files: B.hover }, { label: '拖曳', files: B.drag }, { label: '影片位置', files: B.video }], path.join(out, 'frames', t.id, 'filmstrip.png'), `${t.kind} ${t.selector}（${t.box.w}×${t.box.h}）— 每格間隔 ${INTERVAL} ms`))) t.filmstrip = `frames/${t.id}/filmstrip.png`;
+  if (B && (await buildFilmstrip(browser, [{ label: _t('靜置'), files: B.idle }, { label: _t('滑鼠掃過'), files: B.hover }, { label: _t('拖曳'), files: B.drag }, { label: _t('影片位置'), files: B.video }], path.join(out, 'frames', t.id, 'filmstrip.png'), _t`${t.kind} ${t.selector}（${t.box.w}×${t.box.h}）— 每格間隔 ${INTERVAL} ms`))) t.filmstrip = `frames/${t.id}/filmstrip.png`;
 }
-const scrollFilmstrip = (await buildFilmstrip(browser, [{ label: '捲動位置', files: scrollBufs }], path.join(scrollDir, 'filmstrip.png'), '整頁捲動序列（由上到下）')) ? 'frames/scroll/filmstrip.png' : null;
+const scrollFilmstrip = (await buildFilmstrip(browser, [{ label: _t('捲動位置'), files: scrollBufs }], path.join(scrollDir, 'filmstrip.png'), _t('整頁捲動序列（由上到下）'))) ? 'frames/scroll/filmstrip.png' : null;
 
 // ---- finish: video, report, contact sheet ----
 const video = wantVideo ? await page.video()?.path() : null;

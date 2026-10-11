@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Side-by-side comparison of two explored sites (competitor / before-after) as one offline HTML file.
 //   compare-report.mjs --a <site dir> --b <site dir> [--out ./compare.html]
+import { _t } from './i18n.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -17,7 +18,7 @@ const rel = (p) => path.relative(outDir, p).split(path.sep).map(encodeURICompone
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 function load(dir) {
-  if (!fs.existsSync(path.join(dir, 'site.json'))) { console.error('找不到 site.json：' + dir); process.exit(1); }
+  if (!fs.existsSync(path.join(dir, 'site.json'))) { console.error(_t('找不到 site.json：') + dir); process.exit(1); }
   const tokPath = path.join(dir, 'design-bundle', 'tokens.json');
   if (!fs.existsSync(tokPath)) spawnSync(process.execPath, [path.join(here, 'export-design.mjs'), dir], { stdio: 'ignore' });
   const site = JSON.parse(fs.readFileSync(path.join(dir, 'site.json'), 'utf8'));
@@ -30,7 +31,7 @@ function load(dir) {
 }
 const data = { a: load(A), b: load(B), generatedAt: new Date().toISOString() };
 
-const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>網站比較</title>
+const html = _t`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>網站比較</title>
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--mute:#667085;--line:#e4e7ec;--a:#4f46e5;--b:#db2777}
 @media(prefers-color-scheme:dark){:root{--bg:#0d0f13;--card:#171a21;--ink:#eef0f4;--mute:#98a2b3;--line:#272b35;--a:#8b85ff;--b:#f472b6}}

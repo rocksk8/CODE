@@ -1,6 +1,7 @@
 // Many "experience" sites only reveal their content after a visitor does something: click an "enter" button, scroll, press a key.
 // This walks through those states the way a visitor would, records every state that actually changes, and stops when nothing changes.
 // It never submits forms, never logs in, never leaves the site, and never clicks anything that looks like buying, deleting or subscribing.
+import { _t } from './i18n.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -57,24 +58,24 @@ export async function exploreStates(page, { outDir, maxSteps = 6, settleMs = 700
     await page.screenshot({ path: file }).catch(() => {});
     states.push({ index: idx, action, label: label || '', url: sig.url, textChars: sig.textChars, text: sig.text, ariaHead: (sig.aria?.text || '').split('\n').slice(0, 25).join('\n').slice(0, 2500), screenshot: path.basename(file) });
   };
-  await record('初始畫面', '', cur);
+  await record(_t('初始畫面'), '', cur);
   for (let step = 0; step < maxSteps; step++) {
     if (Date.now() - t0 > budgetMs) { stopped = 'timeBudget'; break; }
     let action = null, label = '';
     const cands = (await candidates(page, origin)).filter((c) => !clicked.has(c.label) && !NO.test(c.label));
     const best = cands.filter((c) => GO.test(c.label)).sort((a, b) => b.area - a.area)[0] || (cur.textChars < 40 ? cands.sort((a, b) => b.area - a.area)[0] : null);
     try {
-      if (best) { clicked.add(best.label); action = '點擊'; label = best.label; await page.locator(`[data-se-i="${best.i}"]`).first().click({ timeout: 3000 }); }
-      else if (stalls === 0) { action = '滾輪向下'; await page.mouse.move(640, 400); await page.mouse.wheel(0, 900); }
-      else if (stalls === 1) { action = '按空白鍵'; await page.keyboard.press('Space'); }
-      else if (stalls === 2) { action = '按向下鍵'; await page.keyboard.press('ArrowDown'); }
-      else if (stalls === 3) { action = '按向右鍵'; await page.keyboard.press('ArrowRight'); }
+      if (best) { clicked.add(best.label); action = _t('點擊'); label = best.label; await page.locator(`[data-se-i="${best.i}"]`).first().click({ timeout: 3000 }); }
+      else if (stalls === 0) { action = _t('滾輪向下'); await page.mouse.move(640, 400); await page.mouse.wheel(0, 900); }
+      else if (stalls === 1) { action = _t('按空白鍵'); await page.keyboard.press('Space'); }
+      else if (stalls === 2) { action = _t('按向下鍵'); await page.keyboard.press('ArrowDown'); }
+      else if (stalls === 3) { action = _t('按向右鍵'); await page.keyboard.press('ArrowRight'); }
       else { stopped = 'noMoreActions'; break; }
     } catch { stalls++; continue; }
     await page.waitForLoadState('networkidle', { timeout: 1000 }).catch(() => {});
     await page.waitForTimeout(settleMs);
     const next = await signature(page);
-    if (next.id !== cur.id && !seenIds.has(next.id)) { seenIds.add(next.id); stalls = 0; cur = next; await record(action, label, next); log(`   互動 ${states.length - 1}：${action}${label ? '「' + label + '」' : ''} → 畫面改變`); }
+    if (next.id !== cur.id && !seenIds.has(next.id)) { seenIds.add(next.id); stalls = 0; cur = next; await record(action, label, next); log(_t`   互動 ${states.length - 1}：${action}${label ? _t('「') + label + _t('」') : ''} → 畫面改變`); }
     else { stalls++; if (stalls > 4) { stopped = 'nothingChanges'; break; } }
   }
   fs.writeFileSync(path.join(outDir, 'states.json'), JSON.stringify({ states, stoppedBecause: stopped, blockedNavigations: blockedNav }, null, 2));

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Build a single-page visual dashboard (offline, no CDN) from crawl + motion + design outputs.
 //   node build-report.mjs --site ./site-report/<host> [--motion ./motion-report/<host>] [--out ./dashboard.html]
+import { _t } from './i18n.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -128,7 +129,7 @@ if (handoffDir && exists(path.join(handoffDir, 'START-HERE.md'))) {
 
 // UI lives in plain files (report/report.css, report/report-client.js) so it is editable without template-literal escaping.
 const read = (f) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'report', f), 'utf8');
-const html = `<!doctype html>
+const html = _t`<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file: 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; media-src file: 'self' data:"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Site Explorer 報告</title>
 <style>

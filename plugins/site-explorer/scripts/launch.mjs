@@ -2,6 +2,7 @@
 //   playwright-core is looked up in (1) the checkout / global install, (2) ~/.site-explorer/deps (survives plugin updates,
 //   works when the plugin directory is read-only, shared by the plugin and the standalone CLI), else installed into (2).
 //   Browser: CHROMIUM_PATH > Playwright's Chromium > Chrome > Edge > other Chromium-based browsers found on disk.
+import { _t } from './i18n.mjs';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -45,12 +46,12 @@ export function installDeps({ quiet = false } = {}) {
   try {
     const installedOk = () => { try { return JSON.parse(fs.readFileSync(path.join(DEPS_DIR, 'node_modules', 'playwright-core', 'package.json'), 'utf8')).version === pinnedPlaywright(); } catch { return false; } };
     if (fs.existsSync(depsEntry()) && installedOk()) return; // complete, right version (a crashed earlier install is redone)
-    if (!quiet) console.error(`第一次執行：正在安裝相依套件 playwright-core ${pinnedPlaywright()} 到 ${DEPS_DIR}（只需一次，約 14 MB）…`);
+    if (!quiet) console.error(_t`第一次執行：正在安裝相依套件 playwright-core ${pinnedPlaywright()} 到 ${DEPS_DIR}（只需一次，約 14 MB）…`);
     fs.writeFileSync(path.join(DEPS_DIR, 'package.json'), JSON.stringify({ name: 'site-explorer-deps', private: true, dependencies: { 'playwright-core': pinnedPlaywright() } }));
     const r = spawnSync(isWin ? 'npm.cmd' : 'npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: DEPS_DIR, stdio: quiet ? 'ignore' : ['ignore', 'inherit', 'inherit'], shell: isWin });
     if (r.status !== 0 || !fs.existsSync(depsEntry())) {
-      const why = r.error?.code === 'ENOENT' ? '找不到 npm（請從 https://nodejs.org 安裝 Node.js，它會一併安裝 npm）' : '無法連到 npm 套件庫（請檢查網路或公司代理：npm config set proxy …），或磁碟空間不足';
-      throw new Error(`相依套件安裝失敗：${why}${r.error ? '（' + r.error.message + '）' : ''}。\n可手動執行：cd "${DEPS_DIR}" && npm install playwright-core@${pinnedPlaywright()}`);
+      const why = r.error?.code === 'ENOENT' ? _t('找不到 npm（請從 https://nodejs.org 安裝 Node.js，它會一併安裝 npm）') : _t('無法連到 npm 套件庫（請檢查網路或公司代理：npm config set proxy …），或磁碟空間不足');
+      throw new Error(_t`相依套件安裝失敗：${why}${r.error ? _t('（') + r.error.message + _t('）') : ''}。\n可手動執行：cd "${DEPS_DIR}" && npm install playwright-core@${pinnedPlaywright()}`);
     }
   } finally { fs.rmSync(lock, { recursive: true, force: true }); }
 }
@@ -58,11 +59,11 @@ export function installDeps({ quiet = false } = {}) {
 export async function loadPlaywright({ quiet = false } = {}) {
   assertNode(); // playwright-core needs Node 20+; fail with a clear message instead of a cryptic one
   let pw = await importPlaywright(); if (pw) return pw;
-  if (process.env.SITE_EXPLORER_NO_AUTO_INSTALL) throw new Error('缺少相依套件 playwright-core，且已停用自動安裝。請執行：site-explorer setup');
+  if (process.env.SITE_EXPLORER_NO_AUTO_INSTALL) throw new Error(_t('缺少相依套件 playwright-core，且已停用自動安裝。請執行：site-explorer setup'));
   installDeps({ quiet });
   // another process may hold the lock for a moment just to verify the install: wait for it instead of giving up
   for (let i = 0; i < 240 && !pw; i++) { pw = await importPlaywright(); if (!pw) await new Promise((r) => setTimeout(r, 250)); }
-  if (!pw) throw new Error('安裝後仍找不到 playwright-core，請執行：site-explorer setup');
+  if (!pw) throw new Error(_t('安裝後仍找不到 playwright-core，請執行：site-explorer setup'));
   return pw;
 }
 
@@ -75,12 +76,12 @@ export function axeSource({ install = true } = {}) {
   const find = () => { for (const base of [() => req.resolve('axe-core/axe.min.js'), () => createRequire(path.join(DEPS_DIR, 'x.js')).resolve('axe-core/axe.min.js')]) { try { return base(); } catch {} } return null; };
   let f = find();
   if (!f && install && !process.env.SITE_EXPLORER_NO_AUTO_INSTALL) {
-    console.error(`第一次使用無障礙檢查：正在安裝 axe-core ${pinnedAxe()} 到 ${DEPS_DIR}（只需一次）…`);
+    console.error(_t`第一次使用無障礙檢查：正在安裝 axe-core ${pinnedAxe()} 到 ${DEPS_DIR}（只需一次）…`);
     fs.mkdirSync(DEPS_DIR, { recursive: true }); if (!fs.existsSync(path.join(DEPS_DIR, 'package.json'))) fs.writeFileSync(path.join(DEPS_DIR, 'package.json'), JSON.stringify({ name: 'site-explorer-deps', private: true, dependencies: {} }));
     spawnSync(isWin ? 'npm.cmd' : 'npm', ['install', `axe-core@${pinnedAxe()}`, '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: DEPS_DIR, stdio: 'ignore', shell: isWin });
     f = find();
   }
-  if (!f) throw new Error(`找不到 axe-core（無障礙檢查引擎）。請執行：cd "${DEPS_DIR}" && npm install axe-core@${pinnedAxe()}`);
+  if (!f) throw new Error(_t`找不到 axe-core（無障礙檢查引擎）。請執行：cd "${DEPS_DIR}" && npm install axe-core@${pinnedAxe()}`);
   return fs.readFileSync(f, 'utf8');
 }
 
@@ -100,13 +101,13 @@ export async function launchBrowser(options = {}) {
   // behind a corporate proxy: SITE_EXPLORER_PROXY=http://host:port (Playwright does not read HTTPS_PROXY by itself)
   // Chromium's OS sandbox stays ON. It is turned off only where it cannot run (root, e.g. in containers) or when asked for explicitly.
   const noSandbox = process.env.SITE_EXPLORER_NO_SANDBOX === '1' || (typeof process.getuid === 'function' && process.getuid() === 0);
-  if (noSandbox && !globalThis.__sandboxWarned) { globalThis.__sandboxWarned = true; console.error('⚠️  以無沙箱模式啟動瀏覽器（root／容器環境或 SITE_EXPLORER_NO_SANDBOX=1）；請只探索你信任的網站，或改用一般使用者執行。'); }
+  if (noSandbox && !globalThis.__sandboxWarned) { globalThis.__sandboxWarned = true; console.error(_t('⚠️  以無沙箱模式啟動瀏覽器（root／容器環境或 SITE_EXPLORER_NO_SANDBOX=1）；請只探索你信任的網站，或改用一般使用者執行。')); }
   const opts = { headless: true, chromiumSandbox: !noSandbox, ...(process.env.SITE_EXPLORER_PROXY ? { proxy: { server: process.env.SITE_EXPLORER_PROXY } } : {}), ...options };
   if (process.env.CHROMIUM_PATH) return chromium.launch({ ...opts, executablePath: process.env.CHROMIUM_PATH });
   const tried = [];
-  const attempt = async (label, extra) => { try { return await chromium.launch({ ...opts, ...extra }); } catch (e) { tried.push(`${label}：${String(e.message).split('\n')[0].slice(0, 90)}`); return null; } };
-  let b = await attempt('Playwright 下載的 Chromium', {}); if (b) return b;      // what `site-explorer setup` downloads
-  for (const channel of ['chrome', 'msedge']) { b = await attempt(`已安裝的 ${channel === 'chrome' ? 'Google Chrome' : 'Microsoft Edge'}`, { channel }); if (b) return b; }
+  const attempt = async (label, extra) => { try { return await chromium.launch({ ...opts, ...extra }); } catch (e) { tried.push(_t`${label}：${String(e.message).split('\n')[0].slice(0, 90)}`); return null; } };
+  let b = await attempt(_t('Playwright 下載的 Chromium'), {}); if (b) return b;      // what `site-explorer setup` downloads
+  for (const channel of ['chrome', 'msedge']) { b = await attempt(_t`已安裝的 ${channel === 'chrome' ? 'Google Chrome' : 'Microsoft Edge'}`, { channel }); if (b) return b; }
   for (const executablePath of browserCandidates()) { b = await attempt(executablePath, { executablePath }); if (b) return b; }
-  throw new Error('找不到可用的瀏覽器（Chrome／Edge／Chromium）。\n試過：\n  - ' + tried.join('\n  - ') + '\n請執行：site-explorer setup（會在你同意後下載 Chromium），或安裝 Google Chrome，或設定 CHROMIUM_PATH。');
+  throw new Error(_t('找不到可用的瀏覽器（Chrome／Edge／Chromium）。\n試過：\n  - ') + tried.join('\n  - ') + _t('\n請執行：site-explorer setup（會在你同意後下載 Chromium），或安裝 Google Chrome，或設定 CHROMIUM_PATH。'));
 }

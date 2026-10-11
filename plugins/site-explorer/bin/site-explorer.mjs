@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // site-explorer — one command for everything.   site-explorer <網址>   or   site-explorer <子指令> …
+import { _t } from '../scripts/i18n.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -8,7 +9,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const script = (f) => path.join(root, 'scripts', f);
 
-const HELP = `site-explorer ${version} — 探索網站：設計、內容、排版、3D／動畫、SEO／索引健檢，並產生可交接給 AI 與開發者的規格包
+const HELP = _t`site-explorer ${version} — 探索網站：設計、內容、排版、3D／動畫、SEO／索引健檢，並產生可交接給 AI 與開發者的規格包
 
 用法
   site-explorer <網址> [選項]            一鍵探索（可省略 https://），產生儀表板與交接包
@@ -61,7 +62,7 @@ if (!['-h', '--help', 'help', '-v', '--version', 'version'].includes(cmd) && cmd
 let target;
 if (ROUTES[cmd]) target = ROUTES[cmd](rest);
 else if (looksLikeUrl(cmd)) target = [script('explore.mjs'), argv];
-else { console.error(`未知的指令或網址：「${cmd}」\n\n${HELP}`); process.exit(1); }
+else { console.error(_t`未知的指令或網址：「${cmd}」\n\n${HELP}`); process.exit(1); }
 
 // run the script in this process (it reads process.argv like a normal CLI)
 process.argv = [process.argv[0], target[0], ...target[1]];

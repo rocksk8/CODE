@@ -1,5 +1,6 @@
 // How the page behaves at desktop / tablet / phone widths — measured, not guessed: navigation style, columns, type size, overflow, hidden content.
 // extractResponsiveInPage runs inside the browser at the CURRENT viewport; the rest are plain helpers for reports.
+import { _t } from './i18n.mjs';
 
 /** Run in the page. Self-contained (it is serialised into the browser). */
 export function extractResponsiveInPage() {
@@ -36,18 +37,18 @@ export function extractResponsiveInPage() {
   return { width: W, overflowX: document.documentElement.scrollWidth > W + 1, overflowPx: Math.max(0, document.documentElement.scrollWidth - W), nav, navLinks, hasToggle: toggles.length > 0, maxColumns: maxCols, multiColumnBlocks: multi, h1Px: px(h1), bodyPx: px(p), wideImages: wide, textChars };
 }
 
-const NAV = { links: '連結直接顯示', toggle: '收進選單按鈕', hidden: '連結被隱藏且找不到選單按鈕', none: '沒有導覽列' };
+const NAV = { links: _t('連結直接顯示'), toggle: _t('收進選單按鈕'), hidden: _t('連結被隱藏且找不到選單按鈕'), none: _t('沒有導覽列') };
 export const navLabel = (n) => NAV[n] || n || '—';
 
 /** { desktop, tablet, mobile } -> findings a human / AI can act on */
 export function responsiveFindings(r) {
   if (!r || !r.desktop || !r.mobile) return [];
   const d = r.desktop, t = r.tablet, m = r.mobile, out = [];
-  if (t && t.overflowX) out.push({ id: 'tablet-overflow', text: `平板寬度（${t.width}px）出現橫向捲動，超出 ${t.overflowPx}px` });
-  if (d.navLinks >= 3 && m.nav === 'hidden') out.push({ id: 'mobile-nav-missing', text: `桌機有 ${d.navLinks} 個導覽連結，手機寬度卻被隱藏、也找不到選單按鈕` });
-  if (m.maxColumns >= 3) out.push({ id: 'mobile-columns', text: `手機寬度仍並排 ${m.maxColumns} 欄，內容會被擠壓` });
-  if (m.wideImages > 0) out.push({ id: 'mobile-wide-images', text: `${m.wideImages} 張圖片比手機螢幕還寬` });
-  if (d.textChars > 400 && m.textChars < d.textChars * 0.6) out.push({ id: 'mobile-content-hidden', text: `手機版的文字量只有桌機的 ${Math.round((m.textChars / d.textChars) * 100)}%（${m.textChars} vs ${d.textChars} 字）` });
+  if (t && t.overflowX) out.push({ id: 'tablet-overflow', text: _t`平板寬度（${t.width}px）出現橫向捲動，超出 ${t.overflowPx}px` });
+  if (d.navLinks >= 3 && m.nav === 'hidden') out.push({ id: 'mobile-nav-missing', text: _t`桌機有 ${d.navLinks} 個導覽連結，手機寬度卻被隱藏、也找不到選單按鈕` });
+  if (m.maxColumns >= 3) out.push({ id: 'mobile-columns', text: _t`手機寬度仍並排 ${m.maxColumns} 欄，內容會被擠壓` });
+  if (m.wideImages > 0) out.push({ id: 'mobile-wide-images', text: _t`${m.wideImages} 張圖片比手機螢幕還寬` });
+  if (d.textChars > 400 && m.textChars < d.textChars * 0.6) out.push({ id: 'mobile-content-hidden', text: _t`手機版的文字量只有桌機的 ${Math.round((m.textChars / d.textChars) * 100)}%（${m.textChars} vs ${d.textChars} 字）` });
   return out;
 }
 
@@ -55,18 +56,18 @@ export function responsiveFindings(r) {
 export function responsiveLine(r) {
   if (!r || !r.desktop) return '';
   const seq = ['desktop', 'tablet', 'mobile'].filter((k) => r[k]);
-  const cols = seq.map((k) => (r[k].maxColumns > 1 ? r[k].maxColumns + ' 欄' : '單欄')).join(' → ');
+  const cols = seq.map((k) => (r[k].maxColumns > 1 ? r[k].maxColumns + _t(' 欄') : _t('單欄'))).join(' → ');
   const nav = seq.map((k) => navLabel(r[k].nav)).filter((x, i, a) => i === 0 || x !== a[i - 1]).join(' → ');
-  return `${seq.map((k) => r[k].width + 'px').join('／')}：最多並排 ${cols}；導覽：${nav}；標題字級 ${seq.map((k) => r[k].h1Px ?? '—').join('／')}px`;
+  return _t`${seq.map((k) => r[k].width + 'px').join(_t('／'))}：最多並排 ${cols}；導覽：${nav}；標題字級 ${seq.map((k) => r[k].h1Px ?? '—').join(_t('／'))}px`;
 }
 
 export function responsiveMarkdown(r) {
   if (!r || !r.desktop) return [];
-  const names = { desktop: '桌機', tablet: '平板', mobile: '手機' }, ks = ['desktop', 'tablet', 'mobile'].filter((k) => r[k]);
-  const L = ['| 項目 | ' + ks.map((k) => `${names[k]} ${r[k].width}px`).join(' | ') + ' |', '|---|' + ks.map(() => '---').join('|') + '|'];
+  const names = { desktop: _t('桌機'), tablet: _t('平板'), mobile: _t('手機') }, ks = ['desktop', 'tablet', 'mobile'].filter((k) => r[k]);
+  const L = [_t('| 項目 | ') + ks.map((k) => `${names[k]} ${r[k].width}px`).join(' | ') + ' |', '|---|' + ks.map(() => '---').join('|') + '|'];
   const row = (label, f) => L.push(`| ${label} | ${ks.map((k) => f(r[k])).join(' | ')} |`);
-  row('導覽', (x) => `${navLabel(x.nav)}（可見連結 ${x.navLinks}）`); row('並排欄數（最多）', (x) => (x.maxColumns > 1 ? x.maxColumns : '單欄')); row('h1／內文字級 px', (x) => `${x.h1Px ?? '—'}／${x.bodyPx ?? '—'}`);
-  row('橫向溢出', (x) => (x.overflowX ? `⚠️ 是（+${x.overflowPx}px）` : '否')); row('可見文字量', (x) => x.textChars);
+  row(_t('導覽'), (x) => _t`${navLabel(x.nav)}（可見連結 ${x.navLinks}）`); row(_t('並排欄數（最多）'), (x) => (x.maxColumns > 1 ? x.maxColumns : _t('單欄'))); row(_t('h1／內文字級 px'), (x) => _t`${x.h1Px ?? '—'}／${x.bodyPx ?? '—'}`);
+  row(_t('橫向溢出'), (x) => (x.overflowX ? _t`⚠️ 是（+${x.overflowPx}px）` : _t('否'))); row(_t('可見文字量'), (x) => x.textChars);
   const f = responsiveFindings(r); if (f.length) L.push('', ...f.map((x) => `- ⚠️ ${x.text}`));
   return L;
 }

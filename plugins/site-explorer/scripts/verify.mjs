@@ -3,6 +3,7 @@
 //   verify.mjs <handoff 資料夾> [--page home] [--min-score 60] [--out <資料夾>]
 // Renders every starter page offline (no network at all), screenshots each [data-section] and compares it with the reference crop
 // in media/sections/. Text and photos are placeholders, so the score measures LAYOUT: size, light/dark structure, colour — not words.
+import { _t } from './i18n.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -63,13 +64,13 @@ export function scoreSection({ lum, col, meanDist, refH, gotH }) {
   return { score, layout: Math.round(layout * 100), colour: Math.round(colour * 100), height: Math.round(height * 100) };
 }
 
-const grade = (s) => (s >= 85 ? '很像' : s >= 70 ? '接近' : s >= 50 ? '有落差' : '差很多');
+const grade = (s) => (s >= 85 ? _t('很像') : s >= 70 ? _t('接近') : s >= 50 ? _t('有落差') : _t('差很多'));
 
 export async function verifyHandoff(handoffDir, { page: only, outDir, minScore = 0 } = {}) {
   const starterDir = path.join(handoffDir, 'starter');
-  if (!fs.existsSync(starterDir)) throw new Error(`找不到 ${starterDir}。請先產生交接包（site-explorer <網址>）。`);
+  if (!fs.existsSync(starterDir)) throw new Error(_t`找不到 ${starterDir}。請先產生交接包（site-explorer <網址>）。`);
   const files = fs.readdirSync(starterDir).filter((f) => /\.html$/i.test(f)).sort();
-  if (!files.length) throw new Error('starter/ 裡沒有 HTML 頁面。');
+  if (!files.length) throw new Error(_t('starter/ 裡沒有 HTML 頁面。'));
   outDir = outDir || path.join(handoffDir, 'verify');
   fs.mkdirSync(path.join(outDir, 'diff'), { recursive: true });
   const browser = await launchBrowser();
@@ -91,12 +92,12 @@ export async function verifyHandoff(handoffDir, { page: only, outDir, minScore =
         const row = { name: d.name, index: d.index };
         const nth = seen[d.name] = (seen[d.name] ?? -1) + 1; // match by section name (the 2nd "cta" comment ↔ the 2nd cta), so inserting a section does not shift everything
         const loc = pg.locator(`[data-section="${d.name}"]`).nth(nth);
-        if (!d.ref || !(await loc.count())) { row.status = d.ref ? '重建頁面少了這個區塊' : '沒有參考圖'; sections.push(row); continue; }
+        if (!d.ref || !(await loc.count())) { row.status = d.ref ? _t('重建頁面少了這個區塊') : _t('沒有參考圖'); sections.push(row); continue; }
         const got = await loc.screenshot({ timeout: 10000 }).catch(() => null);
-        if (!got) { row.status = '無法截圖'; sections.push(row); continue; }
+        if (!got) { row.status = _t('無法截圖'); sections.push(row); continue; }
         const refBuf = fs.readFileSync(d.ref);
         const r = await cmp.evaluate(compareInBrowser, { a: 'data:image/png;base64,' + refBuf.toString('base64'), b: 'data:image/png;base64,' + got.toString('base64') }).catch(() => null);
-        if (!r) { row.status = '參考圖無法讀取（不是有效的 PNG）'; sections.push(row); continue; }
+        if (!r) { row.status = _t('參考圖無法讀取（不是有效的 PNG）'); sections.push(row); continue; }
         const gotH = (await loc.boundingBox())?.height ?? 0;
         const s = scoreSection({ ...r, refH: r.refH, gotH: Math.round(gotH * (r.refW / 1440)) || r.refH });
         const diffFile = path.join('diff', `${slug}-${String(d.index).padStart(2, '0')}-${d.name}.png`);
@@ -118,27 +119,27 @@ export async function verifyHandoff(handoffDir, { page: only, outDir, minScore =
 }
 
 export function renderMd(r) {
-  const L = ['# 重建驗證（verify）', '', `**整體相似度：${r.overall}／100（${r.grade}）**${r.minScore ? ` · 門檻 ${r.minScore}：${r.passed ? '通過' : '未通過'}` : ''}`, '',
-    '分數衡量「版面」：區塊高度、明暗結構、顏色。文字與照片是佔位內容，所以不比對字句。差異圖（原站｜重建｜差異熱圖）在 `diff/`。', ''];
+  const L = [_t('# 重建驗證（verify）'), '', _t`**整體相似度：${r.overall}／100（${r.grade}）**${r.minScore ? _t` · 門檻 ${r.minScore}：${r.passed ? _t('通過') : _t('未通過')}` : ''}`, '',
+    _t('分數衡量「版面」：區塊高度、明暗結構、顏色。文字與照片是佔位內容，所以不比對字句。差異圖（原站｜重建｜差異熱圖）在 `diff/`。'), ''];
   for (const p of r.pages) {
-    L.push(`## ${clean(p.page)} — ${p.score}／100`, '', '| # | 區塊 | 分數 | 版面 | 顏色 | 高度（原站→重建） | 差異圖 |', '|---|---|---|---|---|---|---|');
-    for (const s of p.sections) L.push(s.status === 'ok' ? `| ${s.index} | ${clean(s.name)} | ${s.score}（${s.grade}） | ${s.layout} | ${s.colour} | ${s.refHeight}→${s.gotHeight}px | [${path.basename(s.diff)}](${s.diff}) |` : `| ${s.index} | ${clean(s.name)} | — | | | | ${s.status} |`);
+    L.push(_t`## ${clean(p.page)} — ${p.score}／100`, '', _t('| # | 區塊 | 分數 | 版面 | 顏色 | 高度（原站→重建） | 差異圖 |'), '|---|---|---|---|---|---|---|');
+    for (const s of p.sections) L.push(s.status === 'ok' ? _t`| ${s.index} | ${clean(s.name)} | ${s.score}（${s.grade}） | ${s.layout} | ${s.colour} | ${s.refHeight}→${s.gotHeight}px | [${path.basename(s.diff)}](${s.diff}) |` : `| ${s.index} | ${clean(s.name)} | — | | | | ${s.status} |`);
     L.push('');
   }
   const worst = r.pages.flatMap((p) => p.sections.filter((s) => s.status === 'ok').map((s) => ({ ...s, page: p.page }))).sort((a, b) => a.score - b.score).slice(0, 3).filter((s) => s.score < 85);
-  if (worst.length) { L.push('## 先修這幾個', ''); for (const s of worst) L.push(`- ${clean(s.page)} 的「${clean(s.name)}」（${s.score}）：${s.height < 85 ? `高度差 ${s.refHeight}→${s.gotHeight}px；` : ''}${s.colour < 70 ? '顏色偏離；' : ''}${s.layout < 70 ? '明暗結構不同；' : ''}看 ${s.diff}`); L.push(''); }
+  if (worst.length) { L.push(_t('## 先修這幾個'), ''); for (const s of worst) L.push(_t`- ${clean(s.page)} 的「${clean(s.name)}」（${s.score}）：${s.height < 85 ? _t`高度差 ${s.refHeight}→${s.gotHeight}px；` : ''}${s.colour < 70 ? _t('顏色偏離；') : ''}${s.layout < 70 ? _t('明暗結構不同；') : ''}看 ${s.diff}`); L.push(''); }
   return L.join('\n');
 }
 
 if (isMain(import.meta.url)) {
   const dir = args.find((a, i) => !a.startsWith('--') && !['--page', '--min-score', '--out'].includes(args[i - 1]));
-  if (!dir) { console.error('用法：site-explorer verify <交接包資料夾（handoff）> [--page home] [--min-score 60] [--out <資料夾>] [--json]'); process.exit(1); }
+  if (!dir) { console.error(_t('用法：site-explorer verify <交接包資料夾（handoff）> [--page home] [--min-score 60] [--out <資料夾>] [--json]')); process.exit(1); }
   const min = Number(opt('min-score', 0));
-  if (!Number.isFinite(min) || min < 0 || min > 100) { console.error('--min-score 必須是 0–100 的數字'); process.exit(1); }
+  if (!Number.isFinite(min) || min < 0 || min > 100) { console.error(_t('--min-score 必須是 0–100 的數字')); process.exit(1); }
   try {
     const r = await verifyHandoff(path.resolve(dir), { page: opt('page'), outDir: opt('out') && path.resolve(opt('out')), minScore: min });
-    if (args.includes('--json')) { process.stdout.write(JSON.stringify({ ok: r.passed || !min, ...r }, null, 2) + '\n'); console.error(`已寫入 ${r.outDir}`); }
-    else { console.log(renderMd(r)); console.log(`\n已寫入 ${r.outDir}/verify.md、verify.json 與 diff/`); }
+    if (args.includes('--json')) { process.stdout.write(JSON.stringify({ ok: r.passed || !min, ...r }, null, 2) + '\n'); console.error(_t`已寫入 ${r.outDir}`); }
+    else { console.log(renderMd(r)); console.log(_t`\n已寫入 ${r.outDir}/verify.md、verify.json 與 diff/`); }
     process.exit(r.passed || !min ? 0 : 2);
   } catch (e) { console.error('✖ ' + e.message); process.exit(1); }
 }
