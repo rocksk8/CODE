@@ -7,7 +7,7 @@ import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
 import { BANNER, sanitizeDoc } from './untrusted.mjs';
-import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch } from './util.mjs';
+import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch, isInternalHost, resolvesInternal, stripMarkup } from './util.mjs';
 import { parseSitemap } from './health-check.mjs';
 import { attachNetworkRecorder, deepContent, ariaTree } from './observe.mjs';
 import { exploreStates } from './interact.mjs';
@@ -299,17 +299,17 @@ async function fetchRaw(u) {
   try {
     const r = await gfetch(u, { headers: { 'user-agent': UA, accept: 'text/html' }, signal: AbortSignal.timeout(15000) });
     if (!mayFetch(r.url, u)) return { status: null, error: 'redirected to an internal address' };
-    const html = await readCapped(r, 3_000_000);
+    const html = await readCapped(r, 1_500_000);
     const bi = html.search(/<body/i); const be = html.toLowerCase().lastIndexOf('</body>'); // linear scans, no backtracking
     const body = bi >= 0 ? html.slice(bi, be > bi ? be + 7 : undefined) : html;
-    const text = body.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<noscript[\s\S]*?<\/noscript>|<!--[\s\S]*?-->/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ');
+    const text = stripMarkup(body).replace(/&[a-z#0-9]+;/gi, ' ');
     const latin = (text.match(/[A-Za-z0-9À-ɏ']+/g) || []).length, cjk = (text.match(/[㐀-鿿぀-ヿ가-힯]/g) || []).length;
     return {
-      htmlTag: ((html.match(/<html[^>]*>/i) || [''])[0]).slice(0, 200), metaCount: (html.match(/<meta\s/gi) || []).length,
+      htmlTag: ((html.match(/<html[^>]{0,400}>/i) || [''])[0]).slice(0, 200), metaCount: (html.match(/<meta\s/gi) || []).length,
       status: r.status, finalUrl: r.url, bytes: html.length, contentType: r.headers.get('content-type') || '',
-      title: ((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim(), h1Count: (html.match(/<h1[\s>]/gi) || []).length,
-      words: latin + Math.round(cjk / 1.8), links: (html.match(/<a\s[^>]*href=/gi) || []).length, canonical: /<link[^>]+rel=["']?canonical/i.test(html), jsonld: (html.match(/<script[^>]+type=["']?application\/ld\+json/gi) || []).length,
-      metaRobots: ((html.match(/<meta[^>]+name=["']robots["'][^>]*content=["']([^"']*)/i) || [])[1] || null), csrShell: /<div[^>]+id=["'](root|app|__next|__nuxt)["'][^>]*>\s*<\/div>/i.test(html),
+      title: ((html.match(/<title[^>]{0,400}>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim(), h1Count: (html.match(/<h1[\s>]/gi) || []).length,
+      words: latin + Math.round(cjk / 1.8), links: (html.match(/<a\s[^>]{0,400}href=/gi) || []).length, canonical: /<link[^>]{1,400}rel=["']?canonical/i.test(html), jsonld: (html.match(/<script[^>]{1,400}type=["']?application\/ld\+json/gi) || []).length,
+      metaRobots: ((html.match(/<meta[^>]{1,400}name=["']robots["'][^>]{0,400}content=["']([^"']*)/i) || [])[1] || null), csrShell: /<div[^>]{1,400}id=["'](root|app|__next|__nuxt)["'][^>]{0,400}>\s*<\/div>/i.test(html),
     };
   } catch (e) { return { error: String(e.message).slice(0, 100) }; }
 }
@@ -320,7 +320,7 @@ async function discoverMore(fromUrl) {
   const found = new Map(); const add = (href, why) => { try { const u = new URL(href, fromUrl); if (!/^https?:$/.test(u.protocol) || !sameSite(u.href, origin)) return; u.hash = ''; if (!found.has(norm(u.href))) found.set(norm(u.href), { url: u.href, why }); } catch {} };
   const text = async (u, max = 2_000_000) => { try { if (!mayFetch(u, fromUrl)) return ''; const r = await gfetch(u, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(12000) }); return r.ok ? await readCapped(r, max) : ''; } catch { return ''; } };
   const html = await text(fromUrl, 3_000_000); let n = 0;
-  for (const m of html.matchAll(/<a\s[^>]*?href=["']([^"'#][^"']*)["']/gi)) { if (++n > 400) break; add(m[1], _t('HTML 連結')); }
+  for (const m of html.matchAll(/<a\s[^>]{0,400}?href=["']([^"'#][^"']{0,2000})["']/gi)) { if (++n > 400) break; add(m[1], _t('HTML 連結')); }
   const sitemapUrls = new Set([...(robotsInfo.parsed?.sitemaps || []), origin + '/sitemap.xml', origin + '/sitemap_index.xml']);
   let children = 0;
   for (const sm of [...sitemapUrls].slice(0, 6)) {
@@ -381,7 +381,7 @@ while (pages.length < maxPages) {
   page.on('console', (m) => { if (m.type() === 'error' && pageErrors.length < 6) pageErrors.push(_t('主控台：') + m.text().split('\n')[0].slice(0, 160)); });
   const watchdog = setTimeout(() => { console.log('timeout (120s), giving up on:', url); page.close().catch(() => {}); }, 120000);
   try {
-    const mixed = new Set(); page.on('request', (r) => { if (/^https:/.test(page.url()) && /^http:/.test(r.url())) mixed.add(r.url().slice(0, 140)); });
+    const mixed = new Set(); page.on('request', (r) => { if (/^https:/.test(page.url()) && /^http:/.test(r.url())) mixed.add(r.url().split(/[?#]/)[0].slice(0, 140)); });
     const resp = await openPage(page, url);
     const contentType = (resp?.headers()['content-type'] || '').toLowerCase();
     if (resp && contentType && !/html/.test(contentType)) { // JSON/PDF/XML/images are not pages: do not score them as pages
@@ -567,7 +567,7 @@ for (const [name, u] of wanted) {
   } catch {}
 }
 
-const fetchStatus = async (u) => { try { return (await fetch(u, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(10000) })).status; } catch { return null; } };
+const fetchStatus = async (u) => { try { if (!isInternalHost(new URL(startUrl).hostname) && await resolvesInternal(new URL(u).hostname)) return null; return (await fetch(u, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(10000) })).status; } catch { return null; } };
 const platforms = await detect(pages, headers, fetchStatus);
 
 // aggregate design tokens across pages

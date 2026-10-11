@@ -56,11 +56,25 @@ export function isInternalHost(host) {
   if (mm) h = mm[1];
   else if ((mm = h.match(/^(?:0{0,4}:){2,6}(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/) || h.match(/^64:ff9b::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/))) { const hi = parseInt(mm[1], 16), lo = parseInt(mm[2], 16); h = `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`; }
   if (h === '::' || h === '0:0:0:0:0:0:0:0') return true;
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal') || /\.(lan|corp|home|intranet|private|svc|cluster\.local)$/.test(h) || h.endsWith('.home.arpa')) return true;
+  if (h && !h.includes('.') && !h.includes(':') && !/^\d+$/.test(h)) return true; // a single-label name ("intranet", "nas") only exists on the user's own network
   if (h === '::1' || /^f[cd][0-9a-f]{2}:/.test(h) || /^fe80:/.test(h)) return true;
   const m = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/); if (!m) return false;
   const [a, b] = [+m[1], +m[2]];
   return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+}
+import dns from 'node:dns/promises';
+const dnsCache = new Map();
+/** isInternalHost, plus: a public-looking NAME whose DNS answer is a private/loopback/link-local address (e.g. 169.254.169.254.nip.io) counts as internal. */
+export async function resolvesInternal(host) {
+  const h = String(host).toLowerCase().replace(/^\[|\]$/g, '');
+  if (isInternalHost(h)) return true;
+  if (/^[\d.]+$/.test(h) || h.includes(':')) return false; // an IP literal was already judged above
+  if (dnsCache.has(h)) return dnsCache.get(h);
+  let res = false;
+  try { const all = await Promise.race([dns.lookup(h, { all: true }), new Promise((_, rej) => setTimeout(() => rej(new Error('dns timeout')), 4000))]); res = all.some((a) => isInternalHost(a.address)); } catch { res = false; } // unresolvable: nothing to connect to
+  if (dnsCache.size > 2000) dnsCache.clear();
+  dnsCache.set(h, res); return res;
 }
 /** Allowed to fetch `target` because it belongs to a page of `base` (same-site, or `base` itself is internal/local so the user chose it). */
 export const mayFetch = (target, base) => { try { const t = new URL(target); if (!/^https?:$/.test(t.protocol)) return false; return !isInternalHost(t.hostname) || isInternalHost(new URL(base).hostname); } catch { return false; } };
@@ -69,10 +83,13 @@ export const mayFetch = (target, base) => { try { const t = new URL(target); if 
 export async function guardInternal(ctx, startUrl) {
   let startInternal = false; try { startInternal = isInternalHost(new URL(startUrl).hostname); } catch {}
   if (startInternal) return;
-  await ctx.route('**/*', (route) => {
-    let host = ''; try { host = new URL(route.request().url()).hostname; } catch {}
-    return /^(data|blob|about):/.test(route.request().url()) || !isInternalHost(host) ? route.continue() : route.abort('blockedbyclient');
+  await ctx.route('**/*', async (route) => {
+    const u = route.request().url(); if (/^(data|blob|about):/.test(u)) return route.continue();
+    let host = ''; try { host = new URL(u).hostname; } catch {}
+    return (await resolvesInternal(host)) ? route.abort('blockedbyclient') : route.continue();
   });
+  // WebSocket handshakes are not seen by route(): refuse the ones aimed at the user's own machine or LAN
+  if (typeof ctx.routeWebSocket === 'function') await ctx.routeWebSocket('**/*', async (ws) => { let host = ''; try { host = new URL(ws.url()).hostname; } catch {} if (await resolvesInternal(host)) await ws.close({ code: 1008 }); else ws.connectToServer(); }).catch(() => {});
 }
 
 /** fetch that follows redirects itself and re-checks EVERY hop (a public URL may 302 to localhost or a cloud-metadata address). */
@@ -81,6 +98,7 @@ export async function gfetch(url, opts = {}, maxHops = 5) {
   const base = url; let cur = url;
   for (let i = 0; i <= maxHops; i++) {
     if (i > 0 && !mayFetch(cur, base)) throw new Error('blocked redirect to an internal address: ' + cur);
+    if (!isInternalHost(new URL(base).hostname) && await resolvesInternal(new URL(cur).hostname)) throw new Error('blocked: ' + new URL(cur).hostname + ' resolves to an internal address');
     const r = await fetch(cur, { ...opts, redirect: 'manual' });
     if (r.status >= 300 && r.status < 400 && r.headers.get('location')) {
       try { await r.body?.cancel(); } catch {}
@@ -90,4 +108,19 @@ export async function gfetch(url, opts = {}, maxHops = 5) {
     return r;
   }
   throw new Error('too many redirects');
+}
+
+// Linear-time tag/script/comment stripper (regexes like <script[\s\S]*?</script> go quadratic on hostile pages with many unclosed openers)
+export function stripMarkup(src) {
+  const lower = src.toLowerCase(); let out = '', i = 0; const noClose = new Set(); let gt = -2; // remembered answers keep every scan linear overall
+  while (i < src.length) {
+    const lt = src.indexOf('<', i); if (lt < 0) { out += src.slice(i); break; }
+    out += src.slice(i, lt) + ' ';
+    let skipTo = -1;
+    if (src.startsWith('<!--', lt)) { const e = src.indexOf('-->', lt + 4); skipTo = e < 0 ? src.length : e + 3; }
+    else for (const t of ['script', 'style', 'noscript']) if (lower.startsWith('<' + t, lt) && /[\s>\/]/.test(lower[lt + t.length + 1] || '>')) { const e = noClose.has(t) ? -1 : lower.indexOf('</' + t, lt); if (e < 0) noClose.add(t); skipTo = e < 0 ? lt + 1 + t.length : (lower.indexOf('>', e) + 1 || src.length); break; }
+    if (skipTo < 0) { if (gt !== -1 && gt < lt) gt = src.indexOf('>', lt); skipTo = gt < 0 || gt - lt > 400 ? lt + 1 : gt + 1; }
+    i = skipTo;
+  }
+  return out;
 }

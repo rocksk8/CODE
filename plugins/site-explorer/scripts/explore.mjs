@@ -11,6 +11,7 @@ import { runChecks, printChecks } from './doctor.mjs';
 import { warnNoSandboxOnce } from './launch.mjs';
 import { openDb, ingest, runsForHost, renderChangesMd, DB_PATH } from './db.mjs';
 import { findUrl, findUrls, intOpt, sameSite, normalizeFlags } from './args.mjs';
+import { stripControl } from './untrusted.mjs';
 import { isInside, checkExploreOut, UnsafeOutputError } from './safe-out.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -65,6 +66,7 @@ const out = path.resolve(opt('out', process.env.SITE_EXPLORER_OUT || './explore-
 if (isInside(out, path.resolve(here, '..'))) { console.error(_t`輸出資料夾不能放在外掛目錄內（${out}）：外掛更新或重新安裝時會被清掉。請改用你專案裡的資料夾，例如 --out ./explore-out`); process.exit(1); }
 try { checkExploreOut(out); fs.mkdirSync(out, { recursive: true }); if (!fs.existsSync(path.join(out, 'ABOUT-THIS-FOLDER.md'))) fs.writeFileSync(path.join(out, 'ABOUT-THIS-FOLDER.md'), _t('# site-explorer 輸出資料夾（探索進行中）\n')); } // marks the folder as ours right away
 catch (e) { if (e instanceof UnsafeOutputError) { console.error(e.message); process.exit(1); } throw e; }
+if (stateFile) { try { fs.chmodSync(out, 0o700); } catch {} } // logged-in output may hold personal data: only the owner may read the folder
 const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
 const siteDir = path.join(siteRoot, host), motionDir = path.join(motionRoot, host);
@@ -78,7 +80,7 @@ function run(label, script, a) {
     console.log(`\n[${++n}/${total}] ${label}`);
     const p = spawn(process.execPath, [path.join(here, script), ...a], { env: { ...process.env, SITE_EXPLORER_LANG: LANG } });
     let tail = '';
-    const onData = (d) => { tail = (tail + d).slice(-4000); for (const l of String(d).split('\n')) if (l.trim() && !/ExperimentalWarning|trace-warnings|agent-proxy|android\.clients|For details: curl/.test(l)) console.log('   ' + l); };
+    const onData = (d) => { tail = (tail + d).slice(-4000); for (const l of String(d).split('\n').map(stripControl)) if (l.trim() && !/ExperimentalWarning|trace-warnings|agent-proxy|android\.clients|For details: curl/.test(l)) console.log('   ' + l); };
     p.stdout.on('data', onData); p.stderr.on('data', onData);
     p.on('close', (code) => { const s = ((Date.now() - t0) / 1000).toFixed(1); steps.push({ label, ok: code === 0, s }); console.log(code === 0 ? `   ✔ ${s}s` : _t`   ✖ 失敗（${s}s）— 其他階段會繼續`); resolve(code === 0); });
   });
@@ -93,6 +95,13 @@ if (checks.some((c) => c.level === 'fail')) {
   console.error(_t('\n環境檢查未通過，請先依上方建議處理。')); process.exit(1);
 }
 
+{ // results of stages that do not run this time must not be shown as if they were fresh (an old health score, a11y report, verify result or changes.md)
+  const rm = (f) => { try { fs.rmSync(f, { recursive: true, force: true }); } catch {} };
+  rm(path.join(siteDir, 'changes.md'));
+  if (args.includes('--no-health')) { rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); }
+  if (!args.includes('--a11y')) rm(path.join(siteDir, 'a11y.json'));
+  if (!args.includes('--verify')) rm(path.join(out, 'handoff', 'verify'));
+}
 const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
 const crawlOk = crawlRan && (() => { try { return (JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []).length > 0; } catch { return false; } })(); // a crawl that exits 0 but saved no page is a failure
 if (crawlOk) await run(_t('整理設計包（tokens、Tailwind、W3C）'), 'export-design.mjs', [siteDir]);

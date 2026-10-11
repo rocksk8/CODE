@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from './util.mjs';
-import { BANNER, sanitizeDoc } from './untrusted.mjs';
+import { BANNER, sanitizeDoc, clean } from './untrusted.mjs';
 
 export const DB_PATH = process.env.SITE_EXPLORER_DB || path.join(os.homedir(), '.site-explorer', 'explorations.db');
 const SCHEMA_VERSION = 2;
@@ -158,10 +158,11 @@ export function diffPages(db, a, b) {
 export function renderChangesMd(db, a, b) {
   const A = db.prepare('SELECT * FROM runs WHERE id=?').get(a), B = db.prepare('SELECT * FROM runs WHERE id=?').get(b);
   const d = diffPages(db, a, b), settings = diffRuns(db, a, b);
-  const q = (x) => String(x ?? '').replace(/[`\r\n]+/g, ' '); // page text is third-party data: one line, no markdown breakout
+  const q = (x) => clean(String(x ?? '')).replace(/[`\r\n]+/g, ' '); // page text is third-party data: one line, no markdown breakout
   const L = [_t`# 改版前後對照`, '', BANNER, '', _t`- 之前：run #${a}　${A.host}　${String(A.crawled_at || '').slice(0, 10)}`, _t`- 之後：run #${b}　${B.host}　${String(B.crawled_at || '').slice(0, 10)}`, '', _t('> 頁面以「路徑」對應，所以舊站與新站在不同網域（例如測試站）也能比。只比較兩次都有爬到的頁面。'), ''];
   const risk = [];
   if (d.removed.length) risk.push(_t`**${d.removed.length} 個舊網址在新版消失** — 沒有設定 301 就會變 404，搜尋排名與外部連結會流失。`);
+  if (d.removed.length && (B.pages ?? 0) < (A.pages ?? 0)) risk.push(_t`（注意：這次只爬了 ${B.pages} 頁，上次是 ${A.pages} 頁。消失的網址可能只是這次沒爬到——先開啟確認，再決定要不要設 301。）`);
   const lostDesc = d.changed.filter((c) => c.changes.some((x) => x.field === _t('描述') && x.from && !x.to)); if (lostDesc.length) risk.push(_t`${lostDesc.length} 頁的 meta description 被拿掉了。`);
   const noidx = d.changed.filter((c) => c.changes.some((x) => x.field === 'noindex' && x.to === _t('是'))); if (noidx.length) risk.push(_t`**${noidx.length} 頁在新版變成 noindex**（不會被搜尋引擎收錄）。`);
   const errs = d.changed.filter((c) => c.changes.some((x) => x.field === _t('狀態碼') && Number(x.to) >= 400)); if (errs.length) risk.push(_t`${errs.length} 頁在新版回應錯誤狀態碼。`);

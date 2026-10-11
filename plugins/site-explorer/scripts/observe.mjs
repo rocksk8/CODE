@@ -71,7 +71,8 @@ export async function deepContent(page) {
   };
   const frames = [];
   for (const f of page.frames()) {
-    try { const r = await f.evaluate(inFrame); frames.push({ url: String(f.url()).slice(0, 120), main: f === page.mainFrame(), ...r }); } catch {}
+    if (!f.url().startsWith('http') && f.url() !== 'about:blank' && f.url() !== 'about:srcdoc' && !f.url().startsWith('blob:')) continue; // a file:// / chrome-error frame can hang evaluate() forever
+    try { const r = await Promise.race([f.evaluate(inFrame), new Promise((_, rej) => setTimeout(() => rej(new Error('frame timeout')), 6000))]); frames.push({ url: String(f.url()).slice(0, 120), main: f === page.mainFrame(), ...r }); } catch {}
   }
   const sum = (k) => frames.reduce((n, f) => n + (f[k] || 0), 0);
   return { textChars: sum('text'), elements: sum('elements'), shadowHosts: sum('shadowHosts'), interactive: sum('interactive'), frames: frames.filter((f) => !f.main).slice(0, 10), frameCount: frames.length - 1, mainTextChars: frames.find((f) => f.main)?.text || 0 };
