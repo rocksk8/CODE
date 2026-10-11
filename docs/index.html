@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>site-explorer — let an AI understand a website, then rebuild it</title>
+<meta name="description" content="Turn any public website into a handoff package for AI and engineers: design tokens, runnable page skeletons, animation/3D as text, SEO/health report, offline dashboard.">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--mute:#667085;--line:#e4e7ec;--acc:#4f46e5}
+@media(prefers-color-scheme:dark){:root{--bg:#0d0f13;--card:#171a21;--ink:#eef0f4;--mute:#98a2b3;--line:#272b35;--acc:#8b85ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI","PingFang TC","Noto Sans TC",sans-serif}
+main{max-width:1040px;margin:auto;padding:48px 20px 80px}h1{font-size:40px;line-height:1.1;margin:0 0 8px}h2{margin:40px 0 12px}
+.lead{font-size:20px;color:var(--mute);max-width:720px}.cta{display:flex;gap:12px;flex-wrap:wrap;margin:24px 0}
+.cta a{background:var(--card);border:1px solid var(--line);color:var(--ink);padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:600}.cta a.go{background:var(--acc);border-color:var(--acc);color:#fff}
+img{max-width:100%;border:1px solid var(--line);border-radius:12px;display:block}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}.card h3{margin:0 0 6px}.card p{margin:0 0 10px;color:var(--mute)}
+code,pre{background:var(--card);border:1px solid var(--line);border-radius:8px}pre{padding:14px;overflow:auto}code{padding:1px 6px}
+</style>
+</head>
+<body><main>
+<h1>site-explorer</h1>
+<p class="lead">Let an AI actually <em>understand</em> a website — then hand it the keys to rebuild it. One command → design tokens, runnable page skeletons, animation/3D as text, an SEO/health report and an offline dashboard.</p>
+<div class="cta"><a class="go" href="demo/acme-studio/dashboard.html">Open a live sample dashboard</a><a href="demo/three-demo/dashboard.html">Sample with 3D / video</a><a href="https://github.com/rocksk8/CODE">GitHub</a></div>
+<img src="images/demo.gif" alt="Dashboard tour" width="900">
+<h2>Try it</h2>
+<pre>npm i -g git+https://github.com/rocksk8/CODE.git
+site-explorer setup
+site-explorer https://example.com</pre>
+<h2>What you get</h2>
+<div class="grid">
+<div class="card"><h3>Runnable page skeletons</h3><p>Generated from measured structure, spacing and backgrounds. Placeholders only.</p><img src="images/starter-vs-original.png" alt="Original vs generated starter" loading="lazy"></div>
+<div class="card"><h3>Motion an AI can read</h3><p>three.js facts, filmstrips and a runnable motion starter.</p><img src="images/dashboard-motion-preview.png" alt="Live motion preview" loading="lazy"></div>
+<div class="card"><h3>Export for AI</h3><p>Paste-ready prompts and a single-file package.</p><img src="images/dashboard-export.png" alt="Export tab" loading="lazy"></div>
+<div class="card"><h3>Health check &amp; verdict</h3><p>SEO, indexability, trackers &amp; cookies, structured data, mobile.</p><img src="images/dashboard-health.png" alt="Health tab" loading="lazy"></div>
+</div>
+<p style="margin-top:32px;color:var(--mute)">The sample dashboards are real output of the current version against fictional fixture sites — not an analysis of a real website.</p>
+</main></body></html>

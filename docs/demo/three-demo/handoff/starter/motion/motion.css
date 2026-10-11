@@ -1,0 +1,9 @@
+/* Motion starter. One class per observed element; put the class on your own element. Verify against the filmstrip images. */
+
+/* motion-t0: kind: webgl; size/position: 640×400px, about 12% down the page; animates by itself */
+.motion-t0 { width: min(100%, 640px); aspect-ratio: 640 / 400; display: block; }
+
+/* motion-t1: kind: video; size/position: 320×180px, about 73% down the page; animates by itself */
+.motion-t1 { width: 100%; max-width: 320px; aspect-ratio: 320 / 180; background: #000; }
+
+@media (prefers-reduced-motion: reduce) { [class^="motion-"] { animation: none !important; } }

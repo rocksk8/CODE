@@ -1,0 +1,184 @@
+<div align="center">
+
+# site-explorer
+
+**Let an AI actually *understand* a website — then hand it the keys to rebuild it.**
+
+One command turns any public website into a handoff package that AI and engineers can pick up: design tokens, **runnable page skeletons**, animation/3D translated into text, an SEO/health report, and an offline dashboard.
+
+[![test](https://github.com/rocksk8/CODE/actions/workflows/test.yml/badge.svg)](https://github.com/rocksk8/CODE/actions/workflows/test.yml)
+![license](https://img.shields.io/badge/license-MIT-blue)
+![node](https://img.shields.io/badge/node-%E2%89%A520-green)
+
+**English** · [繁體中文](README.md) · [Sample output](docs/demo/) · [Dashboard screenshots](docs/images/)
+
+![site-explorer dashboard tour](docs/images/demo.gif)
+
+</div>
+
+```bash
+npm i -g git+https://github.com/rocksk8/CODE.git
+site-explorer setup
+site-explorer https://example.com
+```
+
+You get a folder: double-click `dashboard.html` for the overview; give the whole `handoff/` folder to an AI and paste the prompt from `PROMPT.md` — it can start building pages and motion without you writing any briefing.
+
+> **Language note.** The generated reports (`report.md`, `health.md`, the dashboard, `SPEC.md`) are currently written in Traditional Chinese; the handoff entry points (`START-HERE.md`, `PROMPT.md`, `AI-PACKAGE.md`, the starter code) are in English, and everything is plain text/JSON that any LLM reads fine. English report output is on the roadmap.
+
+## What it does
+
+| | |
+|---|---|
+| ![](docs/images/dashboard-overview.png) | **A visual overview**: real desktop/tablet/phone renders, health score and verdict, brand colours (click to copy), fonts, a wall of every page. The *Details* switch (top right) reveals per-page technical data and raw JSON. |
+| ![](docs/images/starter-vs-original.png) | **Runnable page skeletons**: `starter/*.html` generated from the *measured* section structure, columns, spacing, backgrounds/gradients and phone navigation. All copy and images are placeholders — nothing from the source site is reproduced. Left: the original; right: the generated starter. |
+| ![](docs/images/dashboard-motion-preview.png) | **3D / video / animation an AI can read**: three.js scene facts, which objects rotate, video specs, plus single-image filmstrips. `starter/motion/index.html` runs every observed animation with its reference frames next to it. |
+| ![](docs/images/dashboard-export.png) | **One-click export for AI**: pick a goal (pages / motion / both), copy a ready prompt. `AI-PACKAGE.md` is the single-file version for chats that can't take a folder. |
+| ![](docs/images/dashboard-health.png) | **Website health**: SEO, crawlability/indexability, links, performance, mobile, security, structured data, trackers & cookies, AI-crawler friendliness — with a verdict (pass / conditional / fail) and `--fail-on` exit codes for CI. |
+
+## How it differs from other tools
+
+| You might use | What it's good at | What site-explorer adds |
+|---|---|---|
+| Lighthouse / PageSpeed | Standard performance, accessibility and best-practice scores | It doesn't capture *what the site looks like*, and produces nothing for an AI to build from |
+| axe / WAVE | Accessibility rules | Same; this tool also covers SEO indexability, trackers and before/after comparison |
+| Wappalyzer / BuiltWith | Technology detection | Detection only: no design capture, no usable skeleton |
+| Screenshot-to-code AI tools | A page from one image | Usually just one image: no measured section structure, tokens, animation data or responsive behaviour |
+| SiteSucker / wget | Mirroring a site | Mirrors someone else's files; this records observed facts and rebuilds with placeholders |
+
+**Positioning:** explore → hand off → (let an AI) rebuild. It does not replace Lighthouse or axe; it turns "what a site really looks like and how it behaves" into data an AI can use.
+
+## Who it's for
+
+- **Redesigns / rebuilds** — the old site's page inventory (with 301 needs), content structure and design tokens in one go; automatic before/after comparison.
+- **Building front-ends with AI** — give it measured structure and reference images instead of a vague description.
+- **SEO and acceptance testing** — a health check that can gate CI (exit codes) and lists new/fixed issues between runs.
+- **Competitor research, design-system extraction** — colours, fonts (with licensing), spacing, components, motion rhythm.
+
+---
+
+## Install
+
+Node 20+ (the history database needs 22.13+). Browser: any of Chrome / Edge / Chromium; if none is found, `setup` offers to download Chromium.
+
+**Inside Claude Code (recommended)**
+```
+/plugin marketplace add rocksk8/code
+/plugin install site-explorer@rocksk8-code
+```
+After installing, a hook installs dependencies into `~/.site-explorer/deps` in the background at session start (once, non-blocking, survives plugin updates). Then just say "analyse https://example.com", or use `/site-explorer:explore`.
+
+**In a terminal** (paste one line at a time)
+```bash
+npm i -g git+https://github.com/rocksk8/CODE.git
+```
+```bash
+site-explorer setup
+```
+```bash
+site-explorer example.com
+```
+`setup` checks Node → installs dependencies → finds a browser → smoke test; `site-explorer doctor` prints a fix command for every problem.
+Don't use the `github:rocksk8/code` shorthand: npm switches to SSH for it, which fails on machines without an SSH key.
+No install: `npx git+https://github.com/rocksk8/CODE.git example.com`.
+
+**Output location:** `explore-out/` in the current folder by default. Use `--out <folder>` or set `SITE_EXPLORER_OUT`. The folder root gets an `ABOUT-THIS-FOLDER.md` (what this is, where to look, how to rerun) and a `runs.json`.
+
+Contributors: `cd plugins/site-explorer && npm run test:full`.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `/site-explorer:explore <url>` | One-shot exploration: dashboard + handoff package |
+| `/site-explorer:handoff <url>` | Produce the handoff package and explain style, structure, motion, health and unknowns |
+| `/site-explorer:health <url>` | Website health (SEO / indexability / links / performance / mobile / security / AI crawlers) |
+| `/site-explorer:to-design <url> [design to make]` | Explore → handoff → build a Claude Design design system → mock-up |
+| `/site-explorer:capture-motion <url>` | 3D/animation capture only (AI-readable) |
+| `/site-explorer:compare <A> <B>` | Side-by-side comparison of two sites (competitors / before-after) |
+| `/site-explorer:report <url>` | Build the dashboard in stages |
+| `/site-explorer:history list｜search --lib three｜history <host>｜compare a b` | Query and compare earlier explorations |
+| `/site-explorer:doctor [url]` | Environment diagnosis |
+
+## Making 3D, video, animation and very long pages readable for AI
+
+An AI can only read text and images, so:
+
+| Source | What the AI gets |
+|---|---|
+| three.js / WebGL scene | Object list (name, geometry, material colours, lights), camera (fov/position), **which objects rotate**, draw calls per frame, plus a filmstrip image |
+| Video | Duration, resolution, autoplay/loop/muted, source, plus frames at 0/25/50/75% |
+| Ordinary animation | Self-running?, period, amount and area of change, dominant colours, reacts to mouse/drag/scroll?, plus a filmstrip |
+| CSS 3D / keyframes | transform / perspective, keyframes text, duration and easing, reproduction hints |
+| Very long full-page screenshot (gets downscaled until unreadable) | One crop per section (≤ 1800px tall) |
+
+Everything goes into `motion.md`, each item marked "an AI cannot watch this directly — trust the text and numbers".
+
+## The handoff package `handoff/`
+
+| File | For whom / purpose |
+|---|---|
+| `START-HERE.md`, `PROMPT.md`, `AI-PACKAGE.md` | **Start here**: 3 steps; paste-ready prompts (A pages / B motion / C both); single-file version |
+| `starter/` | Runnable skeletons: `index.html` and one file per page, `styles.css`, `app.js`; `starter/motion/index.html` runs every observed animation next to its reference filmstrip |
+| `ai-brief.md` | **AI reads first**: style in one sentence, pasteable CSS tokens, components, page skeletons (with real content structure), voice, hard rules, which images to look at |
+| `SPEC.md` / `spec.json` | Full specification: information architecture, design system, components, per-page sections and content, motion, assets, tech and editing method, health, build order, **unknowns and limits** |
+| `motion.md`, `health.md` | Motion and health |
+| `DECISIONS.md` | **Living** decision log, open questions, assumptions, provenance (who read which pages, when, as whom) |
+| `CLAUDE.md` | For an AI working in this folder: how to read it, what not to do, log every decision |
+| `inventory.csv` | Every page (opens in Excel): URL inventory for redirect planning |
+| `tokens/`, `media/` | css / W3C / Tokens Studio / Tailwind / palette SVG; section crops, filmstrips, brand assets |
+
+The whole package is relocatable: every file referenced in a document is inside it (tests guarantee that). Regenerating never deletes your work: an edited `starter/` is kept as `starter.backup-<time>`, and `DECISIONS.md` is only appended to.
+
+## Designer workbench (the dashboard)
+
+| You want to… | Feature |
+|---|---|
+| "What font, size, colour is this heading?" | **Inspect**: hover the screenshot for font, size, colour, contrast, spacing, radius; click to pin and copy CSS |
+| "How is this page built?" | **Section slices** + **page skeleton**, with the evidence for each guess |
+| "How does it reflow on a phone?" | **Responsive side-by-side** (scroll-synced) |
+| "Can I use this font?" | **Font sources** (Google / Adobe / self-hosted / system) with substitutes |
+| "Which text is hard to read?" | **Contrast check on real backgrounds** |
+| "Bring it into Figma" | `palette.svg`, `tokens.studio.json` |
+| "What's wrong with the SEO?" | **Health** tab: score, issues (why it matters + how to fix + examples), page table, robots / AI crawlers, sitemap, performance, security |
+| "Compare with a competitor" | `/site-explorer:compare` |
+
+## What the health check covers
+
+Indexing & crawling 25% · on-page SEO 20% · links 10% · performance 15% · mobile 10% · security & transport 10% · structured data & social 5% · AI-crawler friendliness 5%. Scoring has diminishing returns, and any *critical* problem (site blocked, whole site noindex, no HTTPS, expired certificate) caps the total at 55. **The score is a relative indicator, not Google's score**; it only covers the crawled pages (a sample); performance is lab data.
+
+The report opens with a **verdict** (pass / conditional / fail). For automation: `site-explorer explore <url> --fail-on high` exits with code 4 when there are issues of that severity or worse. Run the same site again and the report lists new and fixed issues.
+
+### Trackers, cookies, structured data, tablet/phone, before/after
+
+- **Trackers & cookies** — recognises 40+ services (Google Analytics/GTM, Meta Pixel, Hotjar…), lists cookies (name, who sets it, lifetime, Secure/HttpOnly) and whether a cookie banner exists. It looks at the state "before a new visitor clicks any consent button"; **only names and flags are stored, never cookie values**. Trackers without a banner become a finding (whether that is a violation is for the owner to judge).
+- **Structured data** — beyond "is there any": required properties per type (Product, Article, FAQ, LocalBusiness…), `@context`, and markup that only exists after JavaScript runs.
+- **Tablet/phone, measured** — each page is measured at 1440 / 768 / 390: navigation style, side-by-side columns, type size, horizontal overflow, how much content a phone loses. Written into the report, dashboard and handoff — no guessed breakpoints.
+- **Before/after** — rerun the same site and `changes.md` is written automatically; for an old site vs a staging domain use `site-explorer history compare <old run> <new run> --md changes.md`. Pages are matched by *path*; it lists vanished URLs (need a 301), pages that became noindex, dropped descriptions, big text loss, lost structured data.
+
+### Handing over to an AI
+
+The handoff starts at **`START-HERE.md`**: `PROMPT.md` (paste-ready prompts), `starter/` (runnable skeletons; structure, columns, spacing, backgrounds and phone navigation come from measurement), `starter/motion/index.html` (every observed animation/3D element running, with the reference filmstrip beneath), and `AI-PACKAGE.md` (single file). The dashboard's **Export for AI** tab offers the same with one-click copy.
+
+## What's inside
+
+| Component | Role |
+|---|---|
+| `.mcp.json` | Mounts Playwright MCP so Claude can drive the browser live |
+| `scripts/explore.mjs` | Single entry: env check → crawl → design bundle → health → 3D → database → dashboard → handoff; a failing stage doesn't stop the others |
+| `scripts/crawl.mjs` | Crawler; honours robots.txt (incl. Allow rules), detects blocking, handles cookie banners precisely, de-duplicates by final URL, section crops |
+| `scripts/designer-extract.mjs`, `seo-extract.mjs` | In-page extraction: designer data; SEO / performance / structured data |
+| `scripts/export-design.mjs` | Design bundle (tokens, Tailwind, W3C, Tokens Studio, palette SVG, font licensing) |
+| `scripts/health-check.mjs`, `robots.mjs` | Health check; a Google-semantics robots.txt parser |
+| `scripts/capture-3d.mjs`, `motion-ai.mjs` | 3D/animation capture; AI-readable translation |
+| `scripts/starter.mjs`, `build-handoff.mjs` | Starter skeletons; the handoff package |
+| `scripts/build-report.mjs`, `report/` | Offline dashboard (single file, images embedded) |
+| `scripts/compare-report.mjs`, `db.mjs`, `doctor.mjs` | Comparison; database; diagnostics |
+| `skills/`, `commands/`, `agents/` | Skills, commands and analysis agents for Claude Code |
+| `test/` | `npm test`: end-to-end and regression tests (real three.js, deliberately broken sites, adversarial cases) |
+
+Design trade-offs and review records: [`docs/ux-review.md`](docs/ux-review.md), [`docs/stakeholder-review.md`](docs/stakeholder-review.md) (in Chinese). **Not sure what the output looks like?** See [`docs/demo/`](docs/demo/) (real output on fictional sites).
+
+## Boundaries
+
+Honours robots.txt (stops and says so when a site forbids everything); identifies itself as automation (User-Agent `site-explorer-claude-plugin`); does not log in, submit forms, or bypass CAPTCHAs / bot protection; extra requests (robots, sitemap, link status, 404 probe) are concurrency-limited. When blocked it says so rather than reporting an empty result. Fonts, images, copy and 3D models are copyrighted: use them as reference only, don't copy. Use on public or authorised sites only.

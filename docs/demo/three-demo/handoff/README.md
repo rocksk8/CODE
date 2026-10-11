@@ -1,8 +1,9 @@
-# localhost:8793 交接包
+# 127.0.0.1:4174 交接包
 
-由 site-explorer 於 2026-10-10 產生。來源：http://localhost:8793/
+由 site-explorer 於 2026-10-11 產生。來源：http://127.0.0.1:4174/
 
 ## 閱讀順序
+0. `START-HERE.md` — 從這裡開始：3 步驟；`PROMPT.md` 是可直接貼給 AI 的提示；`starter/` 是可執行的頁面與動態起手式；`AI-PACKAGE.md` 是單一檔案版（AI 讀不了資料夾時用）
 1. `ai-brief.md` — 給 AI 的精簡簡報（先讀）
 2. `SPEC.md` — 完整規格（人與 AI 的依據）
 3. `motion.md` — 3D／影片／動畫的文字化描述

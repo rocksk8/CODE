@@ -1,13 +1,59 @@
-# site-explorer（Claude Code 套件）
+<div align="center">
 
-讓 Claude 自動控制瀏覽器探索網站，並把結果整理成**人看得懂、AI 看得懂、開發接得住**的形式：
+# site-explorer
 
-- 🎨 **設計**：色彩、字型（含授權與替代）、間距、元件、版面網格、動態節奏
-- 🧱 **結構**：自動辨識 Hero／功能格／價格／見證／CTA…，逐區塊裁切與骨架圖
-- 🌀 **3D／影片／動畫**：AI 看不懂它們，所以翻譯成「文字描述＋量化數據＋three.js 場景事實＋單張影格序列圖」
-- 🩺 **網站健檢**：SEO、爬蟲索引（robots／sitemap／canonical／noindex／soft 404／JS 依賴）、連結、效能、行動版、安全、AI 爬蟲友善度
-- 📦 **交接包**：`ai-brief.md`＋`SPEC.md`＋`spec.json`＋`DECISIONS.md`＋圖片，讓 AI 做設計範本、讓後續開發知道所有該知道的事
-- 🗄️ **本機資料庫**：累積每次探索，搜尋、比較、追蹤改版與健檢分數變化
+**讓 AI 真的「看懂」一個網站，然後接手把它做出來。**
+
+一行指令，把任何公開網站變成 AI 與工程師都接得住的交接包：設計 token、**可執行的頁面骨架**、動畫／3D 的文字化描述、SEO／健檢報告，外加一個離線儀表板。
+
+[![test](https://github.com/rocksk8/CODE/actions/workflows/test.yml/badge.svg)](https://github.com/rocksk8/CODE/actions/workflows/test.yml)
+![license](https://img.shields.io/badge/license-MIT-blue)
+![node](https://img.shields.io/badge/node-%E2%89%A520-green)
+
+[English](README.en.md) · **繁體中文** · [範例輸出](docs/demo/) · [儀表板截圖](docs/images/)
+
+![site-explorer 儀表板導覽](docs/images/demo.gif)
+
+</div>
+
+```bash
+npm i -g git+https://github.com/rocksk8/CODE.git
+site-explorer setup
+site-explorer https://example.com
+```
+
+跑完會得到一個資料夾：雙擊 `dashboard.html` 看總覽；把 `handoff/` 整包丟給 AI，再貼上 `PROMPT.md` 裡的提示，它就能開始做頁面與動態——不用你寫一行說明。
+
+## 它做什麼
+
+| | |
+|---|---|
+| ![](docs/images/dashboard-overview.png) | **看得見的總覽**：桌機／平板／手機的實際畫面、健檢分數與驗收結論、品牌色（點一下複製）、字型、每一頁的縮圖牆。右上角「詳細資料」開關可展開每頁技術數據與原始 JSON。 |
+| ![](docs/images/starter-vs-original.png) | **可執行的頁面骨架**：依實測的區塊結構、欄數、間距、背景／漸層、手機導覽產生 `starter/*.html`；文案與圖片一律是佔位，不複製原站內容。左：原站；右：自動產生的起手式。 |
+| ![](docs/images/dashboard-motion-preview.png) | **3D／影片／動畫翻成 AI 看得懂的形式**：three.js 場景事實、哪些物件在轉、影片規格，加單張影格序列圖；`starter/motion/index.html` 把每個動畫跑起來，旁邊附參考畫格。 |
+| ![](docs/images/dashboard-export.png) | **一鍵匯出給 AI**：選目標（頁面／動態／兩者），複製現成提示；`AI-PACKAGE.md` 是單檔版，AI 讀不了資料夾時用。 |
+| ![](docs/images/dashboard-health.png) | **網站健檢**：SEO、爬蟲索引、連結、效能、行動版、安全、結構化資料、追蹤碼與 Cookie、AI 爬蟲友善度；有驗收結論（通過／有條件／不通過）與 `--fail-on` 給 CI 用。 |
+
+## 和別的工具差在哪
+
+| 你可能會用 | 它做得好的 | site-explorer 補的 |
+|---|---|---|
+| Lighthouse／PageSpeed | 效能、無障礙、最佳實務的標準分數 | 它不看「設計長什麼樣」，也不產生給 AI 的交接資料 |
+| axe／WAVE | 無障礙規則 | 同上；本工具另含 SEO 索引、追蹤碼、前後對照 |
+| Wappalyzer／BuiltWith | 技術偵測 | 只偵測；不擷取設計、不產生可用的骨架 |
+| 截圖轉程式碼的 AI 工具 | 單張圖產生頁面 | 通常只有一張圖，沒有實測的區塊結構、token、動畫數據、響應式行為 |
+| SiteSucker／wget | 整站下載 | 下載的是別人的檔案；本工具只記錄觀察到的事實並以佔位內容重建 |
+
+**定位**：探索 → 交接 →（讓 AI）重建。它不取代 Lighthouse 或 axe；它把「一個網站實際長怎樣、怎麼運作」整理成 AI 讀得懂的資料。
+
+## 適合誰
+
+- **改版／重做網站**：舊站的頁面清單（含 301 需求）、內容結構、設計 token，一次拿齊；改版前後自動對照。
+- **用 AI 做前端**：給它實測的結構與參考圖，而不是一段含糊的描述。
+- **SEO 與驗收**：可進 CI 的健檢（結束代碼）、新出現／已修復的問題清單。
+- **競品研究、設計系統整理**：色彩、字型（含授權）、間距、元件、動態節奏。
+
+---
 
 ## 安裝（一次搞定）
 

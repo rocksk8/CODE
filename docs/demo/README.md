@@ -1,10 +1,17 @@
+# Demo output (fictional sites)
+
+Real output of the current version against the fictional fixture sites in `plugins/site-explorer/test/fixtures/` (Acme Studio, and a WebGL + CSS-3D + video page). **Not an analysis of a real website.**
+Regenerate with `node plugins/site-explorer/tools/make-demo.mjs`.
+
+| Folder | What | Look at |
+|---|---|---|
+| `acme-studio/dashboard.html` | single-file dashboard (double-click) | overview, design, layout, health, **Export for AI** tab, **Details** switch |
+| `acme-studio/handoff/` | the handoff package for the marketing site | `START-HERE.md`, `PROMPT.md`, `starter/index.html` (runnable skeleton), `ai-brief.md`, `SPEC.md`, `media/sections/` |
+| `three-demo/dashboard.html` | dashboard with WebGL, CSS 3D and video | "3D／動畫" tab (frame player), live motion preview on the overview |
+| `three-demo/handoff/` | handoff with motion | `starter/motion/index.html` (every animation running next to its filmstrip), `motion.md`, `media/motion/*-filmstrip.png` |
+
+---
+
 # Demo 輸出（虛構網站）
 
-這些是用 `test/fixtures/` 內的**虛構網站**（Acme Studio、含 three.js 與影片的 3D 範例）實際跑出來的結果，用來展示輸出長什麼樣子。**不是真實網站的分析**，數據僅供格式參考。
-
-| 資料夾 | 內容 | 看什麼 |
-|---|---|---|
-| `acme-studio/dashboard.html` | 單檔儀表板（雙擊開啟） | 色票、字型授權、檢視元素、區塊切片、健檢分頁 |
-| `acme-studio/handoff/` | 行銷站的交接包 | `ai-brief.md`（先讀）、`SPEC.md`、`DECISIONS.md`、`media/sections/`（區塊裁切圖） |
-| `three-demo/dashboard.html` | 含 WebGL 與影片的儀表板 | 「3D／動畫」分頁的播放器 |
-| `three-demo/handoff/` | 含 3D 的交接包 | `motion.md`（three.js 場景描述、移動中的物件、影片規格）、`media/motion/*-filmstrip.png`（單張影格序列圖） |
+用目前版本對 `test/fixtures/` 內的**虛構網站**實際跑出來的結果；**不是真實網站的分析**。重新產生：`node plugins/site-explorer/tools/make-demo.mjs`。

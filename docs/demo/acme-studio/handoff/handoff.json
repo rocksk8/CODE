@@ -1,17 +1,22 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-10T09:25:02.325Z",
-  "site": "localhost:8791",
+  "generatedAt": "2026-10-11T14:17:13.974Z",
+  "site": "127.0.0.1:4173",
   "files": [
+    "AI-PACKAGE.md",
     "CLAUDE.md",
     "DECISIONS.md",
+    "PROMPT.md",
     "README.md",
     "SPEC.md",
+    "START-HERE.md",
     "ai-brief.md",
     "health.json",
     "health.md",
+    "inventory.csv",
     "media",
     "spec.json",
+    "starter",
     "tokens"
   ],
   "counts": {

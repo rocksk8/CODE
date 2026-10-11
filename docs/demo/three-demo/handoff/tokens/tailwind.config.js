@@ -1,4 +1,4 @@
-// tailwind.config.js (extracted from http://localhost:8793/)
+// tailwind.config.js (extracted from http://127.0.0.1:4174/)
 module.exports = {
   theme: {
     extend: {
