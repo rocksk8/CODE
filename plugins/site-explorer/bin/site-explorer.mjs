@@ -67,6 +67,12 @@ const ROUTES = {
 if (!cmd || ['-h', '--help', 'help'].includes(cmd)) { console.log(HELP); process.exit(0); }
 if (['-v', '--version', 'version'].includes(cmd)) { console.log(version); process.exit(0); }
 
+if (['health', 'handoff'].includes(cmd) && rest.some((a) => a === '--help' || a === '-h')) {
+  console.log(cmd === 'health'
+    ? _t('用法：site-explorer health <網址> [--max-pages 6] [--out ./explore-out] [--fail-on high] [--no-link-check] [--json]\n  對網站做 SEO／爬蟲索引／連結／效能／行動版／安全健檢。其實是完整探索（不含 3D／動畫），所以也會產生儀表板與交接包。\n  已經爬好的資料夾可改用：site-explorer health --site <含 site.json 的資料夾>')
+    : _t('用法：site-explorer handoff <網址> [--max-pages 6] [--out ./explore-out] [--verify] [--framework react|vue|astro|shadcn|all]\n  與 explore 相同（完整探索），重點是產出 handoff/ 交接包：START-HERE.md、PROMPT.md、starter/、SPEC.md…。其他選項見 site-explorer explore --help'));
+  process.exit(0);
+}
 if (!['-h', '--help', 'help', '-v', '--version', 'version'].includes(cmd) && cmd) assertNode();
 let target;
 if (ROUTES[cmd]) target = ROUTES[cmd](rest);

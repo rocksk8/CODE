@@ -139,7 +139,7 @@ export function renderMd(r) {
 
 if (isMain(import.meta.url)) {
   const dir = args.find((a, i) => !a.startsWith('--') && !['--page', '--min-score', '--out'].includes(args[i - 1]));
-  if (!dir) { console.error(_t('用法：site-explorer verify <交接包資料夾（handoff）> [--page home] [--min-score 60] [--out <資料夾>] [--json]')); process.exit(1); }
+  if (!dir) { console.error(_t('用法：site-explorer verify <交接包資料夾（handoff）> [--page home] [--min-score N] [--out <資料夾>] [--json]\n  --min-score N   門檻（0–100）；總分低於它就以結束代碼 2 結束。不加就不設門檻\n  分數衡量版面（區塊高度、明暗結構、顏色），不比對文字與照片')); process.exit(1); }
   const min = Number(opt('min-score', 0));
   if (!Number.isFinite(min) || min < 0 || min > 100) { console.error(_t('--min-score 必須是 0–100 的數字')); process.exit(1); }
   try {
