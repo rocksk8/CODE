@@ -1911,5 +1911,9 @@
 "沒有 ffmpeg，略過錄影（只擷取畫格）。要錄影請執行：site-explorer setup --with-ffmpeg": "No ffmpeg, so video recording is skipped (frames only). To record video run: site-explorer setup --with-ffmpeg",
 "\n沒有任何頁面被爬取，略過其餘階段。請檢查網址有沒有打錯、網路是否正常，或執行：site-explorer doctor {}": "\nNo pages could be crawled, so the other stages are skipped. Check the address for typos and the network, or run: site-explorer doctor {}",
 "原因：頁面無法載入（網址錯誤、逾時或被擋住）。請執行：site-explorer doctor <網址> 確認連線。": "Reason: the page could not be loaded (wrong URL, timeout or blocked). Run: site-explorer doctor <url> to check the connection.",
-"終端機：<code>site-explorer history search --lib three</code>、<code>site-explorer history list</code>": "Terminal: <code>site-explorer history search --lib three</code>, <code>site-explorer history list</code>"
+"終端機：<code>site-explorer history search --lib three</code>、<code>site-explorer history list</code>": "Terminal: <code>site-explorer history search --lib three</code>, <code>site-explorer history list</code>",
+"憑證不受信任（簽發者或憑證鏈無法驗證）": "Certificate is not trusted (issuer or chain cannot be verified)",
+"安裝完整憑證鏈，或改用受信任的憑證機構簽發的憑證。": "Install the full certificate chain, or use a certificate from a trusted authority.",
+"{} 個網址不夠乾淨（過長、含大寫、底線或過多參數）": "{} URLs are not clean (too long, uppercase, underscores or too many parameters)",
+"使用小寫、連字號、簡短且有意義的路徑。": "Use lowercase, hyphens and short, meaningful paths."
 }
