@@ -22,6 +22,7 @@ const USAGE = `用法：site-explorer explore <網址> [更多網址…] [選項
   --no-motion          不擷取 3D／動畫          --no-health   不做 SEO／索引健檢
   --no-link-check      健檢時不檢查連結狀態      --no-handoff  不產生交接包
   --no-db              不存入歷史資料庫          --wait 4000   3D 擷取前等待毫秒
+  --verify             交接包產生後，順便驗證 starter 骨架和原站像不像（逐區塊相似度＋差異圖，結果進儀表板）
   --motion-pages 5     3D／動畫擷取的頁數上限（含起始頁；1 = 只擷取起始頁）
   --headed             顯示瀏覽器視窗（可親手點「進入」；對防機器人／整頁 3D 網站較有效）
   --open | --no-open   完成後是否自動開啟儀表板  --no-standalone  儀表板不內嵌圖片
@@ -48,7 +49,7 @@ const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
 const siteDir = path.join(siteRoot, host), motionDir = path.join(motionRoot, host);
 const steps = [];
-const total = 7 - ['--no-motion', '--no-db', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length;
+const total = 7 - ['--no-motion', '--no-db', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
 let n = 0;
 
 function run(label, script, a) {
@@ -130,6 +131,7 @@ try {
 let handoffOk = false;
 const handoffDir = path.join(out, 'handoff');
 if ((crawlOk || motionOk) && crawlOk && !args.includes('--no-handoff')) handoffOk = await run('產生交接包（AI 簡報、完整規格、決策紀錄、圖片）', 'build-handoff.mjs', ['--site', siteDir, ...(motionOk ? ['--motion', motionDir] : []), '--out', handoffDir]);
+if (handoffOk && args.includes('--verify')) await run('驗證重建（starter 對照原站，逐區塊相似度）', 'verify.mjs', [handoffDir]);
 const dash = path.join(out, 'dashboard.html');
 if (!crawlOk && !motionOk) console.log('\n探索沒有成功，略過儀表板與交接包。請先處理上面的錯誤（可執行 site-explorer doctor 檢查環境），再重新執行。');
 else await run('產生圖形化儀表板', 'build-report.mjs', [...(crawlOk ? ['--site', siteDir] : []), ...(motionOk ? ['--motion', motionDir] : []), '--out', dash, ...(handoffOk ? ['--handoff', handoffDir] : []), ...(args.includes('--no-standalone') ? [] : ['--standalone'])]);

@@ -33,7 +33,7 @@ const ref = (file, allowEmbed = true) => {
 const readJSON = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const exists = fs.existsSync;
 
-const data = { standalone, embed, generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, health: null, files: [], motionPages: null, exportKit: null };
+const data = { standalone, embed, generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, health: null, files: [], motionPages: null, exportKit: null, verify: null };
 
 if (siteDir && exists(path.join(siteDir, 'site.json'))) {
   data.site = readJSON(path.join(siteDir, 'site.json'));
@@ -110,6 +110,10 @@ if (handoffDir && exists(path.join(handoffDir, 'START-HERE.md'))) {
   for (const f of walk(path.join(handoffDir, 'starter')).sort()) add_(path.relative(handoffDir, f).split(path.sep).join('/'), /\.(html|css|js)$/.test(f) ? textOf(path.relative(handoffDir, f)) : null);
   const relOf = (f) => path.relative(handoffDir, f).split(path.sep).join('/'); // judge RELATIVE paths: the output folder's own name must not change the counts
   const imgs = walk(path.join(handoffDir, 'media')).filter((f) => /\.png$/.test(f)).map(relOf);
+  try { // optional: verify/verify.json from `site-explorer verify` (rebuilt starter vs the original), with its difference images
+    const v = readJSON(path.join(handoffDir, 'verify', 'verify.json'));
+    data.verify = { overall: v.overall, grade: v.grade, minScore: v.minScore, passed: v.passed, pages: (v.pages || []).map((p) => ({ page: String(p.page), score: p.score, sections: (p.sections || []).map((x) => ({ name: String(x.name), status: String(x.status), score: x.score, grade: x.grade, layout: x.layout, colour: x.colour, height: x.height, refHeight: x.refHeight, gotHeight: x.gotHeight, diff: x.diff && !/\.\./.test(x.diff) ? ref(path.join(handoffDir, 'verify', x.diff)) : null })) })) };
+  } catch {}
   data.exportKit = { dir: handoffDir, prompts, files, hasMotion: exists(path.join(handoffDir, 'starter', 'motion')), starterPages: walk(path.join(handoffDir, 'starter')).map(relOf).filter((f) => /^starter\/[^/]+\.html$/.test(f)).length, images: imgs.length, sectionImages: imgs.filter((f) => /^media\/sections\//.test(f)).length, motionImages: imgs.filter((f) => /^media\/motion\//.test(f)).length };
 }
 

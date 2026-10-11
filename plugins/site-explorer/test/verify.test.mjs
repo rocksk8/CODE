@@ -75,3 +75,31 @@ test('verify: a corrupt reference image or a hidden section is reported for that
   assert.match(by.features.status, /PNG/);
   assert.equal(by.cta.status, 'ok'); assert.ok(by.cta.score >= 70, `cta still matched by name: ${by.cta.score}`);
 });
+
+test('explore --verify: a real run verifies its own starter and the dashboard shows the result with difference images', async (t) => {
+  if (!haveBrowser) return t.skip('no browser');
+  const { spawn } = await import('node:child_process'); const http = await import('node:http');
+  const html = '<!doctype html><title>V</title><style>body{margin:0;font-family:Arial}header{background:#111;color:#fff;padding:20px}section{padding:80px 20px}.h{background:#eef}</style><header><nav><a href="/">Home</a> <a href="/a">A</a></nav></header><section class="h"><h1>Big headline for the hero</h1><p>Some long paragraph text for this fixture hero block so it counts as content.</p><button>Go</button></section><section><h2>Features</h2><p>Plenty of words here to describe features of the fixture page properly.</p></section><footer style="background:#222;color:#ccc;padding:40px">Footer text here</footer>';
+  const server = http.createServer((q, r) => { r.writeHead(q.url === '/robots.txt' ? 404 : 200, { 'content-type': 'text/html' }); r.end(html); });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const out = path.join(tmp, 'xv');
+  try {
+    const r = await new Promise((resolve) => {
+      const p = spawn(process.execPath, [path.join(root, 'bin', 'site-explorer.mjs'), `http://127.0.0.1:${server.address().port}/`, '--max-pages', '1', '--no-motion', '--no-health', '--no-db', '--no-open', '--verify', '--out', out], { env: { ...process.env, SITE_EXPLORER_DB: path.join(tmp, 'v.db') } });
+      let o = ''; const k = setTimeout(() => p.kill(), 200000); p.stdout.on('data', (d) => (o += d)); p.stderr.on('data', (d) => (o += d)); p.on('close', (s) => { clearTimeout(k); resolve({ s, o }); });
+    });
+    assert.equal(r.s, 0, r.o);
+    const v = JSON.parse(fs.readFileSync(path.join(out, 'handoff', 'verify', 'verify.json'), 'utf8'));
+    assert.ok(v.overall > 0 && v.pages[0].sections.length >= 3, JSON.stringify(v.overall));
+    const dash = fs.readFileSync(path.join(out, 'dashboard.html'), 'utf8');
+    assert.ok(dash.includes('重建驗證') && dash.includes('"verify":{"overall"'), 'dashboard carries the verify result');
+    const b = await launchBrowser(); const pg = await b.newPage();
+    try {
+      const errs = []; pg.on('pageerror', (e) => errs.push(e.message));
+      await pg.goto('file://' + path.join(out, 'dashboard.html')); await pg.locator('[data-go="export"], button:has-text("匯出給 AI")').first().click();
+      assert.ok(await pg.locator('#s-export').innerText().then((x) => /重建驗證/.test(x)));
+      assert.ok(await pg.locator('#s-export img[alt$="差異圖"]').count() >= 3, 'difference images are shown');
+      assert.deepEqual(errs, []);
+    } finally { await b.close(); }
+  } finally { server.close(); }
+});
