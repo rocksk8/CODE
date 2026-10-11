@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // One command: check → crawl → design bundle → SEO health → 3D capture → database → dashboard → handoff package.
 //   explore.mjs <url> [--max-pages 6] [--out ./explore-out] [--no-motion] [--no-db] [--wait 4000]
-import { _t } from './i18n.mjs';
+import { _t, LANG } from './i18n.mjs';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import fs from 'node:fs';
@@ -69,7 +69,7 @@ function run(label, script, a) {
   return new Promise((resolve) => {
     const t0 = Date.now();
     console.log(`\n[${++n}/${total}] ${label}`);
-    const p = spawn(process.execPath, [path.join(here, script), ...a], { env: process.env });
+    const p = spawn(process.execPath, [path.join(here, script), ...a], { env: { ...process.env, SITE_EXPLORER_LANG: LANG } });
     let tail = '';
     const onData = (d) => { tail = (tail + d).slice(-4000); for (const l of String(d).split('\n')) if (l.trim() && !/ExperimentalWarning|trace-warnings|agent-proxy|android\.clients|For details: curl/.test(l)) console.log('   ' + l); };
     p.stdout.on('data', onData); p.stderr.on('data', onData);
@@ -182,6 +182,6 @@ let failCode = 0;
 if (failOn && !healthOk) { failCode = 1; console.error(_t`--fail-on ${failOn} 需要這次健檢成功，但健檢${args.includes('--no-health') ? _t('被 --no-health 略過') : _t('沒有完成')}；為避免用舊結果誤判，以結束代碼 1 結束。`); }
 try { const hj = path.join(siteDir, 'health.json'); if (healthOk && fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(_t`驗收結論：${h.verdict?.label ?? '—'}`); if (failOn) { const rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }; if (h.issues.some((i) => rank[i.severity] <= rank[failOn])) { failCode = 4; console.error(_t`健檢有 ${failOn} 以上的問題，依 --fail-on ${failOn} 以結束代碼 4 結束。`); } } } } catch {}
 if (fs.existsSync(dash)) console.log(_t('\n👉 下一步：先雙擊 dashboard.html 看總覽；要交給 AI 或工程師，就把 handoff 資料夾整個給對方。'));
-if (fs.existsSync(path.join(siteDir, 'report.md')) && fs.readFileSync(path.join(siteDir, 'report.md'), 'utf8').includes('被擋住')) console.log(_t('\n⚠️ 部分頁面被擋住，結果可能不完整（見儀表板或 report.md）。'));
+if (fs.existsSync(path.join(siteDir, 'report.md')) && fs.readFileSync(path.join(siteDir, 'report.md'), 'utf8').includes(_t('被擋住'))) console.log(_t('\n⚠️ 部分頁面被擋住，結果可能不完整（見儀表板或 report.md）。'));
 if (JSON_MODE) { const { buildSummary } = await import('./summary.mjs'); process.stdout.write(JSON.stringify({ ok: !!(crawlOk || motionOk) && failCode === 0, exitCode: crawlOk || motionOk ? failCode : 1, ...buildSummary({ out, host, steps, url }), runId }, null, 2) + '\n'); }
 process.exit(crawlOk || motionOk ? failCode : 1);

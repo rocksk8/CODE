@@ -353,15 +353,15 @@ export async function runHealth(siteDir, opts = {}) {
   else if (live.some((p) => p.seo.structuredData.jsonld.length)) ok('structured', _t`偵測到結構化資料：${[...new Set(pages.flatMap((p) => p.seo.structuredData.jsonld.flatMap((j) => j.types || [])))].slice(0, 6).join(_t('、'))}`);
   { // what each item must contain for its type; context; whether the markup exists without running JavaScript
     const allNodes = (p) => p.seo.structuredData.jsonld.filter((j) => !j.error);
-    const bad = [], rec = [], noCtx = [], untyped = [];
+    const bad = [], badPages = new Set(), rec = [], noCtx = [], untyped = [];
     for (const p of live) {
       const nodes = allNodes(p); if (!nodes.length) continue;
       if (!nodes.every((j) => 'context' in j)) continue; // crawled by an older version (no @context, truncated properties): judging it would invent findings
       const found = validateNodes(nodes);
-      for (const f of found) { if (f.untyped) { if (!untyped.includes(p)) untyped.push(p); continue; } if (f.missing.length) bad.push(_t`${p.url}：${f.type} 缺少 ${f.missing.join(_t('、'))}`); else if (f.recommended.length) rec.push(_t`${p.url}：${f.type} 建議補 ${f.recommended.slice(0, 4).join(_t('、'))}`); }
+      for (const f of found) { if (f.untyped) { if (!untyped.includes(p)) untyped.push(p); continue; } if (f.missing.length) { bad.push(_t`${p.url}：${f.type} 缺少 ${f.missing.join(_t('、'))}`); badPages.add(p.url); } else if (f.recommended.length) rec.push(_t`${p.url}：${f.type} 建議補 ${f.recommended.slice(0, 4).join(_t('、'))}`); }
       if (nodes.some((j) => j.types.length && !hasContextOk(j.context))) noCtx.push(p);
     }
-    if (bad.length) add('structured', 'high', 'jsonld-missing-required', _t`${bad.length} 個結構化資料項目缺少必填欄位`, { affected: new Set(bad.map((b) => b.split('：')[0])).size, scope: 'page', examples: bad, impact: _t('缺必填欄位的標記不會取得豐富搜尋結果（星等、價格、FAQ 摺疊等），Search Console 也會回報錯誤。'), fix: _t('依類型補上欄位（範例：Product 要有 name 與 offers／review／aggregateRating；Article 要有 headline、datePublished、author）；用 Rich Results Test 驗證。') });
+    if (bad.length) add('structured', 'high', 'jsonld-missing-required', _t`${bad.length} 個結構化資料項目缺少必填欄位`, { affected: badPages.size, scope: 'page', examples: bad, impact: _t('缺必填欄位的標記不會取得豐富搜尋結果（星等、價格、FAQ 摺疊等），Search Console 也會回報錯誤。'), fix: _t('依類型補上欄位（範例：Product 要有 name 與 offers／review／aggregateRating；Article 要有 headline、datePublished、author）；用 Rich Results Test 驗證。') });
     if (noCtx.length) add('structured', 'medium', 'jsonld-no-context', _t`${noCtx.length} 個頁面的 JSON-LD 缺少 @context: "https://schema.org"`, { affected: noCtx.length, scope: 'page', examples: urls(noCtx), impact: _t('沒有 @context，解析器不知道這些欄位的定義，整段標記會被忽略。'), fix: _t('在每個 JSON-LD 加上 "@context": "https://schema.org"。') });
     if (untyped.length) add('structured', 'medium', 'jsonld-no-type', _t`${untyped.length} 個頁面有沒有 @type 的 JSON-LD 項目`, { affected: untyped.length, scope: 'page', examples: urls(untyped), fix: _t('每個項目都要宣告 "@type"（例如 Organization、Product、Article）。') });
     if (rec.length) add('structured', 'low', 'jsonld-recommended', _t`${rec.length} 個結構化資料項目缺少建議欄位`, { examples: rec, impact: _t('不影響資格，但欄位越完整，搜尋結果呈現越豐富。'), fix: _t('有資料的話補上建議欄位。') });

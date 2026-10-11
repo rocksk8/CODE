@@ -22,10 +22,17 @@ export function _t(first, ...vals) {
   if (!isEnglish) return tagged ? plain(first, vals) : first;
   const key = tagged ? first.join('{}') : first;
   const en = load()[key];
-  if (en === undefined) return tagged ? plain(first, vals) : first;
+  if (en === undefined) { // untranslated: fall back to the original, and (for the test suite) record it
+    if (process.env.SITE_EXPLORER_I18N_TRACE && /[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/.test(key)) { try { fs.appendFileSync(process.env.SITE_EXPLORER_I18N_TRACE, JSON.stringify(key) + '\n'); } catch {} }
+    return tagged ? plain(first, vals) : first;
+  }
   return tagged ? fill(en, vals) : en;
 }
 
 /** The whole dictionary (for the dashboard, which runs in a browser). */
 export const dictionary = () => (isEnglish ? load() : {});
 export const htmlLang = () => (isEnglish ? 'en' : 'zh-Hant');
+
+/** Section-pattern reasons come from code that runs inside the browser page (no translator there), so they are translated where they are shown. */
+export const WHY_KEYS = ['頁首標籤／頂部導覽', '頁尾標籤／底部大量連結', '首屏大標題＋按鈕或媒體', '價格字樣與重複方案', '引言或客戶見證', '展開式問答', '表單欄位', '多張小圖且文字少', '多個數字', '多張圖片', '頁尾附近的短文＋按鈕', '未符合特定版型', '重複 {} 個卡片'];
+export const whyText = (s) => { const m = /^重複 (\d+) 個卡片$/.exec(String(s ?? '')); return m ? _t`重複 ${m[1]} 個卡片` : _t(String(s ?? '')); };

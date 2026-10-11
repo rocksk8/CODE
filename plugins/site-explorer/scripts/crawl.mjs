@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Crawl a site with a real browser and capture design, content, layout and editing signals.
-import { _t } from './i18n.mjs';
+import { _t, whyText } from './i18n.mjs';
 import { launchBrowser } from './launch.mjs';
 import { findUrl, findUrls, intOpt, sameSite, loadRobots, CRAWLER_UA_TOKEN, normalizeFlags } from './args.mjs';
 import { isAllowed, groupFor } from './robots.mjs';
@@ -443,6 +443,7 @@ while (pages.length < maxPages) {
       if (data.emptyDiag) { data.emptyDiag.consoleErrors = pageErrors.slice(); const n = net.summary(page.url()); data.emptyDiag.scripts = n.byType.script || 0; data.emptyDiag.dataRequests = (n.byType.fetch || 0) + (n.byType.xhr || 0); data.emptyDiag.requests = n.total; data.emptyDiag.scriptUrls = n.scriptUrls || []; }
     }
     data.designer = await page.evaluate(extractDesignerInPage).catch((e) => { console.log('   (designer data skipped:', e.message.split('\n')[0] + ')'); return null; });
+    for (const b of data.designer?.blocks || []) if (b && typeof b.why === 'string') b.why = whyText(b.why); // the reason text is produced inside the page (no translator there): translate it here
     data.status = resp?.status();
     // --- SEO / indexability signals ---
     data.seo = await page.evaluate(extractSeoInPage).catch((e) => { console.log('   (seo data skipped:', e.message.split('\n')[0] + ')'); return null; });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // site-explorer — one command for everything.   site-explorer <網址>   or   site-explorer <子指令> …
-import { _t } from '../scripts/i18n.mjs';
+import { _t, LANG } from '../scripts/i18n.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -43,7 +43,9 @@ const HELP = _t`site-explorer ${version} — 探索網站：設計、內容、�
 `;
 
 import { assertNode } from '../scripts/util.mjs';
-const argv = process.argv.slice(2);
+// --lang en|zh is consumed here: it selects the output language for this process and every child process, and is not passed on to the scripts
+process.env.SITE_EXPLORER_LANG = LANG;
+const argv = (() => { const a = process.argv.slice(2), o = []; for (let i = 0; i < a.length; i++) { if (a[i] === '--lang') { i++; continue; } if (a[i].startsWith('--lang=')) continue; o.push(a[i]); } return o; })();
 const [cmd, ...rest] = argv;
 const looksLikeUrl = (s) => !!s && !s.startsWith('-') && /^(https?:\/\/|localhost\b|[\w-]+(\.[\w-]+)+(:\d+)?(\/|$))/i.test(s);
 

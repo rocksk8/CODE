@@ -162,11 +162,11 @@ export function renderChangesMd(db, a, b) {
   const L = [_t`# 改版前後對照`, '', BANNER, '', _t`- 之前：run #${a}　${A.host}　${String(A.crawled_at || '').slice(0, 10)}`, _t`- 之後：run #${b}　${B.host}　${String(B.crawled_at || '').slice(0, 10)}`, '', _t('> 頁面以「路徑」對應，所以舊站與新站在不同網域（例如測試站）也能比。只比較兩次都有爬到的頁面。'), ''];
   const risk = [];
   if (d.removed.length) risk.push(_t`**${d.removed.length} 個舊網址在新版消失** — 沒有設定 301 就會變 404，搜尋排名與外部連結會流失。`);
-  const lostDesc = d.changed.filter((c) => c.changes.some((x) => x.field === '描述' && x.from && !x.to)); if (lostDesc.length) risk.push(_t`${lostDesc.length} 頁的 meta description 被拿掉了。`);
-  const noidx = d.changed.filter((c) => c.changes.some((x) => x.field === 'noindex' && x.to === '是')); if (noidx.length) risk.push(_t`**${noidx.length} 頁在新版變成 noindex**（不會被搜尋引擎收錄）。`);
-  const errs = d.changed.filter((c) => c.changes.some((x) => x.field === '狀態碼' && Number(x.to) >= 400)); if (errs.length) risk.push(_t`${errs.length} 頁在新版回應錯誤狀態碼。`);
-  const shrunk = d.changed.filter((c) => c.changes.some((x) => x.field === '字數' && x.to < x.from)); if (shrunk.length) risk.push(_t`${shrunk.length} 頁的文字量減少 30% 以上。`);
-  const lostLd = d.changed.filter((c) => c.changes.some((x) => x.field === '結構化資料' && x.to === '（無）')); if (lostLd.length) risk.push(_t`${lostLd.length} 頁的結構化資料不見了。`);
+  const lostDesc = d.changed.filter((c) => c.changes.some((x) => x.field === _t('描述') && x.from && !x.to)); if (lostDesc.length) risk.push(_t`${lostDesc.length} 頁的 meta description 被拿掉了。`);
+  const noidx = d.changed.filter((c) => c.changes.some((x) => x.field === 'noindex' && x.to === _t('是'))); if (noidx.length) risk.push(_t`**${noidx.length} 頁在新版變成 noindex**（不會被搜尋引擎收錄）。`);
+  const errs = d.changed.filter((c) => c.changes.some((x) => x.field === _t('狀態碼') && Number(x.to) >= 400)); if (errs.length) risk.push(_t`${errs.length} 頁在新版回應錯誤狀態碼。`);
+  const shrunk = d.changed.filter((c) => c.changes.some((x) => x.field === _t('字數') && x.to < x.from)); if (shrunk.length) risk.push(_t`${shrunk.length} 頁的文字量減少 30% 以上。`);
+  const lostLd = d.changed.filter((c) => c.changes.some((x) => x.field === _t('結構化資料') && x.to === _t('（無）'))); if (lostLd.length) risk.push(_t`${lostLd.length} 頁的結構化資料不見了。`);
   L.push(_t('## 要先處理的風險'), ...(risk.length ? risk.map((r) => '- ' + r) : [_t('- 沒有發現明顯的 SEO 風險。')]), '');
   if (A.health_score != null && B.health_score != null) L.push(_t`健檢分數：${A.health_score}（${A.health_grade}）→ ${B.health_score}（${B.health_grade}）`, '');
   L.push(_t`## 舊網址消失（${d.removed.length}）— 需要 301 轉址`, ...(d.removed.length ? d.removed.slice(0, 200).map((r) => _t`- \`${q(r.path)}\`　${r.title ? _t('（') + q(r.title).slice(0, 120) + _t('）') : ''}`) : [_t('- 無')]), '');

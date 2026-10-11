@@ -14,7 +14,7 @@
 //     health.md        SEO / indexability findings (if checked)
 //     tokens/          css, W3C, Tokens Studio, tailwind, palette.svg
 //     media/           section crops, page shots, motion filmstrips, brand assets (all viewable by AI)
-import { _t } from './i18n.mjs';
+import { _t, whyText } from './i18n.mjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -209,7 +209,7 @@ const spec = {
     url: p.url, path: new URL(p.url).pathname || '/', slug: p.slug, type: pageType(p),
     observed: { responsive: p.responsive || null, emptyPage: !!p.emptyPage, emptyDiag: p.emptyDiag || null, deep: p.deep || null, network: p.network || null, aria: p.aria || null, states: (p.states || []).map((s) => ({ index: s.index, action: s.action, label: s.label, textChars: s.textChars, text: s.text, shot: s.shotPath || null })) },
     meta: { title: p.seo?.title ?? p.title, description: p.seo?.description ?? null, canonical: p.seo?.canonical ?? null, lang: p.lang || p.seo?.lang || null, h1: p.seo?.h1 || [] },
-    sections: (p.designer?.blocks || []).map((b, i) => ({ index: i + 1, kind: b.kind, kindLabel: KIND[b.kind], purpose: PURPOSE[b.kind], why: b.why, y: b.y, height: b.h, columns: b.columns, headings: b.headings, buttons: b.buttons, media: b.media, image: b.image || null, look: b.style || null, content: b.content || [] })),
+    sections: (p.designer?.blocks || []).map((b, i) => ({ index: i + 1, kind: b.kind, kindLabel: KIND[b.kind], purpose: PURPOSE[b.kind], why: whyText(b.why), y: b.y, height: b.h, columns: b.columns, headings: b.headings, buttons: b.buttons, media: b.media, image: b.image || null, look: b.style || null, content: b.content || [] })),
     responsive: { desktopOverflow: !!p.layout?.desktopOverflow, tabletOverflow: !!p.layout?.tabletOverflow, mobileOverflow: !!p.layout?.mobileOverflow, mobile: p.seo?.mobile || null }, media: media.pages[p.slug],
     images: (p.content?.images || []).slice(0, 40).map((i) => ({ src: i.src, alt: i.alt, w: i.w, h: i.h })), forms: p.content?.forms || [],
   })),
@@ -269,7 +269,7 @@ for (const p of spec.pages) {
     L.push(...T(['#', _t('版型'), _t('用途'), _t('高'), _t('欄'), _t('圖片')], p.sections.map((s) => [s.index, s.kindLabel, s.purpose, s.height + 'px', s.columns, s.image ? '`' + s.image + '`' : '—'])), '');
     for (const s of p.sections) {
       if (!s.content.length) continue;
-      L.push(_t`**${s.index}. ${s.kindLabel}**（推測依據：${s.why}）`, ...s.content.slice(0, 12).map((c) => c.t === 'img' ? _t`- 圖片 alt=「${c.alt}」${c.w}×${c.h}` : `- \`${c.t}\` ${c.text}${c.href && c.t === 'a' ? ' → ' + String(c.href).replace(origin, '') : ''}`), '');
+      L.push(_t`**${s.index}. ${s.kindLabel}**（推測依據：${whyText(s.why)}）`, ...s.content.slice(0, 12).map((c) => c.t === 'img' ? _t`- 圖片 alt=「${c.alt}」${c.w}×${c.h}` : `- \`${c.t}\` ${c.text}${c.href && c.t === 'a' ? ' → ' + String(c.href).replace(origin, '') : ''}`), '');
     }
   }
 }

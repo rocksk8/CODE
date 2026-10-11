@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Build a single-page visual dashboard (offline, no CDN) from crawl + motion + design outputs.
 //   node build-report.mjs --site ./site-report/<host> [--motion ./motion-report/<host>] [--out ./dashboard.html]
-import { _t } from './i18n.mjs';
+import { _t, htmlLang, dictionary, WHY_KEYS } from './i18n.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -129,21 +129,25 @@ if (handoffDir && exists(path.join(handoffDir, 'START-HERE.md'))) {
 
 // UI lives in plain files (report/report.css, report/report-client.js) so it is editable without template-literal escaping.
 const read = (f) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'report', f), 'utf8');
-const html = _t`<!doctype html>
-<html lang="zh-Hant"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file: 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; media-src file: 'self' data:"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Site Explorer 報告</title>
+const clientSrc = read('report-client.js');
+// English dashboards carry the part of the dictionary that the browser-side code uses (keys are the Chinese source strings)
+const enDict = Object.fromEntries(Object.entries(dictionary()).filter(([k]) => WHY_KEYS.includes(k) || (() => { const piece = k.split('{}').sort((a, b) => b.length - a.length)[0]; return piece && clientSrc.includes(piece); })()));
+const html = `<!doctype html>
+<html lang="${htmlLang()}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file: 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; media-src file: 'self' data:"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${_t('Site Explorer 報告')}</title>
 <style>
 ${read('report.css')}
 </style></head><body>
-<header><h1>🔍 網站探索報告</h1><div class="sub" id="sub"></div></header>
+<header><h1>🔍 ${_t('網站探索報告')}</h1><div class="sub" id="sub"></div></header>
 <nav><div class="in" id="tabs"></div></nav>
 <main>
 <section id="s-overview"></section><section id="s-design"></section><section id="s-layout"></section>
 <section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-health"></section><section id="s-history"></section><section id="s-export"></section><section id="s-data"></section><section id="s-about"></section>
 </main><div class="toast" id="toast"></div>
 <script id="data" type="application/json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>
+<script>window.__EN=${JSON.stringify(enDict).replace(/</g, '\\u003c')}</script>
 <script>
-${read('report-client.js').replace(/<\/script/gi, '<\\/script')}
+${clientSrc.replace(/<\/script/gi, '<\\/script')}
 </script></body></html>`;
 
 fs.mkdirSync(outDir, { recursive: true });
