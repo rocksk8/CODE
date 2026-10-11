@@ -383,3 +383,11 @@ test('explore: a bad URL is named in the error, and a bad --fail-on is rejected 
   r = await run('explore.mjs', ['https://example.com', '--fail-on', 'bogus']); assert.equal(r.status, 1); assert.match(r.out, /--fail-on 需要/);
   r = await run('explore.mjs', ['--help']); assert.match(r.out, /--fail-on/); assert.match(r.out, /結束代碼/);
 });
+
+test('explore CLI: --flag=value, missing values and --fail-on with --no-health are handled loudly, never silently ignored', async () => {
+  let r = await run('explore.mjs', ['https://example.com', '--fail-on']); assert.equal(r.status, 1); assert.match(r.out, /--fail-on 需要一個值/);
+  r = await run('explore.mjs', ['https://example.com', '--fail-on=bogus']); assert.equal(r.status, 1); assert.match(r.out, /--fail-on 需要/, 'the = form is parsed (and then rejected as a bad level)');
+  r = await run('explore.mjs', ['https://example.com', '--out', '--no-motion']); assert.equal(r.status, 1); assert.match(r.out, /--out 需要一個值/);
+  r = await run('explore.mjs', ['https://example.com', '--fail-on=high', '--no-health']); assert.equal(r.status, 1); assert.match(r.out, /不能和 --no-health/);
+  r = await run('health-check.mjs', ['--site', '/nonexistent', '--max-links']); assert.equal(r.status, 1);
+});

@@ -30,8 +30,8 @@ const ruleFor = (type) => (RULES[type] ? type : LOCAL.test(type) ? 'LocalBusines
 export function validateNodes(nodes) {
   const out = [];
   for (const n of nodes) {
-    if (n.error) continue;
-    if (!n.types || !n.types.length) { if (n.props && n.props.length > 1) out.push({ type: '(沒有 @type)', untyped: true, missing: [], recommended: [] }); continue; }
+    if (n.error || n.empty) continue;
+    if (!n.types || !n.types.length) { if (!n.hasId && n.props && n.props.length > 1) out.push({ type: '(沒有 @type)', untyped: true, missing: [], recommended: [] }); continue; } // {"@id": …} reference nodes are not items
     for (const t of n.types) {
       const key = ruleFor(t); if (!key) continue; const r = RULES[key]; const has = new Set(n.props || []);
       const missing = r.req.filter((p) => !has.has(p));

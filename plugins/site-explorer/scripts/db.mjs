@@ -126,7 +126,7 @@ export function diffRuns(db, a, b) {
   return changes;
 }
 
-const pathKey = (u) => { try { const x = new URL(u); return (x.pathname.replace(/\/+$/, '') || '/') + x.search; } catch { return String(u); } };
+const pathKey = (u) => { try { const x = new URL(u); return ((x.pathname.replace(/\/(index|default)\.(html?|php|aspx?)$/i, '/').replace(/\/+$/, '') || '/') + x.search).toLowerCase(); } catch { return String(u); } }; // /About = /about, /index.html = /
 /**
  * Page-by-page before/after for a redesign. Pages are matched by PATH, so it also works when the new site
  * lives on another host (staging) — a removed path is a URL that needs a 301 or it becomes a 404.
@@ -140,7 +140,9 @@ export function diffPages(db, a, b) {
     if (!rb) { if (live(ra)) out.removed.push({ path: k, title: ra.title }); continue; }
     const ch = [];
     const text = (label, x, y) => { if (String(x ?? '').trim() !== String(y ?? '').trim()) ch.push({ field: label, from: x ?? '', to: y ?? '' }); };
-    text('標題', ra.title, rb.title); text('h1', ra.h1, rb.h1); text('描述', ra.description, rb.description); text('canonical', pathKey(ra.canonical || ''), pathKey(rb.canonical || ''));
+    text('標題', ra.title, rb.title); text('h1', ra.h1, rb.h1);
+    if (ra.description != null && rb.description != null) text('描述', ra.description, rb.description); // NULL = a run stored before this column existed: unknown, not "empty"
+    if (ra.canonical != null && rb.canonical != null) text('canonical', pathKey(ra.canonical || ''), pathKey(rb.canonical || ''));
     if (ra.status !== rb.status) ch.push({ field: '狀態碼', from: ra.status ?? '', to: rb.status ?? '' });
     if (ra.noindex != null && rb.noindex != null && ra.noindex !== rb.noindex) ch.push({ field: 'noindex', from: ra.noindex ? '是' : '否', to: rb.noindex ? '是' : '否' });
     if (ra.words > 0 && rb.words != null && Math.abs(rb.words - ra.words) / ra.words >= 0.3) ch.push({ field: '字數', from: ra.words, to: rb.words });

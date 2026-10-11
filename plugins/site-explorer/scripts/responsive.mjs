@@ -9,7 +9,15 @@ export function extractResponsiveInPage() {
   const navRoot = document.querySelector('header nav, nav, [role=navigation], header');
   const navLinks = navRoot ? [...navRoot.querySelectorAll('a[href]')].filter(shown).length : 0;
   const toggleRe = /(menu|nav|burger|hamburger|toggle|drawer|選單|目錄|導覽)/i;
-  const toggles = [...document.querySelectorAll('button,[role=button],[aria-expanded],[aria-controls],label[for]')].filter((el) => shown(el) && (toggleRe.test((el.getAttribute('aria-label') || '') + ' ' + (el.className && el.className.baseVal === undefined ? el.className : '') + ' ' + (el.id || '') + ' ' + (el.innerText || '').slice(0, 20)) || el.hasAttribute('aria-expanded')));
+  const lookToggle = (el) => toggleRe.test((el.getAttribute('aria-label') || '') + ' ' + (el.className && el.className.baseVal === undefined ? el.className : '') + ' ' + (el.id || '') + ' ' + (el.innerText || '').slice(0, 20));
+  const toggles = [...document.querySelectorAll('button,[role=button],[aria-expanded],[aria-controls],label[for]')].filter((el) => shown(el) && (lookToggle(el) || el.hasAttribute('aria-expanded')));
+  if (!toggles.length) { // a hamburger is often a <div>/<span>/<i> with a click handler, not a <button>: small, clickable, named like a menu
+    for (const el of [...document.querySelectorAll('[class*=menu i],[class*=burger i],[class*=toggle i],[class*=nav-icon i],[id*=menu i],[id*=burger i],[onclick]')].slice(0, 200)) {
+      if (!shown(el) || el.closest('nav a, nav ul') || (!lookToggle(el) && !(el.hasAttribute('onclick') && el.closest('header, [role=banner], nav')))) continue; // unnamed click handlers only count inside the header
+      const r = el.getBoundingClientRect(); if (r.width > 120 || r.height > 120) continue;
+      const cs = getComputedStyle(el); if (cs.cursor === 'pointer' || el.hasAttribute('onclick') || el.querySelector('svg,i,span')) { toggles.push(el); break; }
+    }
+  }
   const nav = navLinks >= 2 ? 'links' : toggles.length ? 'toggle' : navRoot ? 'hidden' : 'none';
   // columns: distinct left edges among the visible children of grid / flex rows
   let multi = 0, maxCols = 0; const cols = [];

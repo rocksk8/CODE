@@ -22,7 +22,26 @@ export function normalizeUrl(input) {
 
 /** First CLI argument that looks like a URL (with or without scheme). */
 // options that take a value (so the value is never mistaken for a URL); boolean flags such as --open must not swallow the URL after them
-const VALUE_FLAGS = new Set(['--max-pages', '--depth', '--out', '--wait', '--motion-pages', '--frames', '--interval', '--max-targets', '--max-links', '--site', '--motion', '--embed-mb', '--a', '--b', '--lib', '--platform', '--font', '--color', '--health-below']);
+const VALUE_FLAGS = new Set(['--max-pages', '--depth', '--out', '--wait', '--motion-pages', '--frames', '--interval', '--max-targets', '--max-links', '--site', '--motion', '--embed-mb', '--a', '--b', '--lib', '--platform', '--font', '--color', '--health-below', '--fail-on', '--handoff']);
+/**
+ * `--flag=value` becomes `--flag value`; a value flag with no value (end of line, or followed by another flag) is an ERROR — never a silent default
+ * (a CI gate such as `--fail-on=high` must not quietly turn into "no gate").
+ * @returns {{ args: string[], error: string|null }}
+ */
+export function normalizeFlags(argv, valueFlags = VALUE_FLAGS) {
+  const out = [];
+  for (const a of argv) {
+    const m = /^(--[\w-]+)=([\s\S]*)$/.exec(a);
+    if (m && valueFlags.has(m[1])) { out.push(m[1], m[2]); continue; }
+    out.push(a);
+  }
+  for (let i = 0; i < out.length; i++) {
+    if (valueFlags.has(out[i]) && (out[i + 1] === undefined || /^--[a-z]/i.test(out[i + 1]))) return { args: out, error: `${out[i]} 需要一個值（例如 ${out[i]} <值>，或 ${out[i]}=<值>）` };
+    if (valueFlags.has(out[i])) i++;
+  }
+  return { args: out, error: null };
+}
+
 /** Every URL among the arguments, in order (the first one is where the crawl starts; the others are extra pages to include). */
 export function findUrls(args) {
   const out = [];

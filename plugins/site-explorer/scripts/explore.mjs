@@ -8,11 +8,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runChecks, printChecks } from './doctor.mjs';
 import { openDb, ingest, runsForHost, renderChangesMd, DB_PATH } from './db.mjs';
-import { findUrl, findUrls, intOpt, sameSite } from './args.mjs';
+import { findUrl, findUrls, intOpt, sameSite, normalizeFlags } from './args.mjs';
 import { isInside, checkExploreOut, UnsafeOutputError } from './safe-out.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const args = process.argv.slice(2);
+const __n = normalizeFlags(process.argv.slice(2)); if (__n.error) { console.error(__n.error); process.exit(1); }
+const args = __n.args;
 const url = findUrl(args);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const USAGE = `用法：site-explorer explore <網址> [更多網址…] [選項]    （網址可省略 https://；可一次給多個頁面，第一個是起點）
@@ -34,6 +35,7 @@ if (!url) {
   console.error(USAGE); process.exit(1);
 }
 const failOn = opt('fail-on', null);
+if (failOn && args.includes('--no-health')) { console.error('--fail-on 需要健檢，不能和 --no-health 一起用。'); process.exit(1); }
 if (failOn && !['critical', 'high', 'medium', 'low'].includes(failOn)) { console.error('--fail-on 需要 critical／high／medium／low 其中之一'); process.exit(1); }
 const urlsGiven = findUrls(args).filter((u) => { try { return sameSite(u, url); } catch { return false; } }).length; // only URLs the crawler will accept (same site as the first) raise the limits
 const maxPages = Math.max(intOpt(args, 'max-pages', 6, { min: 1, max: 500 }), urlsGiven), waitMs = intOpt(args, 'wait', 4000, { min: 0, max: 60000 });
@@ -134,7 +136,7 @@ else await run('產生圖形化儀表板', 'build-report.mjs', [...(crawlOk ? ['
 
 const failed = steps.filter((s) => !s.ok);
 console.log(`\n完成：${steps.length - failed.length}/${steps.length} 階段成功${failed.length ? '，失敗：' + failed.map((f) => f.label).join('、') : ''}`);
-try { const hj = path.join(siteDir, 'health.json'); if (fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(`健檢：${h.score}/100（${h.grade}）— 嚴重 ${h.severity.critical}・高 ${h.severity.high}・中 ${h.severity.medium}　詳見 ${path.join(siteDir, 'health.md')}`); } } catch {}
+try { const hj = path.join(siteDir, 'health.json'); if (healthOk && fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(`健檢：${h.score}/100（${h.grade}）— 嚴重 ${h.severity.critical}・高 ${h.severity.high}・中 ${h.severity.medium}　詳見 ${path.join(siteDir, 'health.md')}`); } } catch {}
 if (!args.includes('--no-motion')) { // always say what happened to 3D / animation, so its absence from the summary never looks like the feature vanished
   try {
     const pj = path.join(motionDir, 'pages.json'); const pgs = fs.existsSync(pj) ? JSON.parse(fs.readFileSync(pj, 'utf8')).pages : [];
@@ -159,7 +161,8 @@ if (fs.existsSync(dash)) {
   }
 }
 let failCode = 0;
-try { const hj = path.join(siteDir, 'health.json'); if (fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(`驗收結論：${h.verdict?.label ?? '—'}`); if (failOn) { const rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }; if (h.issues.some((i) => rank[i.severity] <= rank[failOn])) { failCode = 4; console.error(`健檢有 ${failOn} 以上的問題，依 --fail-on ${failOn} 以結束代碼 4 結束。`); } } } } catch {}
+if (failOn && !healthOk) { failCode = 1; console.error(`--fail-on ${failOn} 需要這次健檢成功，但健檢${args.includes('--no-health') ? '被 --no-health 略過' : '沒有完成'}；為避免用舊結果誤判，以結束代碼 1 結束。`); }
+try { const hj = path.join(siteDir, 'health.json'); if (healthOk && fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(`驗收結論：${h.verdict?.label ?? '—'}`); if (failOn) { const rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }; if (h.issues.some((i) => rank[i.severity] <= rank[failOn])) { failCode = 4; console.error(`健檢有 ${failOn} 以上的問題，依 --fail-on ${failOn} 以結束代碼 4 結束。`); } } } } catch {}
 if (fs.existsSync(dash)) console.log('\n👉 下一步：先雙擊 dashboard.html 看總覽；要交給 AI 或工程師，就把 handoff 資料夾整個給對方。');
 if (fs.existsSync(path.join(siteDir, 'report.md')) && fs.readFileSync(path.join(siteDir, 'report.md'), 'utf8').includes('被擋住')) console.log('\n⚠️ 部分頁面被擋住，結果可能不完整（見儀表板或 report.md）。');
 process.exit(crawlOk || motionOk ? failCode : 1);

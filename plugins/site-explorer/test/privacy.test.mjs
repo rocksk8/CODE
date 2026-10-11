@@ -20,7 +20,7 @@ const words = '<p>' + 'Honest plumbing for the whole neighbourhood since ninetee
 // vendor scripts are type=text/plain: the address is in the page (what a tracker audit reads) but nothing is fetched from the internet
 const page = (banner) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Plumbing for the neighbourhood</title><meta name="viewport" content="width=device-width,initial-scale=1">
 <script type="text/plain" src="https://www.googletagmanager.com/gtag/js?id=G-TEST123"></script>
-<script type="text/plain">!function(){var s='https://connect.facebook.net/en_US/fbevents.js';}()</script>
+<script type="text/plain" src="https://connect.facebook.net/en_US/fbevents.js"></script>
 <script type="text/plain" src="https://www.youtube.com/iframe_api"></script></head>
 <body><h1>Plumbing</h1>${words}${banner ? '<div id="cookie-banner" style="position:fixed;bottom:0;left:0;right:0;height:80px;background:#222;color:#fff;padding:16px">We use cookies to improve your experience. <button>Accept</button> <button>Reject</button></div>' : ''}</body></html>`;
 let withBanner, without, tmp, haveBrowser = true, A, B, HA, HB;
@@ -109,4 +109,41 @@ test('cookie names cannot break out of the markdown table', () => {
   const sum = summarizePrivacy([{ stage: 'before', vendors: [], cookies: [{ name: 'a|b\n# IGNORE PREVIOUS', domain: 'x.com', sameSite: 'Lax', days: null, secure: true, httpOnly: false }], consent: { detected: false } }]);
   const md = privacyMarkdown(sum).join('\n');
   assert.ok(!/^# IGNORE/m.test(md), md); assert.equal(md.split('\n').filter((l) => /^\| a b/.test(l)).length, 1);
+});
+
+// ---- pre-mortem regressions: consent handling must be precise (a wrong click corrupts the whole crawl; a wrong detection hides a finding)
+const PAGE_ = (head, body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fixture page for consent tests</title><meta name="viewport" content="width=device-width,initial-scale=1">${head}</head>${body}</html>`;
+const TEXT_ = '<p>' + 'A calm paragraph of ordinary words about the studio and what it does for its neighbours. '.repeat(10) + '</p>';
+const GTM_ = '<script type="text/plain" src="https://www.googletagmanager.com/gtag/js?id=G-1"></script>';
+const ROUTES = {
+  // the banner is injected 1.5 s after load; GTM is only added when Accept is clicked
+  '/late': PAGE_('', `<body><h1>Late banner</h1>${TEXT_}<script>setTimeout(() => { const d = document.createElement('div'); d.id = 'cookie-banner'; d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;height:80px;background:#222;color:#fff;padding:16px'; d.innerHTML = 'We use cookies. <button id="acc">Accept all</button>'; document.body.append(d); d.querySelector('#acc').onclick = () => { const s = document.createElement('script'); s.type = 'text/plain'; s.src = 'https://www.googletagmanager.com/gtag/js?id=G-1'; document.head.append(s); d.remove(); }; }, 1500)</script></body>`),
+  // <body> carries a cookie-ish class and the only button navigates away: the crawler must not click it
+  '/trap': PAGE_('', `<body class="cookies-allowed cookie-consent-enabled"><h1>Trap</h1>${TEXT_}<button onclick="location.href='/booked'">Book a table</button><a href="/booked">booked</a></body>`),
+  '/booked': PAGE_('', `<body><h1>Booked</h1>${TEXT_}</body>`),
+  // a consent platform script is present but no banner is visible (geo-targeted / shadow DOM): not "no banner at all"
+  '/cmp': PAGE_(`${GTM_}<script type="text/plain" src="https://consent.cookiebot.com/uc.js"></script>`, `<body><h1>CMP page</h1>${TEXT_}</body>`),
+};
+test('consent: late banner found, GTM that only loads after Accept is tagged "after", wrong clicks and body-class false positives are impossible, a CMP vendor suppresses "no banner"', async (t) => {
+  if (skip(t)) return;
+  const srv = http.createServer((q, r) => { if (ROUTES[q.url]) { r.writeHead(200, { 'content-type': 'text/html' }); return r.end(ROUTES[q.url]); } r.writeHead(404); r.end(); });
+  const port = await listen(srv); const d = fs.mkdtempSync(path.join(os.tmpdir(), 'se consent-'));
+  try {
+    const crawl = async (name, route) => { const r = await run('crawl.mjs', [`http://127.0.0.1:${port}${route}`, '--max-pages', '1', '--no-screenshots', '--out', path.join(d, name)]); assert.equal(r.status, 0, r.out); const dir = path.join(d, name, `127.0.0.1_${port}`); await run('health-check.mjs', ['--site', dir, '--no-link-check']); return { site: JSON.parse(fs.readFileSync(path.join(dir, 'site.json'), 'utf8')), health: JSON.parse(fs.readFileSync(path.join(dir, 'health.json'), 'utf8')) }; };
+    const late = await crawl('late', '/late');
+    assert.equal(late.site.privacy.consentBanner, true, 'a banner injected after 1.5 s is still seen as a new visitor would see it');
+    const g = late.site.privacy.vendors.find((v) => v.name === 'Google Tag Manager'); assert.ok(g && g.when === 'after', 'GTM appeared only after the crawler accepted: ' + JSON.stringify(late.site.privacy.vendors.map((v) => [v.name, v.when])));
+    assert.equal(late.site.privacy.trackingVendors.length, 0, 'not "loaded before consent"'); assert.ok(late.site.privacy.laterTracking.some((v) => v.name === 'Google Tag Manager'));
+    assert.ok(!late.health.issues.some((i) => i.id === 'trackers-present' || i.id === 'trackers-no-banner'), 'a compliant site is not flagged');
+    const trap = await crawl('trap', '/trap');
+    assert.equal(trap.site.consentAction, null, 'no click on a button of a page whose <body> merely has a cookie-ish class'); assert.ok(trap.site.pages[0].url.endsWith('/trap'), trap.site.pages[0].url);
+    assert.equal(trap.site.privacy.consentBanner, false, '<body class="cookie-consent-enabled"> is not a banner');
+    const cmp = await crawl('cmp', '/cmp');
+    assert.equal(cmp.site.privacy.hasCmpVendor, true); assert.ok(!cmp.health.issues.some((i) => i.id === 'trackers-no-banner'), 'a CMP is loaded: do not claim there is no consent tool'); assert.ok(cmp.health.issues.some((i) => i.id === 'trackers-present'));
+  } finally { srv.close(); fs.rmSync(d, { recursive: true, force: true }); }
+});
+
+test('pinterest-style path rules: a product photo on pinimg.com is not a tag', () => {
+  assert.deepEqual(classifyUrls(['https://s.pinimg.com/images/product-photo.jpg', 'https://i.pinimg.com/236x/ct/photo.jpg']), []);
+  assert.deepEqual(classifyUrls(['https://s.pinimg.com/ct/core.js']).map((v) => v.name), ['Pinterest Tag']);
 });

@@ -57,3 +57,17 @@ test('changes.md treats page text as untrusted data: banner, one line per title,
     assert.ok(!md.includes('`evil`'), 'a backtick in a URL cannot close the code span');
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
+
+test('diffPages: paths match regardless of case and index.html; runs stored before a column existed are "unknown", not "changed"', (t) => {
+  if (skip(t)) return;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'se-db-'));
+  try {
+    fakeSite(path.join(tmp, 'old'), 'a.example.com', [{ path: '/About', title: 'About', desc: 'Who we are' }, { path: '/index.html', title: 'Home', desc: 'Welcome' }]);
+    fakeSite(path.join(tmp, 'new'), 'b.example.com', [{ path: '/about/', title: 'About', desc: 'Who we are' }, { path: '/', title: 'Home', desc: 'Welcome' }]);
+    const a = ingest(db, { siteDir: path.join(tmp, 'old') }), b = ingest(db, { siteDir: path.join(tmp, 'new') });
+    db.prepare('UPDATE pages SET description = NULL, canonical = NULL WHERE run_id = ?').run(a); // simulate a pre-migration run
+    const d = diffPages(db, a, b);
+    assert.deepEqual(d.removed, [], '/About = /about and /index.html = / are the same pages'); assert.deepEqual(d.added, []);
+    assert.deepEqual(d.changed, [], 'NULL description/canonical (old run) is not reported as a change: ' + JSON.stringify(d.changed));
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});

@@ -10,7 +10,7 @@ import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { isMain, readCappedBuffer, mayFetch, gfetch } from './util.mjs';
 import { fetchRobots, isAllowed, groupFor, AI_BOTS, SEARCH_BOTS } from './robots.mjs';
-import { intOpt } from './args.mjs';
+import { intOpt, normalizeFlags } from './args.mjs';
 import { cleanDeep, clean, safe, BANNER, sanitizeDoc } from './untrusted.mjs';
 import { validateNodes, hasContextOk } from './structured.mjs';
 import { responsiveFindings } from './responsive.mjs';
@@ -191,7 +191,10 @@ export async function runHealth(siteDir, opts = {}) {
   const probe = await http(origin + '/__se-404-probe-' + Math.random().toString(36).slice(2, 8), { method: 'GET', redirect: 'follow' });
   facts.soft404 = { status: probe.status };
   facts.unreachable = robots.status == null && probe.status == null;
-  if (facts.unreachable) add('indexability', 'critical', 'site-unreachable', '健檢時網站完全連不上（robots.txt 與測試網址都沒有回應）', { detail: String(robots.error || probe.error || ''), impact: '沒有回應就無法驗證 robots、sitemap、連結與狀態碼；這次的分數不可信，請不要拿它和上一次比較。', fix: '確認網站是否在線上、網路是否通，之後重新執行。' });
+  const fresh = Date.now() - Date.parse(site.crawledAt || 0) < 15 * 60 * 1000; // a crawl from minutes ago; old crawl data says nothing about whether the site is up NOW
+  const browserOk = fresh && pages.some((p) => p.status === 200); // the browser crawl just got pages: only this script's own requests failed (proxy / VPN / corporate network)
+  if (facts.unreachable && browserOk) add('indexability', 'info', 'extra-checks-blocked', '健檢額外的網路請求（robots.txt、sitemap、連結狀態、轉址）連不上，這些檢查已略過', { detail: String(robots.error || probe.error || ''), impact: '瀏覽器能開啟網站，但健檢程式自己的連線被擋（常見於公司網路、VPN 或 Proxy）。所以這份報告沒有包含 robots／sitemap／連結狀態的結果。', fix: '在能直接連網的環境重跑；或設定環境變數 SITE_EXPLORER_PROXY。' });
+  else if (facts.unreachable) add('indexability', 'critical', 'site-unreachable', '健檢時網站完全連不上（robots.txt 與測試網址都沒有回應）', { detail: String(robots.error || probe.error || ''), impact: '沒有回應就無法驗證 robots、sitemap、連結與狀態碼；這次的分數不可信，請不要拿它和上一次比較。', fix: '確認網站是否在線上、網路是否通，之後重新執行。' });
   if (probe.status === 200) add('indexability', 'high', 'soft-404', '不存在的網址回應 200（soft 404）', { examples: [probe.url], impact: '搜尋引擎會把大量無內容頁面當成真實頁面收錄，浪費抓取預算並拉低品質評價。', fix: '不存在的頁面必須回傳 404 或 410 狀態碼（即使畫面顯示「找不到頁面」）。' });
   else if (probe.status === 404 || probe.status === 410) ok('indexability', '不存在的網址正確回應 404／410');
   if (!isLocal(host)) {
@@ -257,8 +260,21 @@ export async function runHealth(siteDir, opts = {}) {
     linkChecks = { internalChecked: checked.length, externalChecked: extChecked.length, broken: broken.map((b) => ({ url: b.url, status: b.status, from: b.from })), redirects: redirs.length, externalBroken: extBroken.map((b) => ({ url: b.url, status: b.status })), unreachable: unreachable.length };
     if (broken.length) add('links', 'high', 'broken-internal', `${broken.length} 個內部連結壞掉（4xx／5xx）`, { affected: broken.length, examples: broken.map((b) => `${b.status} ${b.url}（來自 ${b.from[0]}）`), impact: '使用者與爬蟲都會碰壁，浪費抓取預算並傳遞負面訊號。', fix: '修正連結目標，或為搬移的頁面設定 301。' });
     else if (checked.length || crawledStatus.size) ok('links', `已檢查 ${checked.length + crawledStatus.size} 個內部連結，沒有壞連結`);
-    const hopChains = []; // the link checker only saw hop 1: follow the rest so a 302 -> 301 -> page chain is reported as a chain
-    for (const r of redirs.slice(0, 20)) { const hops = [{ status: r.status, url: r.url }]; let loc = r.location, last = r.url; for (let n = 0; n < 5 && loc; n++) { let nxt; try { nxt = new URL(loc, last).href; } catch { break; } if (!mayFetch(nxt, origin)) break; const h = await http(nxt); if (h.status >= 300 && h.status < 400 && h.location) { hops.push({ status: h.status, url: nxt }); last = nxt; loc = h.location; } else { last = nxt; loc = null; } } if (hops.length >= 2) hopChains.push(`${hops.map((h) => h.status + ' ' + h.url).join(' → ')} → ${last}`); }
+    const hopChains = [], loops = []; // the link checker only saw hop 1: follow the rest so a 302 -> 301 -> page chain is reported as a chain
+    const known = new Set(chains.map((c) => norm(c.url))); // chains the crawl already recorded are not listed twice
+    for (const r of redirs.slice(0, 20)) {
+      if (known.has(norm(r.url))) continue;
+      const hops = [{ status: r.status, url: r.url }], seen = new Set([norm(r.url)]); let loc = r.location, last = r.url, loop = false;
+      for (let n = 0; n < 5 && loc; n++) {
+        let nxt; try { nxt = new URL(loc, last).href; } catch { break; } if (!mayFetch(nxt, origin)) break;
+        if (seen.has(norm(nxt))) { loop = true; hops.push({ status: '↺', url: nxt }); break; }
+        seen.add(norm(nxt)); const h = await http(nxt);
+        if (h.status >= 300 && h.status < 400 && h.location) { hops.push({ status: h.status, url: nxt }); last = nxt; loc = h.location; } else { last = nxt; loc = null; }
+      }
+      const text = `${hops.map((h) => h.status + ' ' + h.url).join(' → ')}${loop ? '' : ' → ' + last}`;
+      if (loop) loops.push(text); else if (hops.length >= 2) hopChains.push(text);
+    }
+    if (loops.length) add('indexability', 'high', 'redirect-loop', `${loops.length} 個網址陷入重新導向迴圈`, { affected: loops.length, examples: loops, impact: '瀏覽器顯示「重新導向次數過多」，搜尋引擎無法抓取，等同頁面壞掉。', fix: '檢查伺服器／CDN／外掛的轉址規則，常見原因是 http↔https 或 www↔非 www 兩邊互相轉。' });
     if (hopChains.length) { const ex = issues.find((i) => i.id === 'redirect-chain'); if (ex) { ex.examples.push(...hopChains.map((c) => safe(c, 300))); ex.affected += hopChains.length; } else add('indexability', 'medium', 'redirect-chain', `${hopChains.length} 個網址經過 2 次以上重新導向`, { affected: hopChains.length, examples: hopChains, impact: '每多一跳都延遲載入並稀釋權重，爬蟲通常只跟隨約 5 跳。', fix: '讓舊網址一步直接導向最終網址。' }); }
     if (redirs.length) add('links', 'low', 'internal-redirect', `${redirs.length} 個內部連結指向會重新導向的網址`, { affected: redirs.length, examples: redirs.slice(0, 6).map((r) => `${r.status} ${r.url} → ${r.location}`), fix: '把連結改成最終網址，省下一次跳轉。' });
     if (extBroken.length) add('links', 'medium', 'broken-external', `${extBroken.length} 個外部連結失效`, { affected: extBroken.length, examples: extBroken.map((b) => `${b.status} ${b.url}`), fix: '移除或更新失效連結。' });
@@ -320,8 +336,8 @@ export async function runHealth(siteDir, opts = {}) {
   const pv = site.privacy; if (pv && pv.pagesChecked) {
     facts.privacy = { trackers: pv.trackingVendors.map((v) => v.name), vendors: pv.vendors.length, cookies: pv.cookies.length, consentBanner: pv.consentBanner };
     const trk = pv.trackingVendors.map((v) => v.name);
-    if (trk.length && pv.consentChecked && !pv.consentBanner) add('security', 'medium', 'trackers-no-banner', `載入了 ${trk.length} 個追蹤／廣告服務，但沒有偵測到 Cookie 同意橫幅`, { examples: trk, impact: '在歐盟（GDPR／ePrivacy）等地區，分析與廣告類追蹤通常要在訪客同意「之後」才能啟動；台灣個資法也要求事前告知蒐集目的。被投訴或稽核時，這是最常被點名的一項。', fix: '導入同意管理工具（如 Cookiebot、OneTrust、Termly），讓追蹤碼在同意後才載入；並在隱私權政策列出這些服務。若你只服務法規寬鬆的市場，請由負責人確認後忽略。' });
-    else if (trk.length) add('security', 'info', 'trackers-present', `使用 ${trk.length} 個追蹤／廣告服務：${trk.join('、')}`, { impact: (pv.consentBanner ? '已偵測到 Cookie 橫幅。' : '') + '本工具無法驗證追蹤碼是否真的等到同意後才啟動——這些服務在爬蟲尚未同意時就已經載入。', fix: '用瀏覽器開發者工具（Network 分頁）拒絕 Cookie 後重新整理，確認這些請求不再出現。' });
+    if (trk.length && pv.consentChecked && !pv.consentBanner && !pv.hasCmpVendor) add('security', 'medium', 'trackers-no-banner', `載入了 ${trk.length} 個追蹤／廣告服務，但沒有偵測到 Cookie 同意橫幅`, { examples: trk, impact: '在歐盟（GDPR／ePrivacy）等地區，分析與廣告類追蹤通常要在訪客同意「之後」才能啟動；台灣個資法也要求事前告知蒐集目的。被投訴或稽核時，這是最常被點名的一項。', fix: '導入同意管理工具（如 Cookiebot、OneTrust、Termly），讓追蹤碼在同意後才載入；並在隱私權政策列出這些服務。若你只服務法規寬鬆的市場，請由負責人確認後忽略。' });
+    else if (trk.length) add('security', 'info', 'trackers-present', `一進站就載入 ${trk.length} 個追蹤／廣告服務：${trk.join('、')}`, { impact: (pv.consentBanner ? '已偵測到 Cookie 橫幅。' : pv.hasCmpVendor ? '網站有載入同意管理工具，但這次沒有看到橫幅（可能依地區或延遲顯示，或在 shadow DOM 內）。' : '') + '本工具無法驗證追蹤碼是否真的等到同意後才啟動——這些服務在爬蟲尚未同意時就已經載入。', fix: '用瀏覽器開發者工具（Network 分頁）拒絕 Cookie 後重新整理，確認這些請求不再出現。' });
     else ok('security', '沒有辨識到追蹤／廣告類第三方服務');
     const replay = pv.vendors.filter((v) => v.cat === 'session-replay'); if (replay.length) add('security', 'info', 'session-replay', `使用行為錄影／熱圖工具：${replay.map((v) => v.name).join('、')}`, { impact: '這類工具會錄下訪客的滑鼠與畫面，可能錄到表單輸入的個資。', fix: '確認已遮蔽輸入欄位與敏感頁面，並在隱私權政策中揭露。' });
     if (https && pv.weakCookies.length) add('security', 'low', 'cookies-insecure', `${pv.weakCookies.length} 個 Cookie 沒有 Secure 旗標（網站是 HTTPS）`, { affected: pv.weakCookies.length, examples: pv.weakCookies.map((c) => `${c.name}（${c.domain}）`), impact: 'Cookie 可能在不加密的連線上被送出。', fix: '由設定它的程式加上 Secure（與適當的 SameSite、HttpOnly）。' });
@@ -418,7 +434,8 @@ export function renderHealthMd(h) {
 }
 
 if (isMain(import.meta.url)) {
-  const a = process.argv.slice(2), i = a.indexOf('--site');
+  const __n = normalizeFlags(process.argv.slice(2)); if (__n.error) { console.error(__n.error); process.exit(1); }
+  const a = __n.args, i = a.indexOf('--site');
   if (i < 0 || !a[i + 1] || !fs.existsSync(path.join(a[i + 1], 'site.json'))) { console.error('Usage: health-check.mjs --site <crawl dir with site.json> [--no-link-check] [--max-links 120] [--fail-on critical|high|medium|low]'); process.exit(1); }
   const h = await runHealth(a[i + 1], { noLinkCheck: a.includes('--no-link-check'), maxLinks: intOpt(a, 'max-links', 120, { min: 0, max: 1000 }) });
   console.log(`健檢完成：${h.score}/100（${h.grade}）— ${Object.entries(h.severity).filter(([, n]) => n).map(([s, n]) => `${SEV_LABEL[s]} ${n}`).join('　')}`);

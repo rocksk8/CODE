@@ -106,6 +106,8 @@ test('verdict, broken images, page errors-ready and chains found only by the lin
   const chain = H.issues.find((i) => i.id === 'redirect-chain');
   assert.ok(chain.examples.some((e) => /chain1/.test(e) && /chain2/.test(e)), 'the 302 → 301 chain starting at /chain1 is shown in full: ' + JSON.stringify(chain.examples));
   assert.match(fs.readFileSync(path.join(siteDir, 'health.md'), 'utf8'), /驗收結論：⚠️ 有條件通過/);
+  assert.equal(chain.examples.filter((e) => /chain1/.test(e)).length, 1, 'a chain recorded by the crawl AND seen by the link checker is listed once: ' + JSON.stringify(chain.examples));
+  const loop = H.issues.find((i) => i.id === 'redirect-loop'); assert.ok(loop && loop.severity === 'high', 'loop1 → loop2 → loop1 is named a loop, not a 6-hop chain'); assert.ok(!chain.examples.some((e) => /loop1/.test(e)));
 });
 
 test('--fail-on gives a CI exit code; a second run reports what changed and keeps the previous result', async (t) => {
@@ -132,4 +134,16 @@ test('an unreachable site is a critical finding, not a quiet improvement', async
   const h = JSON.parse(fs.readFileSync(path.join(d, 'health.json'), 'utf8'));
   assert.ok(h.issues.some((i) => i.id === 'site-unreachable' && i.severity === 'critical'));
   assert.equal(h.verdict.status, 'fail'); assert.ok(h.score <= 55);
+});
+
+test('a fresh browser crawl + dead Node-side network is "extra checks blocked" (info), not "site unreachable" (critical)', async (t) => {
+  if (skip(t)) return;
+  const dead = http.createServer(); const p = await listen(dead); dead.close();
+  const d = path.join(tmp, 'blocked'); fs.mkdirSync(path.join(d, 'pages', 'home'), { recursive: true });
+  const seo = { title: 'T', description: '', h1Count: 1, words: 200, lang: 'en', viewport: 'x', images: { total: 0, missingAlt: 0 }, links: { generic: 0, empty: 0, externalNoRel: 0 }, structuredData: { jsonld: [] }, social: {}, hreflang: [], favicons: [] };
+  fs.writeFileSync(path.join(d, 'site.json'), JSON.stringify({ startUrl: `http://127.0.0.1:${p}/`, finalOrigin: `http://127.0.0.1:${p}`, crawledAt: new Date().toISOString(), pages: [{ slug: 'home', url: `http://127.0.0.1:${p}/`, status: 200 }] }));
+  fs.writeFileSync(path.join(d, 'pages', 'home', 'page.json'), JSON.stringify({ title: 'T', seo, content: { links: [] } }));
+  const r = await run('health-check.mjs', ['--site', d, '--no-link-check']); assert.equal(r.status, 0, r.out);
+  const h = JSON.parse(fs.readFileSync(path.join(d, 'health.json'), 'utf8'));
+  assert.ok(h.issues.some((i) => i.id === 'extra-checks-blocked' && i.severity === 'info')); assert.ok(!h.issues.some((i) => i.id === 'site-unreachable')); assert.notEqual(h.verdict.status, 'fail');
 });

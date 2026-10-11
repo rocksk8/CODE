@@ -20,6 +20,8 @@ const text = '<p>' + 'Friendly words about what we make and why it matters to th
 const items = '<div class="grid"><div><h3>One</h3><p>First column with enough words to take space.</p></div><div><h3>Two</h3><p>Second column with enough words to take space.</p></div><div><h3>Three</h3><p>Third column with enough words to take space.</p></div></div>';
 const nav = '<nav><a href="/a">Home</a> <a href="/b">Shop</a> <a href="/c">About</a> <a href="/d">Contact</a></nav>';
 const page = (css, navHtml, extra) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Responsive test page for measuring</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font:16px sans-serif} nav a{display:inline-block;padding:10px;margin:4px} .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}${css}</style></head><body><header>${navHtml}</header><h1>Measured page</h1>${text}${items}${extra}</body></html>`;
+const DIVMENU = page('.menu-icon{display:none;width:32px;height:32px;cursor:pointer} .menu-icon i{display:block;height:3px;background:#000;margin:6px 0} @media (max-width:800px){nav a{display:none} .menu-icon{display:block}}', nav + '<div class="menu-icon" onclick="document.body.classList.toggle(\'o\')"><i></i><i></i><i></i></div>', '');
+const REDIRECT = page('', nav, "<script>addEventListener('resize', () => { if (innerWidth < 800) location.replace('/m'); })</script>");
 const BAD = page('.wide{width:900px;height:20px;background:#ccc} @media (max-width:800px){nav a{display:none}}', nav, '<div class="wide"></div>');
 const GOOD = page('.menu{display:none} @media (max-width:800px){nav a{display:none} .menu{display:inline-block;padding:10px} .grid{grid-template-columns:1fr}}', nav + '<button class="menu" aria-label="Menu" aria-expanded="false">Menu</button>', '');
 let bad, good, tmp, haveBrowser = true, B, G, HB, HG;
@@ -60,4 +62,20 @@ test('health flags the broken page and leaves the responsive page alone', (t) =>
   const bad = new Set(HB.issues.map((i) => i.id)), good = new Set(HG.issues.map((i) => i.id));
   for (const id of ['tablet-overflow', 'mobile-nav-missing', 'mobile-columns']) assert.ok(bad.has(id), id + ' in ' + [...bad].join());
   for (const id of ['tablet-overflow', 'mobile-nav-missing', 'mobile-columns', 'mobile-content-hidden']) assert.ok(!good.has(id), id + ' wrongly reported for the responsive page');
+});
+
+test('pre-mortem: a hamburger built from a <div> counts as a menu, and a page that redirects when resized is not measured at the wrong address', async (t) => {
+  if (skip(t)) return;
+  const srv = http.createServer((q, r) => { const body = q.url === '/' ? DIVMENU : q.url === '/r' ? REDIRECT : q.url === '/m' ? page('', '<p>mobile site</p>', '') : null; if (!body) { r.writeHead(404); return r.end(); } r.writeHead(200, { 'content-type': 'text/html' }); r.end(body); });
+  const port = await listen(srv); const d = fs.mkdtempSync(path.join(os.tmpdir(), 'se resp2-'));
+  try {
+    let r = await run('crawl.mjs', [`http://127.0.0.1:${port}/`, '--max-pages', '1', '--no-screenshots', '--out', path.join(d, 'a')]); assert.equal(r.status, 0, r.out);
+    const A = JSON.parse(fs.readFileSync(path.join(d, 'a', `127.0.0.1_${port}`, 'pages', 'home', 'page.json'), 'utf8'));
+    assert.equal(A.responsive.desktop.nav, 'links'); assert.equal(A.responsive.mobile.nav, 'toggle', 'a div hamburger is not "no menu"');
+    r = await run('crawl.mjs', [`http://127.0.0.1:${port}/r`, '--max-pages', '1', '--no-screenshots', '--out', path.join(d, 'b')]); assert.equal(r.status, 0, r.out);
+    const dirB = path.join(d, 'b', `127.0.0.1_${port}`), site = JSON.parse(fs.readFileSync(path.join(dirB, 'site.json'), 'utf8'));
+    const B = JSON.parse(fs.readFileSync(path.join(dirB, 'pages', site.pages[0].slug, 'page.json'), 'utf8'));
+    assert.match(B.responsiveSkipped || '', /自己跳轉/); assert.ok(B.responsive.desktop && !B.responsive.mobile && !B.responsive.tablet, 'only the measurements taken at the real address are kept');
+    assert.ok(site.pages[0].url.endsWith('/r'), 'the page is still recorded under its own address');
+  } finally { srv.close(); fs.rmSync(d, { recursive: true, force: true }); }
 });
