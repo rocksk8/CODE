@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Crawl a site with a real browser and capture design, content, layout and editing signals.
 import { launchBrowser } from './launch.mjs';
-import { findUrl, findUrls, intOpt, sameSite, loadRobots, CRAWLER_UA_TOKEN } from './args.mjs';
+import { findUrl, findUrls, intOpt, sameSite, loadRobots, CRAWLER_UA_TOKEN, normalizeFlags } from './args.mjs';
 import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
@@ -17,7 +17,8 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 
-const args = process.argv.slice(2);
+const __n = normalizeFlags(process.argv.slice(2)); if (__n.error) { console.error(__n.error); process.exit(1); }
+const args = __n.args;
 const startUrl = findUrl(args);
 const opt = (name, def) => {
   const i = args.indexOf(`--${name}`);
@@ -241,17 +242,18 @@ async function snapshotPrivacy(page, ctx, net) {
     return { vendors: classifyUrls(urls), cookies: analyzeCookies(await ctx.cookies(), new URL(page.url()).hostname, { https: page.url().startsWith('https:') }), consent: await page.evaluate(detectConsentInPage).catch(() => ({ detected: false, kind: null })) };
   } catch { return null; }
 }
-async function dismissConsent(page) {
+async function dismissConsent(page) { // only ever clicks inside the box detectConsentInPage marked: never "any button on a page whose <body> mentions cookies"
   try {
     return await page.evaluate(() => {
-      const box = [...document.querySelectorAll('[id*=cookie i],[class*=cookie i],[id*=consent i],[class*=consent i],[id*=onetrust i]')].find((e) => e.getBoundingClientRect().height > 40);
+      const box = document.querySelector('[data-se-consent="1"]');
       if (!box) return null;
-      const btns = [...box.querySelectorAll('button, a[role=button], [role=button]')];
-      const pick = (re) => btns.find((b) => re.test((b.innerText || b.getAttribute('aria-label') || '').trim()));
-      const b = pick(/reject|decline|necessary only|refuse|deny|拒絕|僅必要|只接受必要/i) || pick(/accept|agree|got it|allow|ok\b|同意|接受|我知道/i);
+      const btns = [...box.querySelectorAll('button, a[role=button], [role=button], input[type=button]')];
+      const label = (b) => (b.innerText || b.value || b.getAttribute('aria-label') || '').trim();
+      const pick = (re) => btns.find((b) => re.test(label(b)));
+      const b = pick(/\b(reject|decline|refuse|deny)\b|necessary only|拒絕|僅必要|只接受必要/i) || pick(/\b(accept|agree|allow)\b|\bgot it\b|\bok\b|同意|接受|我知道/i);
       if (!b) return null;
       b.click();
-      return (b.innerText || '').trim().slice(0, 30);
+      return label(b).slice(0, 30);
     });
   } catch { return null; }
 }
@@ -399,7 +401,8 @@ while (pages.length < maxPages) {
     crawledFinal.add(finalKey); crawledFinal.add(norm(url));
     if (pages.length === 0 && resp) headers.main = resp.headers();
     let preConsent = null;
-    if (pages.length === 0) { preConsent = await snapshotPrivacy(page, ctx, net); consentAction = await dismissConsent(page); if (consentAction) await page.waitForTimeout(600); }
+    if (pages.length === 0) { for (let k = 0; k < 6; k++) { if ((await page.evaluate(detectConsentInPage).catch(() => null))?.detected) break; await page.waitForTimeout(400); } // banners are often injected by a script after load
+      preConsent = await snapshotPrivacy(page, ctx, net); consentAction = await dismissConsent(page); if (consentAction) await page.waitForTimeout(600); }
     let contentReady = await waitForContent(page, contentWaitMs);
     // trigger lazy content
     // bounded: infinite-scroll pages grow forever while you scroll
@@ -413,8 +416,8 @@ while (pages.length < maxPages) {
     { // first page: cookies + banner as a NEW visitor sees them (snapshot taken before the crawler touched the banner); later pages: only the services they load
       const now = await snapshotPrivacy(page, ctx, net);
       if (!now) data.privacy = null;
-      else if (preConsent) { const names = new Set(preConsent.vendors.map((v) => v.name)); data.privacy = { stage: 'before', vendors: [...preConsent.vendors, ...now.vendors.filter((v) => !names.has(v.name))], cookies: preConsent.cookies, consent: preConsent.consent }; }
-      else data.privacy = { stage: 'after', vendors: now.vendors, cookies: [], consent: { detected: false, kind: null } };
+      else if (preConsent) { const names = new Set(preConsent.vendors.map((v) => v.name)); data.privacy = { stage: 'before', vendors: preConsent.vendors, vendorsAfter: now.vendors.filter((v) => !names.has(v.name)), cookies: preConsent.cookies, consent: preConsent.consent }; } // vendors = loaded for a new visitor; vendorsAfter = only appeared after the crawler touched the banner / scrolled
+      else data.privacy = { stage: 'after', vendors: [], vendorsAfter: now.vendors, cookies: [], consent: { detected: false, kind: null } };
     }
     const aria = await ariaTree(page);
     data.aria = aria ? { lines: aria.lines, headings: aria.headings, links: aria.links, buttons: aria.buttons, images: aria.images, landmarks: aria.landmarks, head: aria.text.split('\n').slice(0, 40).join('\n').slice(0, 3500) } : null;
@@ -465,12 +468,15 @@ while (pages.length < maxPages) {
     const dir = path.join(outDir, 'pages', slugOf(url)); fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'page.html'), await page.content());
     data.responsive = {};
+    const homeUrl = page.url(); // some sites redirect when the window is resized (e.g. to an m. site): measurements taken there are not this page's
+    const jumped = async (name) => { if (page.url() === homeUrl) return false; data.responsiveSkipped = `頁面在視窗縮到「${name}」寬度時自己跳轉到別的網址，手機／平板的量測與截圖略過`; delete data.responsive[name]; await page.setViewportSize({ width: 1440, height: 900 }).catch(() => {}); await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {}); return true; };
     if (shots) {
       for (const [name, [w, h]] of Object.entries(VIEWPORTS)) {
         await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250);
+        if (name !== 'desktop' && await jumped(name)) break;
         data.responsive[name] = await page.evaluate(extractResponsiveInPage).catch(() => null);
         if (name === 'tablet' && data.seo) data.seo.tablet = await page.evaluate(extractMobileInPage).catch(() => null);
-        const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth).catch(() => false);
         data.layout[`${name}Overflow`] = overflow;
         await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true });
         if (name === 'desktop') {
@@ -486,6 +492,7 @@ while (pages.length < maxPages) {
     } else {
       for (const [name, [w, h]] of Object.entries(VIEWPORTS)) {
         await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250);
+        if (name !== 'desktop' && await jumped(name)) break;
         data.responsive[name] = await page.evaluate(extractResponsiveInPage).catch(() => null);
         if (data.seo && name === 'tablet') data.seo.tablet = await page.evaluate(extractMobileInPage).catch(() => null);
         if (data.seo && name === 'mobile') data.seo.mobile = await page.evaluate(extractMobileInPage).catch(() => null);

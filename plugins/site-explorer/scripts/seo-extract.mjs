@@ -51,10 +51,18 @@ export async function extractSeoInPage() {
   // structured data
   const jsonld = [];
   const filled = (v) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0);
+  const bare = (t) => String(t).replace(/^https?:\/\/schema\.org\//i, '').replace(/^schema:/i, ''); // "https://schema.org/Product" and "schema:Product" are the type Product
+  const flat = (x, out, depth) => { // top-level object / array / @graph (array OR single object), nested arbitrarily
+    if (depth > 4 || out.length > 200 || x === null || typeof x !== 'object') return;
+    if (Array.isArray(x)) { for (const y of x) flat(y, out, depth + 1); return; }
+    if (x['@graph'] !== undefined) { const ctx = x['@context']; const g = x['@graph']; for (const y of [].concat(g)) if (y && typeof y === 'object') flat(ctx && !y['@context'] ? { ...y, '@context': ctx } : y, out, depth + 1); const rest = Object.keys(x).filter((k) => k !== '@graph' && k !== '@context'); if (rest.some((k) => k === '@type')) out.push(Object.fromEntries(Object.entries(x).filter(([k]) => k !== '@graph'))); return; }
+    out.push(x);
+  };
   for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
     try {
-      const data = JSON.parse(s.textContent); const topCtx = Array.isArray(data) ? null : data['@context']; const nodes = Array.isArray(data) ? data : data['@graph'] ? data['@graph'] : [data];
-      for (const n of nodes) { const t = n && n['@type']; const ctx = (n && n['@context']) || topCtx || (Array.isArray(data) && data[0] && data[0]['@context']) || null; jsonld.push({ types: [].concat(t || []).map(String), props: Object.keys(n || {}).filter((k) => !k.startsWith('@') && filled(n[k])).slice(0, 60), context: ctx ? (typeof ctx === 'string' ? ctx : JSON.stringify(ctx)).slice(0, 80) : null, name: n && (n.name || n.headline || '') ? String(n.name || n.headline).slice(0, 60) : '' }); }
+      const data = JSON.parse(s.textContent); const nodes = []; flat(data, nodes, 0);
+      if (!nodes.length) continue; // `null`, `[]`, a bare string: valid JSON, but not structured data
+      for (const n of nodes) { const t = n && n['@type']; const ctx = (n && n['@context']) || null; jsonld.push({ types: [].concat(t || []).map(bare).filter((x) => /^[\w.-]{1,60}$/.test(x)), props: Object.keys(n || {}).filter((k) => !k.startsWith('@') && filled(n[k])).slice(0, 60), context: ctx ? (typeof ctx === 'string' ? ctx : JSON.stringify(ctx)).slice(0, 80) : null, hasId: !!(n && n['@id']), name: n && (n.name || n.headline || '') ? String(n.name || n.headline).slice(0, 60) : '' }); }
     } catch (e) { jsonld.push({ error: String(e.message).slice(0, 80) }); }
   }
   const microdata = document.querySelectorAll('[itemscope]').length;
