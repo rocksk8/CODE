@@ -484,7 +484,8 @@ while (pages.length < maxPages) {
         if (name === 'tablet' && data.seo) data.seo.tablet = await page.evaluate(extractMobileInPage).catch(() => null);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth).catch(() => false);
         data.layout[`${name}Overflow`] = overflow;
-        await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true });
+        try { await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true, timeout: 20000 }); }
+        catch { await page.screenshot({ path: path.join(dir, `${name}.png`), timeout: 10000 }).catch(() => {}); } // huge pages: keep the data, fall back to the visible area
         if (name === 'desktop') {
           // Per-section crops: a 1440x9000 full-page image gets downscaled until it is unreadable (for people and for AI)
           const secDir = path.join(dir, 'sections'); fs.mkdirSync(secDir, { recursive: true });
@@ -544,7 +545,7 @@ await browser.close();
 if (pages.length === 0) {
   console.error(_t('\n沒有成功爬取任何頁面。'));
   if (skippedByRobots.length) console.error(_t`原因：robots.txt 不允許爬取此網站（${robotsList().join(', ')}）。已依網站設定停止；若你擁有此網站，請調整 robots.txt，或改用 Playwright MCP 手動瀏覽。`);
-  else console.error(_t('原因：頁面無法載入（網址錯誤、逾時或被擋住）。請先執行 doctor.mjs <網址> 確認連線。'));
+  else console.error(_t('原因：頁面無法載入（網址錯誤、逾時或被擋住）。請執行：site-explorer doctor <網址> 確認連線。'));
   process.exit(3);
 }
 

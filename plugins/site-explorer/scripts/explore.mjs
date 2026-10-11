@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runChecks, printChecks } from './doctor.mjs';
+import { warnNoSandboxOnce } from './launch.mjs';
 import { openDb, ingest, runsForHost, renderChangesMd, DB_PATH } from './db.mjs';
 import { findUrl, findUrls, intOpt, sameSite, normalizeFlags } from './args.mjs';
 import { isInside, checkExploreOut, UnsafeOutputError } from './safe-out.mjs';
@@ -36,6 +37,12 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
   --fail-on high       健檢有「高」以上問題時，以結束代碼 4 結束（可填 critical／high／medium／low；給自動化／CI 用）
 結束代碼：0 成功；1 失敗或參數錯誤；4 健檢未達 --fail-on 門檻`;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
+{ // a misspelled flag must fail loudly: "--fial-on high" silently turning a CI gate off is worse than an error
+  const KNOWN = new Set(['--a11y', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang']);
+  const unknown = args.filter((a) => a.startsWith('--') && !KNOWN.has(a));
+  if (unknown.length) { const near = (u) => [...KNOWN].find((k) => k.length > 3 && (k.startsWith(u) || u.startsWith(k) || [...u].filter((c) => k.includes(c)).length >= k.length - 2 && Math.abs(k.length - u.length) <= 2)); console.error(_t`不認得的選項：${unknown.join(' ')}${near(unknown[0]) ? _t`（是不是 ${near(unknown[0])}？）` : ''}\n執行 site-explorer explore --help 看全部選項。`); process.exit(1); }
+  if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
+}
 if (!url) {
   const flagsWithValue = new Set(['--max-pages', '--out', '--wait', '--motion-pages', '--fail-on', '--storage-state', '--framework']);
   const bad = args.find((a, i) => !a.startsWith('-') && !flagsWithValue.has(args[i - 1]));
@@ -78,17 +85,23 @@ function run(label, script, a) {
 }
 
 console.log(_t`探索 ${url}\n輸出：${out}\n`);
+warnNoSandboxOnce(); // once for the whole run: the stages below inherit the flag
 const checks = await runChecks(url);
 printChecks(checks);
-if (checks.some((c) => c.level === 'fail')) { console.error(_t('\n環境檢查未通過，請先依上方建議處理。')); process.exit(1); }
+if (checks.some((c) => c.level === 'fail')) {
+  try { const left = fs.readdirSync(out); if (left.length === 1 && left[0] === 'ABOUT-THIS-FOLDER.md') fs.rmSync(out, { recursive: true, force: true }); } catch {} // do not leave an empty folder behind
+  console.error(_t('\n環境檢查未通過，請先依上方建議處理。')); process.exit(1);
+}
 
-const crawlOk = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
+const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
+const crawlOk = crawlRan && (() => { try { return (JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []).length > 0; } catch { return false; } })(); // a crawl that exits 0 but saved no page is a failure
 if (crawlOk) await run(_t('整理設計包（tokens、Tailwind、W3C）'), 'export-design.mjs', [siteDir]);
 let healthOk = false;
 if (crawlOk && args.includes('--a11y')) await run(_t('無障礙檢查（axe-core）'), 'a11y.mjs', ['--site', siteDir, ...authArgs, ...(args.includes('--max-pages') ? ['--max-pages', String(maxPages)] : [])]);
 if (crawlOk && !args.includes('--no-health')) healthOk = await run(_t('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）'), 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
 let motionOk = false;
-if (!args.includes('--no-motion')) motionOk = await run(_t('擷取 3D／動畫畫格'), 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])]);
+if (!crawlOk && !args.includes('--no-motion')) console.log(_t`\n沒有任何頁面被爬取，略過其餘階段。請檢查網址有沒有打錯、網路是否正常，或執行：site-explorer doctor ${url}`);
+else if (!args.includes('--no-motion')) motionOk = await run(_t('擷取 3D／動畫畫格'), 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])]);
 
 // 3D／motion is per page: also capture the other crawled pages (--motion-pages N, default 5 pages in total; 1 = only the start page)
 if (!args.includes('--no-motion') && crawlOk) {

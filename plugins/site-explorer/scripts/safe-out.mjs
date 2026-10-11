@@ -47,7 +47,8 @@ export function requireExtension(file, re, what) {
 export function checkExploreOut(dir) {
   const abs = path.resolve(dir);
   const refuse = (why) => { throw new UnsafeOutputError(_t`不會寫入「${abs}」：${why}\n請指定一個新的資料夾，例如 --out ./explore-out（不會動到你現有的檔案）。`); };
-  const ours = ['ABOUT-THIS-FOLDER.md', 'runs.json'].some((f) => fs.existsSync(path.join(abs, f)));
+  const has = (f) => fs.existsSync(path.join(abs, f));
+  const ours = has('ABOUT-THIS-FOLDER.md') || (has('runs.json') && (has('site') || has('dashboard.html'))); // a lone runs.json could be somebody else's file
   if (ours) return abs;
   if (samePath(abs, path.parse(abs).root)) refuse(_t('這是檔案系統的根目錄'));
   if (samePath(abs, os.homedir())) refuse(_t('這是你的家目錄'));

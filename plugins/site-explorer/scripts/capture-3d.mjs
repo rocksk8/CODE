@@ -61,12 +61,12 @@ let ctx, page;
 try { [ctx, page] = await newCtx(wantVideo); }
 catch (e) {
   if (!wantVideo) throw e;
-  console.warn('Video recording unavailable (ffmpeg missing: run `npx playwright install ffmpeg`); continuing with frames only.');
+  console.warn(_t('沒有 ffmpeg，略過錄影（只擷取畫格）。要錄影請執行：site-explorer setup --with-ffmpeg'));
   wantVideo = false; [ctx, page] = await newCtx(false);
 }
 const assets3d = new Set();
 page.on('response', (r) => { const u = r.url(); if (/\.(glb|gltf|obj|fbx|usdz|hdr|exr|ktx2?|basis|drc|splat|ply|riv|lottie)(\?|$)/i.test(u) || /lottie.*\.json|\/models?\/.*\.bin/i.test(u)) assets3d.add(u); });
-await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(async (e) => { console.error(_t`無法開啟 ${url}：${String(e.message).split('\n')[0].replace(/^page\.goto: /, '')}`); await browser.close().catch(() => {}); process.exit(1); });
 await page.waitForLoadState('load', { timeout: 15000 }).catch(() => {});
 await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
 await page.waitForTimeout(WAIT);

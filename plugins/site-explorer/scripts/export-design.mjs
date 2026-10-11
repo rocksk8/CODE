@@ -57,9 +57,15 @@ const neutrals = all.filter(neutral);
 // body text colour = what real paragraphs use (frequency alone is fooled by white text on dark sections)
 const t0 = d.typography || {};
 const pc = [t0.p?.color, t0.li?.color, t0.h2?.color, t0.h1?.color].map(parse).find((x) => x && x.a > 0.5);
-const text = pc ? { hex: hex(pc), rgb: pc } : all.find((e) => e.tags.has('text') && neutral(e)) || all.find((e) => e.tags.has('text'));
+let text = pc ? { hex: hex(pc), rgb: pc } : all.find((e) => e.tags.has('text') && neutral(e)) || all.find((e) => e.tags.has('text'));
 const lightBg = neutrals.filter((e) => e.l > 0.85 && e.tags.has('bg')).sort((a, b) => b.count - a.count)[0];
 const background = lightBg || neutrals.find((e) => e.hex === '#ffffff') || { hex: '#ffffff', rgb: { r: 255, g: 255, b: 255 } };
+// a "body text" colour that cannot be read on the page background (the first paragraph is white because it sits in a dark hero, say) is not the body colour:
+// take the most used text colour that is readable on the background, else a safe near-black / white
+if (text && contrast(text.rgb, background.rgb) < 3) {
+  const readable = all.filter((e) => e.tags.has('text') && contrast(e.rgb, background.rgb) >= 4.5).sort((a, b) => b.count - a.count)[0];
+  text = readable || (lum(background.rgb) > 0.5 ? { hex: '#111111', rgb: { r: 17, g: 17, b: 17 } } : { hex: '#ffffff', rgb: { r: 255, g: 255, b: 255 } });
+}
 const btnPrimary = (c.buttons || []).map((b) => parse(b.backgroundColor)).find((p) => p && p.a > 0.5 && hsl(p).s > 0.14);
 const brand = btnPrimary ? { hex: hex(btnPrimary), rgb: btnPrimary } : saturated[0];
 const accent = saturated.find((e) => brand && e.hex !== brand.hex && Math.abs(e.h - hsl(brand.rgb).h) > 25);

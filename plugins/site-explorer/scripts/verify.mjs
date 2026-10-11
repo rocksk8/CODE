@@ -9,10 +9,13 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launchBrowser } from './launch.mjs';
 import { isMain } from './util.mjs';
+import { normalizeFlags, VALUE_FLAGS } from './args.mjs';
 import { isInside } from './safe-out.mjs';
 import { clean } from './untrusted.mjs';
 
-const args = process.argv.slice(2);
+const __n = normalizeFlags(process.argv.slice(2), new Set([...VALUE_FLAGS, '--page', '--min-score', '--out']));
+if (__n.error && isMain(import.meta.url)) { console.error(__n.error); process.exit(1); }
+const args = __n.args;
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : d; };
 
 export const SECTION_COMMENT = /<!--\s*(\d+)\.\s*([\w-]+)\s*\|\s*reference image:\s*([^|]+?)\s*\|/g;
@@ -107,9 +110,12 @@ export async function verifyHandoff(handoffDir, { page: only, outDir, minScore =
       }
       await pg.close();
       const ok = sections.filter((s) => s.status === 'ok'); const w = ok.reduce((t, s) => t + s.weight, 0) || 1;
-      pages.push({ page: f, sections, score: ok.length ? Math.round(ok.reduce((t, s) => t + s.score * s.weight, 0) / w) : 0, missing: sections.length - ok.length });
+      const missingN = sections.length - ok.length; const avgW = ok.length ? w / ok.length : 1; // a section that could not be compared counts as 0, not as "not there"
+      pages.push({ page: f, sections, score: ok.length ? Math.round(ok.reduce((t, s) => t + s.score * s.weight, 0) / (w + missingN * avgW)) : 0, missing: missingN, compared: ok.length, total: sections.length });
     }
   } finally { await browser.close(); }
+  if (only && !pages.length) throw new Error(_t`找不到頁面「${only}」。可用的頁面：${files.map((f) => f.replace(/\.html$/i, '')).join('、')}`);
+  if (!pages.some((p) => p.sections.length)) throw new Error(_t('starter 頁面裡找不到可比對的區塊（缺少「reference image」註解），沒有東西可驗證。'));
   const scored = pages.filter((p) => p.sections.length);
   const overall = scored.length ? Math.round(scored.reduce((t, p) => t + p.score, 0) / scored.length) : 0;
   const result = { schemaVersion: 1, overall, grade: grade(overall), minScore, passed: overall >= minScore && scored.length > 0 && scored.every((p) => !p.missing), pages };

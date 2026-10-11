@@ -96,12 +96,21 @@ export function browserCandidates() {
   return list.filter((p) => { try { return fs.existsSync(p); } catch { return false; } });
 }
 
+/** Chromium's OS sandbox stays on except where it cannot run (root, e.g. in containers) or when asked for explicitly. */
+export const willRunWithoutSandbox = () => process.env.SITE_EXPLORER_NO_SANDBOX === '1' || (typeof process.getuid === 'function' && process.getuid() === 0);
+/** Tell the user once per run (child processes inherit the flag through the environment, so a run prints it once, not once per stage). */
+export function warnNoSandboxOnce() {
+  if (!willRunWithoutSandbox() || globalThis.__sandboxWarned || process.env.SITE_EXPLORER_SANDBOX_WARNED) return;
+  globalThis.__sandboxWarned = true; process.env.SITE_EXPLORER_SANDBOX_WARNED = '1';
+  console.error(_t('⚠️  以無沙箱模式啟動瀏覽器（root／容器環境或 SITE_EXPLORER_NO_SANDBOX=1）；請只探索你信任的網站，或改用一般使用者執行。'));
+}
+
 export async function launchBrowser(options = {}) {
   const { chromium } = await loadPlaywright();
   // behind a corporate proxy: SITE_EXPLORER_PROXY=http://host:port (Playwright does not read HTTPS_PROXY by itself)
   // Chromium's OS sandbox stays ON. It is turned off only where it cannot run (root, e.g. in containers) or when asked for explicitly.
-  const noSandbox = process.env.SITE_EXPLORER_NO_SANDBOX === '1' || (typeof process.getuid === 'function' && process.getuid() === 0);
-  if (noSandbox && !globalThis.__sandboxWarned) { globalThis.__sandboxWarned = true; console.error(_t('⚠️  以無沙箱模式啟動瀏覽器（root／容器環境或 SITE_EXPLORER_NO_SANDBOX=1）；請只探索你信任的網站，或改用一般使用者執行。')); }
+  const noSandbox = willRunWithoutSandbox();
+  warnNoSandboxOnce();
   const opts = { headless: true, chromiumSandbox: !noSandbox, ...(process.env.SITE_EXPLORER_PROXY ? { proxy: { server: process.env.SITE_EXPLORER_PROXY } } : {}), ...options };
   if (process.env.CHROMIUM_PATH) return chromium.launch({ ...opts, executablePath: process.env.CHROMIUM_PATH });
   const tried = [];
