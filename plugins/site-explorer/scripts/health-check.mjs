@@ -338,8 +338,9 @@ export async function runHealth(siteDir, opts = {}) {
     const bad = [], rec = [], noCtx = [], untyped = [];
     for (const p of live) {
       const nodes = allNodes(p); if (!nodes.length) continue;
+      if (!nodes.every((j) => 'context' in j)) continue; // crawled by an older version (no @context, truncated properties): judging it would invent findings
       const found = validateNodes(nodes);
-      for (const f of found) { if (f.untyped) { untyped.push(p); continue; } if (f.missing.length) bad.push(`${p.url}：${f.type} 缺少 ${f.missing.join('、')}`); else if (f.recommended.length) rec.push(`${p.url}：${f.type} 建議補 ${f.recommended.slice(0, 4).join('、')}`); }
+      for (const f of found) { if (f.untyped) { if (!untyped.includes(p)) untyped.push(p); continue; } if (f.missing.length) bad.push(`${p.url}：${f.type} 缺少 ${f.missing.join('、')}`); else if (f.recommended.length) rec.push(`${p.url}：${f.type} 建議補 ${f.recommended.slice(0, 4).join('、')}`); }
       if (nodes.some((j) => j.types.length && !hasContextOk(j.context))) noCtx.push(p);
     }
     if (bad.length) add('structured', 'high', 'jsonld-missing-required', `${bad.length} 個結構化資料項目缺少必填欄位`, { affected: new Set(bad.map((b) => b.split('：')[0])).size, scope: 'page', examples: bad, impact: '缺必填欄位的標記不會取得豐富搜尋結果（星等、價格、FAQ 摺疊等），Search Console 也會回報錯誤。', fix: '依類型補上欄位（範例：Product 要有 name 與 offers／review／aggregateRating；Article 要有 headline、datePublished、author）；用 Rich Results Test 驗證。' });

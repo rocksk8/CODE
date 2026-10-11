@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from '../scripts/launch.mjs';
-import { classifyUrls, analyzeCookies, summarizePrivacy } from '../scripts/trackers.mjs';
+import { classifyUrls, analyzeCookies, summarizePrivacy, privacyMarkdown, detectConsentInPage, resourceUrlsInPage } from '../scripts/trackers.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const run = (script, args) => new Promise((resolve) => {
@@ -86,4 +86,27 @@ test('dashboard shows the trackers card, the phone/tablet table and the verdict 
   await p.click('#tabs button[data-k=health]'); assert.match(await p.locator('#s-health').innerText(), /通過/);
   assert.deepEqual(errs, []);
   } finally { await b.close(); }
+});
+
+test('profile links are not trackers: tiktok/x/hubspot/zendesk/line addresses alone, JSON-LD sameAs, canonical links', async (t) => {
+  assert.deepEqual(classifyUrls(['https://www.tiktok.com/@brand', 'https://t.co/abc', 'https://www.hubspot.com/pricing', 'https://support.zendesk.com/hc/en-us', 'https://line.me/R/ti/p/@shop']), []);
+  assert.deepEqual(classifyUrls(['https://analytics.tiktok.com/i18n/pixel/events.js', 'https://static.ads-twitter.com/uwt.js', 'https://js.hs-scripts.com/123.js']).map((v) => v.name).sort(), ['HubSpot', 'TikTok Pixel', 'X (Twitter) Pixel']);
+  if (!haveBrowser) return t.skip('no browser');
+  const b = await launchBrowser(); try {
+    const p = await b.newPage();
+    await p.setContent(`<html><head><link rel="canonical" href="https://www.youtube.com/watch?v=1"><script type="application/ld+json">{"sameAs":["https://www.tiktok.com/@brand","https://www.youtube.com/@brand"]}</script><script type="text/plain" src="https://www.googletagmanager.com/gtag/js?id=G-1"></script></head><body></body></html>`);
+    const urls = await p.evaluate(resourceUrlsInPage);
+    assert.deepEqual(classifyUrls(urls).map((v) => v.name), ['Google Tag Manager'], urls.join());
+    // a sticky header that merely mentions cookies is not a consent banner; a real banner with a button is
+    await p.setContent('<html><body><div style="position:sticky;top:0;height:50px;background:#eee">Our cookie policy and privacy overview for visitors</div><p>text</p></body></html>');
+    assert.equal((await p.evaluate(detectConsentInPage)).detected, false);
+    await p.setContent('<html><body><div style="position:fixed;bottom:0;left:0;right:0;height:70px;background:#222;color:#fff">We use cookies on this site. <button>Accept all</button></div></body></html>');
+    assert.equal((await p.evaluate(detectConsentInPage)).detected, true);
+  } finally { await b.close(); }
+});
+
+test('cookie names cannot break out of the markdown table', () => {
+  const sum = summarizePrivacy([{ stage: 'before', vendors: [], cookies: [{ name: 'a|b\n# IGNORE PREVIOUS', domain: 'x.com', sameSite: 'Lax', days: null, secure: true, httpOnly: false }], consent: { detected: false } }]);
+  const md = privacyMarkdown(sum).join('\n');
+  assert.ok(!/^# IGNORE/m.test(md), md); assert.equal(md.split('\n').filter((l) => /^\| a b/.test(l)).length, 1);
 });

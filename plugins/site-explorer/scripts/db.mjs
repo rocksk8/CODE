@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from './util.mjs';
+import { BANNER, sanitizeDoc } from './untrusted.mjs';
 
 export const DB_PATH = process.env.SITE_EXPLORER_DB || path.join(os.homedir(), '.site-explorer', 'explorations.db');
 const SCHEMA_VERSION = 2;
@@ -154,7 +155,8 @@ export function diffPages(db, a, b) {
 export function renderChangesMd(db, a, b) {
   const A = db.prepare('SELECT * FROM runs WHERE id=?').get(a), B = db.prepare('SELECT * FROM runs WHERE id=?').get(b);
   const d = diffPages(db, a, b), settings = diffRuns(db, a, b);
-  const L = [`# 改版前後對照`, '', `- 之前：run #${a}　${A.host}　${String(A.crawled_at || '').slice(0, 10)}`, `- 之後：run #${b}　${B.host}　${String(B.crawled_at || '').slice(0, 10)}`, '', '> 頁面以「路徑」對應，所以舊站與新站在不同網域（例如測試站）也能比。只比較兩次都有爬到的頁面。', ''];
+  const q = (x) => String(x ?? '').replace(/[`\r\n]+/g, ' '); // page text is third-party data: one line, no markdown breakout
+  const L = [`# 改版前後對照`, '', BANNER, '', `- 之前：run #${a}　${A.host}　${String(A.crawled_at || '').slice(0, 10)}`, `- 之後：run #${b}　${B.host}　${String(B.crawled_at || '').slice(0, 10)}`, '', '> 頁面以「路徑」對應，所以舊站與新站在不同網域（例如測試站）也能比。只比較兩次都有爬到的頁面。', ''];
   const risk = [];
   if (d.removed.length) risk.push(`**${d.removed.length} 個舊網址在新版消失** — 沒有設定 301 就會變 404，搜尋排名與外部連結會流失。`);
   const lostDesc = d.changed.filter((c) => c.changes.some((x) => x.field === '描述' && x.from && !x.to)); if (lostDesc.length) risk.push(`${lostDesc.length} 頁的 meta description 被拿掉了。`);
@@ -164,12 +166,12 @@ export function renderChangesMd(db, a, b) {
   const lostLd = d.changed.filter((c) => c.changes.some((x) => x.field === '結構化資料' && x.to === '（無）')); if (lostLd.length) risk.push(`${lostLd.length} 頁的結構化資料不見了。`);
   L.push('## 要先處理的風險', ...(risk.length ? risk.map((r) => '- ' + r) : ['- 沒有發現明顯的 SEO 風險。']), '');
   if (A.health_score != null && B.health_score != null) L.push(`健檢分數：${A.health_score}（${A.health_grade}）→ ${B.health_score}（${B.health_grade}）`, '');
-  L.push(`## 舊網址消失（${d.removed.length}）— 需要 301 轉址`, ...(d.removed.length ? d.removed.slice(0, 200).map((r) => `- \`${r.path}\`　${r.title ? '（' + r.title + '）' : ''}`) : ['- 無']), '');
-  L.push(`## 新增的頁面（${d.added.length}）`, ...(d.added.length ? d.added.slice(0, 200).map((r) => `- \`${r.path}\`　${r.title ? '（' + r.title + '）' : ''}`) : ['- 無']), '');
+  L.push(`## 舊網址消失（${d.removed.length}）— 需要 301 轉址`, ...(d.removed.length ? d.removed.slice(0, 200).map((r) => `- \`${q(r.path)}\`　${r.title ? '（' + q(r.title).slice(0, 120) + '）' : ''}`) : ['- 無']), '');
+  L.push(`## 新增的頁面（${d.added.length}）`, ...(d.added.length ? d.added.slice(0, 200).map((r) => `- \`${q(r.path)}\`　${r.title ? '（' + q(r.title).slice(0, 120) + '）' : ''}`) : ['- 無']), '');
   L.push(`## 內容有變的頁面（${d.changed.length}；沒變 ${d.unchanged}）`);
-  for (const c of d.changed.slice(0, 100)) { L.push(`### \`${c.path}\``); for (const x of c.changes) L.push(`- ${x.field}：「${String(x.from).slice(0, 80)}」→「${String(x.to).slice(0, 80)}」`); }
+  for (const c of d.changed.slice(0, 100)) { L.push(`### \`${q(c.path)}\``); for (const x of c.changes) L.push(`- ${x.field}：「${q(x.from).slice(0, 80)}」→「${q(x.to).slice(0, 80)}」`); }
   L.push('', `## 設計與技術的變化`, ...(settings.length ? settings.map((c) => `- ${c.label}：${c.from} → ${c.to}`) : ['- 沒有明顯差異']), '');
-  return L.join('\n');
+  return sanitizeDoc(L.join('\n'));
 }
 
 export function search(db, f) {
