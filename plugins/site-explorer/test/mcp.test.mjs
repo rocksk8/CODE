@@ -88,7 +88,8 @@ test('explore --json: stdout is exactly one JSON object, progress goes to stderr
     assert.equal(cli.s, 0, cli.e); const j = JSON.parse(cli.o); // throws if anything but one JSON document is on stdout
     assert.equal(j.ok, true); assert.ok(j.health.score >= 0 && j.pages.crawled === 1 && j.files.handoff && j.files.dashboard && j.steps.length >= 4);
     assert.match(cli.e, /\[1\/\d+\]/, 'human progress is on stderr');
-    const m = await callTool('check_site_health', { url, max_pages: 1, out_dir: path.join(tmp, 'j2') });
+    const cwd0 = process.cwd(); process.chdir(tmp); // the MCP server only writes inside its working directory
+    let m; try { m = await callTool('check_site_health', { url, max_pages: 1, out_dir: path.join(tmp, 'j2') }); } finally { process.chdir(cwd0); }
     assert.equal(m.isError, false, m.content[0].text); const mj = JSON.parse(m.content[0].text);
     assert.ok(mj.health && ['pass', 'conditional', 'fail'].includes(mj.health.verdict) && mj.files.handoff === null, 'health-only run makes no handoff');
     const v = await callTool('verify_rebuild', { handoff_dir: path.join(tmp, 'j1', 'handoff'), min_score: 1 });

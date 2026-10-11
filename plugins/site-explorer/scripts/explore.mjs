@@ -79,11 +79,14 @@ const steps = [];
 const total = 7 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
 let n = 0;
 
+let current = null; // the stage that is running: Ctrl-C / SIGTERM (CI timeout, MCP kill) must stop it too, not leave a browser crawling
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { current?.kill('SIGTERM'); } catch {} process.exit(sig === 'SIGINT' ? 130 : 143); });
 function run(label, script, a) {
   return new Promise((resolve) => {
     const t0 = Date.now();
     console.log(`\n[${++n}/${total}] ${label}`);
     const p = spawn(process.execPath, [path.join(here, script), ...a], { env: { ...process.env, SITE_EXPLORER_LANG: LANG } });
+    current = p;
     let tail = '';
     const onData = (d) => { tail = (tail + d).slice(-4000); for (const l of String(d).split('\n').map(stripControl)) if (l.trim() && !/ExperimentalWarning|trace-warnings|agent-proxy|android\.clients|For details: curl/.test(l)) console.log('   ' + l); };
     p.stdout.on('data', onData); p.stderr.on('data', onData);

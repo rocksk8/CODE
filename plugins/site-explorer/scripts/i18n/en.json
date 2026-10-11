@@ -1933,5 +1933,9 @@
 "AI 可讀：{}\n報告：{}\n縮圖總覽：{}{}": "AI-readable: {}\nReport: {}\nContact sheet: {}{}",
 "\n影片：": "\nVideo: ",
 "交接包：{}\n  ai-brief.md（{} KB）  SPEC.md（{} KB）  {} 張區塊圖  {} 張動態圖": "Handoff package: {}\n  ai-brief.md ({} KB)  SPEC.md ({} KB)  {} section images  {} motion images",
-"   （互動時拒絕了 {} 個會改資料的請求（POST／PUT／DELETE）；依賴它們的畫面可能看起來不完整）": "   (refused {} data-changing request(s) (POST/PUT/DELETE) while interacting; screens that depend on them may look incomplete)"
+"   （互動時拒絕了 {} 個會改資料的請求（POST／PUT／DELETE）；依賴它們的畫面可能看起來不完整）": "   (refused {} data-changing request(s) (POST/PUT/DELETE) while interacting; screens that depend on them may look incomplete)",
+"用法：site-explorer history compare <runA> <runB> [--md 對照.md]（run 編號見 site-explorer history list）": "Usage: site-explorer history compare <runA> <runB> [--md changes.md] (run numbers: site-explorer history list)",
+"起始頁（首頁）回應 {}": "The start page (home page) answers {}",
+"首頁是搜尋引擎與訪客的入口；它出錯時整個網站的可信度與收錄都會受影響。": "The home page is the entrance for search engines and visitors; when it errors, the whole site's credibility and indexing suffer.",
+"先修好首頁（或讓網址正確導向），再看其他問題。": "Fix the home page first (or make the address redirect correctly), then look at the other issues."
 }

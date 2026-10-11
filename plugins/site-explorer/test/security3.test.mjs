@@ -97,3 +97,27 @@ test('tagList: markup-looking text inside <script>/<style> is not a tag', async 
   const h = '<html><body><script>x("<script type=\\"application/ld+json\\">")</script><script type="application/ld+json">{}</script><style>a>b{}</style><a href=/x>y</a></body></html>';
   assert.deepEqual(tagList(h).map((t) => t.name), ['html', 'body', 'script', 'script', 'style', 'a']);
 });
+
+// ---- round 5: remaining audit items ----
+test('handoff: a planted DECISIONS.md symlink is dropped, never read or written through', async () => {
+  const fs = await import('node:fs'), os = await import('node:os'), path = await import('node:path');
+  const { claimOutputDir } = await import('../scripts/safe-out.mjs');
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'se-sym-')); const target = path.join(d, 'secret.txt'); fs.writeFileSync(target, 'TOP SECRET');
+  const out = path.join(d, 'handoff'); fs.mkdirSync(out); fs.writeFileSync(path.join(out, 'START-HERE.md'), 'x'); fs.symlinkSync(target, path.join(out, 'DECISIONS.md'));
+  const r = claimOutputDir(out, 'START-HERE.md');
+  assert.equal(r.decisions, null, 'the link target must not be read');
+  assert.equal(fs.existsSync(path.join(out, 'DECISIONS.md')), false); assert.equal(fs.readFileSync(target, 'utf8'), 'TOP SECRET');
+});
+
+test('history export / compare --md refuse file names that do not look like what they write', async () => {
+  const { spawnSync } = await import('node:child_process'); const path = await import('node:path'); const fs = await import('node:fs'), os = await import('node:os');
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'se-exp-')), 'precious.cfg');
+  const r = spawnSync(process.execPath, [new URL('../bin/site-explorer.mjs', import.meta.url).pathname, 'history', 'export', '--out', f], { encoding: 'utf8' });
+  assert.notEqual(r.status, 0); assert.equal(fs.existsSync(f), false);
+});
+
+test('mcp: out_dir outside the server working directory is refused', async () => {
+  const { callTool } = await import('../scripts/mcp-server.mjs');
+  const r = await callTool('explore_site', { url: 'https://example.com', out_dir: '/tmp/elsewhere-' + process.pid });
+  assert.equal(r.isError, true); assert.match(r.content[0].text, /inside the server working directory/);
+});

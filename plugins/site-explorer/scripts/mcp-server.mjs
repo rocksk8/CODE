@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { normalizeUrl } from './args.mjs';
 import { isMain } from './util.mjs';
+import { isInside } from './safe-out.mjs';
 import { sanitizeDoc, BANNER } from './untrusted.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -20,7 +21,7 @@ const MAX_READ = 200_000;
 
 const TOOLS = [
   { name: 'explore_site', description: 'Explore a website with a real browser: design tokens, layout, 3D/animation, SEO health, and an AI handoff package with a runnable starter. Returns a JSON summary and file paths (read the handoff with read_handoff_file). Takes 1–5 minutes. Only explore sites you trust.',
-    inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'Site address, e.g. https://example.com' }, max_pages: { type: 'integer', minimum: 1, maximum: 50, default: 6 }, motion: { type: 'boolean', default: false, description: 'Also capture 3D/animation frames (slower)' }, verify: { type: 'boolean', default: false, description: 'Also compare the generated starter with the original, section by section' }, out_dir: { type: 'string', description: 'Output folder (default: ./explore-out in the server working directory)' } }, required: ['url'], additionalProperties: false } },
+    inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'Site address, e.g. https://example.com' }, max_pages: { type: 'integer', minimum: 1, maximum: 50, default: 6 }, motion: { type: 'boolean', default: false, description: 'Also capture 3D/animation frames (slower)' }, verify: { type: 'boolean', default: false, description: 'Also compare the generated starter with the original, section by section' }, out_dir: { type: 'string', description: 'Output folder inside the server working directory (default: ./explore-out)' } }, required: ['url'], additionalProperties: false } },
   { name: 'check_site_health', description: 'SEO / crawlability / security health check of a website: score, verdict (pass / conditional / fail) and the top issues with fixes. Faster than explore_site.',
     inputSchema: { type: 'object', properties: { url: { type: 'string' }, max_pages: { type: 'integer', minimum: 1, maximum: 50, default: 6 }, out_dir: { type: 'string' } }, required: ['url'], additionalProperties: false } },
   { name: 'verify_rebuild', description: 'Compare a rebuilt page (handoff/starter) with the original site section by section. Returns an overall 0–100 layout-similarity score and the weakest sections; writes difference images to <handoff>/verify/diff/.',
@@ -49,6 +50,7 @@ export async function callTool(name, a = {}) {
   if (name === 'explore_site' || name === 'check_site_health') {
     const url = normalizeUrl(a.url); if (!url) return fail('url must be a website address such as https://example.com');
     if (a.out_dir !== undefined && !safeDir(a.out_dir)) return fail('out_dir is not a valid folder path');
+    if (a.out_dir !== undefined && !isInside(path.resolve(a.out_dir), process.cwd())) return fail('out_dir must be inside the server working directory (' + process.cwd() + ')'); // a prompt-injected agent must not be able to write the output tree anywhere on disk
     const args = [url, '--json', '--no-open', '--max-pages', String(intIn(a.max_pages, 6, 1, 50))];
     if (name === 'check_site_health') args.push('--no-motion', '--no-handoff', '--no-db'); else { if (!a.motion) args.push('--no-motion'); if (a.verify) args.push('--verify'); }
     if (a.out_dir) args.push('--out', path.resolve(a.out_dir));
