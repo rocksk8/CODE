@@ -19,7 +19,7 @@ import { responsiveFindings } from './responsive.mjs';
 const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
 const SEV = { critical: 40, high: 20, medium: 8, low: 3, info: 0 };
 const SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
-export const CATEGORIES = { indexability: ['索引與爬取', 25], onpage: ['頁面 SEO', 20], links: ['連結', 10], performance: ['效能（實驗室數據）', 15], mobile: ['行動版', 10], security: ['安全與傳輸', 10], structured: ['結構化資料與社群', 5], ai: ['AI 爬蟲友善度', 5] };
+export const CATEGORIES = { a11y: ['無障礙（axe-core）', 10], indexability: ['索引與爬取', 25], onpage: ['頁面 SEO', 20], links: ['連結', 10], performance: ['效能（實驗室數據）', 15], mobile: ['行動版', 10], security: ['安全與傳輸', 10], structured: ['結構化資料與社群', 5], ai: ['AI 爬蟲友善度', 5] };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const strip = (h) => h.replace(/^www\./, '');
@@ -385,9 +385,18 @@ export async function runHealth(siteDir, opts = {}) {
 
   if (injection.length) add('ai', 'high', 'prompt-injection', `頁面中有 ${injection.length} 處疑似針對 AI 的指令文字`, { examples: [...new Map(injection.map((x) => [x.text, x])).values()].map((x) => `${x.where.replace(/^page\[([^\]]*)\]\./, '頁面 $1 的 ')}（${x.text.length} 字元；內容已隔離，不在此重述）`), impact: '這類文字對人類看不見或不顯眼，但會被 AI 爬蟲／助理讀進去並可能影響它們的行為（提示注入）。若不是你自己放的，網站可能被入侵或含有第三方惡意內容。', fix: '檢查並移除；確認第三方嵌入、留言／使用者生成內容與外掛是否被竄改。若是刻意測試或安全研究用途則忽略。' });
 
+  // ---------------------------------------------------------------- accessibility (only when a11y.json exists: run with --a11y)
+  let a11y = null; try { a11y = JSON.parse(fs.readFileSync(path.join(siteDir, 'a11y.json'), 'utf8')); } catch {}
+  if (a11y && a11y.pagesChecked) {
+    facts.a11y = { engine: `axe-core ${a11y.axeVersion}`, pagesChecked: a11y.pagesChecked, rules: a11y.rules.length };
+    const SEVMAP = { critical: 'high', serious: 'medium', moderate: 'low', minor: 'low' };
+    for (const r of a11y.rules) add('a11y', SEVMAP[r.impact] || 'low', 'a11y-' + String(r.id).replace(/[^a-z0-9-]/gi, ''), `${r.help}（${r.pages} 頁、${r.nodes} 處）`, { affected: r.pages, scope: 'page', total: a11y.pagesChecked, examples: r.examples.map((x) => `${x.page}：${x.target}`), impact: `axe-core 影響程度「${r.impact}」；看不見、聽不見、用鍵盤或其他輔助工具的人可能無法使用這部分內容（${(r.tags || []).join('、')}）。`, fix: `見 ${r.helpUrl}` });
+    if (!a11y.rules.length) ok('a11y', `axe-core 在 ${a11y.pagesChecked} 頁沒有發現可自動檢查的違規（仍需人工檢查）`);
+  }
+
   // ---------------------------------------------------------------- scoring
   const cats = {};
-  for (const [k, [label, weight]] of Object.entries(CATEGORIES)) {
+  for (const [k, [label, weight]] of Object.entries(CATEGORIES).filter(([k]) => k !== 'a11y' || a11y?.pagesChecked)) { // the accessibility category exists only when it was measured
     const its = issues.filter((i) => i.category === k);
     const penalty = its.reduce((n, i) => n + SEV[i.severity] * (i.scope === 'site' ? 1 : 0.4 + 0.6 * Math.min(1, i.affected / i.total)), 0);
     cats[k] = { label, weight, score: Math.round(100 * Math.exp(-penalty / 55)), issues: its.length, passed: passed.filter((p) => p.category === k).length }; // diminishing returns: the 10th problem hurts less than the 1st

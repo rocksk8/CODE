@@ -38,7 +38,7 @@ export async function main(env = process.env) {
   const minHealth = env.INPUT_MIN_HEALTH ? Number(env.INPUT_MIN_HEALTH) : null; if (minHealth != null && !(minHealth >= 0 && minHealth <= 100)) throw new Error('input "min-health" must be 0–100');
   const out = path.resolve(env.INPUT_OUT || 'site-explorer-out'); fs.mkdirSync(out, { recursive: true });
   const dbEnv = { SITE_EXPLORER_DB: path.join(out, 'history.db') }; // both runs share one database so the before/after report can compare them
-  const common = ['--json', '--no-open', '--no-motion', '--max-pages', String(maxPages)];
+  const common = ['--json', '--no-open', '--no-motion', '--max-pages', String(maxPages), ...(env.INPUT_A11Y === 'true' ? ['--a11y'] : [])];
 
   let baseline = null;
   if (baselineUrl) { const b = await cli([baselineUrl, ...common, '--no-handoff', '--out', path.join(out, 'baseline')], dbEnv); baseline = b.json; if (!baseline) console.error('baseline exploration failed; continuing without a comparison'); }
