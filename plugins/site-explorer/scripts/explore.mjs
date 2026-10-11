@@ -20,6 +20,11 @@ const args = __n.args;
 const url = findUrl(args);
 const JSON_MODE = args.includes('--json');
 if (JSON_MODE) { console.log = (...a) => console.error(...a); } // stdout carries ONLY the final JSON object
+const __errs = []; let __jsonDone = false;
+if (JSON_MODE) { // an early failure (bad flag, unwritable folder…) must still leave one parseable JSON document on stdout
+  const __e = console.error; console.error = (...a) => { __errs.push(a.join(' ')); __e(...a); };
+  process.on('exit', (code) => { if (!__jsonDone && code !== 0) { try { fs.writeSync(1, JSON.stringify({ ok: false, exitCode: code, error: __errs.filter((x) => x.trim()).slice(-3).join(' | ').slice(0, 600) }) + '\n'); } catch {} } });
+}
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選項]    （網址可省略 https://；可一次給多個頁面，第一個是起點）
   --max-pages 6        最多爬幾頁
@@ -65,7 +70,7 @@ const maxPages = Math.max(intOpt(args, 'max-pages', 6, { min: 1, max: 500 }), ur
 const out = path.resolve(opt('out', process.env.SITE_EXPLORER_OUT || './explore-out'));
 if (isInside(out, path.resolve(here, '..'))) { console.error(_t`輸出資料夾不能放在外掛目錄內（${out}）：外掛更新或重新安裝時會被清掉。請改用你專案裡的資料夾，例如 --out ./explore-out`); process.exit(1); }
 try { checkExploreOut(out); fs.mkdirSync(out, { recursive: true }); if (!fs.existsSync(path.join(out, 'ABOUT-THIS-FOLDER.md'))) fs.writeFileSync(path.join(out, 'ABOUT-THIS-FOLDER.md'), _t('# site-explorer 輸出資料夾（探索進行中）\n')); } // marks the folder as ours right away
-catch (e) { if (e instanceof UnsafeOutputError) { console.error(e.message); process.exit(1); } throw e; }
+catch (e) { if (e instanceof UnsafeOutputError) { console.error(e.message); process.exit(1); } console.error(_t`無法建立輸出資料夾「${out}」：${e.code || e.message}。請改用 --out 指定一個你有寫入權限的資料夾。`); process.exit(1); }
 if (stateFile) { try { fs.chmodSync(out, 0o700); } catch {} } // logged-in output may hold personal data: only the owner may read the folder
 const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
@@ -205,5 +210,5 @@ if (failOn && !healthOk) { failCode = 1; console.error(_t`--fail-on ${failOn} �
 try { const hj = path.join(siteDir, 'health.json'); if (healthOk && fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(_t`驗收結論：${h.verdict?.label ?? '—'}`); if (failOn) { const rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }; if (h.issues.some((i) => rank[i.severity] <= rank[failOn])) { failCode = 4; console.error(_t`健檢有 ${failOn} 以上的問題，依 --fail-on ${failOn} 以結束代碼 4 結束。`); } } } } catch {}
 if (fs.existsSync(dash)) console.log(_t('\n👉 下一步：先雙擊 dashboard.html 看總覽；要交給 AI 或工程師，就把 handoff 資料夾整個給對方。'));
 if (fs.existsSync(path.join(siteDir, 'report.md')) && fs.readFileSync(path.join(siteDir, 'report.md'), 'utf8').includes(_t('被擋住'))) console.log(_t('\n⚠️ 部分頁面被擋住，結果可能不完整（見儀表板或 report.md）。'));
-if (JSON_MODE) { const { buildSummary } = await import('./summary.mjs'); process.stdout.write(JSON.stringify({ ok: !!(crawlOk || motionOk) && failCode === 0, exitCode: crawlOk || motionOk ? failCode : 1, ...buildSummary({ out, host, steps, url }), runId }, null, 2) + '\n'); }
+if (JSON_MODE) { __jsonDone = true; const { buildSummary } = await import('./summary.mjs'); process.stdout.write(JSON.stringify({ ok: !!(crawlOk || motionOk) && failCode === 0, exitCode: crawlOk || motionOk ? failCode : 1, ...buildSummary({ out, host, steps, url }), runId }, null, 2) + '\n'); }
 process.exit(crawlOk || motionOk ? failCode : 1);
