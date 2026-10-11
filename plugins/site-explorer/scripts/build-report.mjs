@@ -87,7 +87,7 @@ if (motionDir && exists(path.join(motionDir, 'pages.json'))) {
 // history from the local database (optional)
 try {
   const host = data.site ? new URL(data.site.startUrl).host : data.motion ? new URL(data.motion.url).host : null;
-  const db = host && (await openDb());
+  const db = host && !data.site?.authenticated && (await openDb()); // logged-in captures never touch the shared history database
   if (db) {
     const runs = runsForHost(db, host);
     if (runs.length) {

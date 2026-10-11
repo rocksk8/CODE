@@ -3,6 +3,7 @@
 //   health-check.mjs --site <crawl dir> [--no-link-check] [--max-links 120]
 // Reads the crawl output (site.json + pages/*/page.json), makes a small number of polite extra requests
 // (robots.txt, sitemaps, link status, a 404 probe), writes health.json + health.md and stores a summary in site.json.
+import { isDestructiveUrl } from './auth-state.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import tls from 'node:tls';
@@ -250,12 +251,12 @@ export async function runHealth(siteDir, opts = {}) {
   if (!opts.noLinkCheck) {
     const maxLinks = opts.maxLinks ?? 120;
     const crawledStatus = new Map(pages.map((p) => [norm(p.url), p.status]));
-    const internalList = [...allInternal.values()].filter((e) => !crawledStatus.has(norm(e.url))).filter((e) => !rp || isAllowed(rp, UA, new URL(e.url).pathname + new URL(e.url).search).allowed).slice(0, maxLinks);
+    const internalList = [...allInternal.values()].filter((e) => !crawledStatus.has(norm(e.url))).filter((e) => !rp || isAllowed(rp, UA, new URL(e.url).pathname + new URL(e.url).search).allowed).filter((e) => !isDestructiveUrl(e.url)).slice(0, maxLinks); // never GET a link that looks like logout/delete/unsubscribe, logged in or not (such links can act without a session, e.g. ?token=)
     const checked = await pool(internalList, 4, async (e) => ({ ...e, ...(await http(e.url)) }));
     const crawledBroken = [...allInternal.values()].filter((e) => (crawledStatus.get(norm(e.url)) || 0) >= 400).map((e) => ({ ...e, status: crawledStatus.get(norm(e.url)) }));
     const broken = [...crawledBroken, ...checked.filter((c) => c.status && c.status >= 400)], redirs = checked.filter((c) => c.status >= 300 && c.status < 400), unreachable = checked.filter((c) => !c.status);
     const ext = [...new Map(pages.flatMap((p) => p.links).filter((l) => { try { const u = new URL(l.href); return /^https?:/.test(u.protocol) && strip(u.hostname) !== strip(host); } catch { return false; } }).map((l) => [new URL(l.href).origin + new URL(l.href).pathname, l.href])).values()].slice(0, 30);
-    const extChecked = await pool(ext.filter((u) => mayFetch(u, origin)), 3, async (u) => ({ url: u, ...(await http(u, { timeout: 8000 })) }));
+    const extChecked = await pool(ext.filter((u) => mayFetch(u, origin) && !isDestructiveUrl(u)), 3, async (u) => ({ url: u, ...(await http(u, { timeout: 8000 })) }));
     const extBroken = extChecked.filter((c) => [404, 410].includes(c.status) || (c.status >= 500 && c.status < 600));
     linkChecks = { internalChecked: checked.length, externalChecked: extChecked.length, broken: broken.map((b) => ({ url: b.url, status: b.status, from: b.from })), redirects: redirs.length, externalBroken: extBroken.map((b) => ({ url: b.url, status: b.status })), unreachable: unreachable.length };
     if (broken.length) add('links', 'high', 'broken-internal', `${broken.length} 個內部連結壞掉（4xx／5xx）`, { affected: broken.length, examples: broken.map((b) => `${b.status} ${b.url}（來自 ${b.from[0]}）`), impact: '使用者與爬蟲都會碰壁，浪費抓取預算並傳遞負面訊號。', fix: '修正連結目標，或為搬移的頁面設定 301。' });

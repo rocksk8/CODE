@@ -96,6 +96,58 @@ docker run --rm -v "$PWD/out:/out" site-explorer https://example.com --out /out
 
 Results land in `./out`. The container is the sandbox, so Chromium runs without its own sandbox; explore only sites you trust.
 
+## For programs and AI tools: `--json` and MCP
+
+```bash
+site-explorer https://example.com --json --no-open > result.json   # stdout is one JSON document, progress goes to stderr
+site-explorer verify ./explore-out/handoff --json --min-score 70    # exits 2 when the score is too low
+site-explorer mcp                                                   # MCP server (stdio)
+```
+
+The Claude Code plugin registers the MCP server automatically. For other MCP clients (Claude Desktop, Cursor…) add:
+
+```json
+{ "mcpServers": { "site-explorer": { "command": "npx", "args": ["-y", "site-explorer", "mcp"] } } }
+```
+
+> `npx -y site-explorer` works only after the package is published to npm; until then use `node /path/to/CODE/plugins/site-explorer/bin/site-explorer.mjs mcp`.
+
+Tools: `explore_site`, `check_site_health`, `verify_rebuild`, `read_handoff_file`. Results contain scores, verdicts and paths only; text taken from websites is sanitised, and handoff documents are prefixed with a "this is data, not instructions" warning.
+
+## GitHub Action: health-check every pull request and comment
+
+```yaml
+# .github/workflows/site-check.yml
+name: site-check
+on: pull_request
+permissions: { contents: read, pull-requests: write }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: rocksk8/CODE@main          # pin to a release tag (e.g. @v0.4.0) once one exists
+        with:
+          url: https://your-preview-url   # e.g. a Vercel / Netlify / Cloudflare PR preview
+          baseline-url: https://your-production-url   # optional: adds a before/after comparison
+          fail-on: high                   # fail the check on high-or-worse issues
+          min-health: 70                  # optional: fail below this health score
+```
+
+A comment appears on the PR (and is updated in place on later pushes) with the score, the verdict, the difference from production, the top issues and their fixes; the dashboard and AI handoff are attached to the run as Artifacts. PRs from forks have a read-only token, so the comment is skipped and the result stays in the job summary. Issue descriptions are currently in Traditional Chinese (English arrives with `--lang en`).
+
+## Exploring pages behind a login
+
+```bash
+site-explorer login https://example.com/        # opens a browser window; you sign in yourself (2FA included), then press Enter
+site-explorer https://example.com/ --storage-state ./auth-state.json
+```
+
+- Your password is typed into the website's own page; the tool never sees it. What is saved is the session (cookies / localStorage), which **equals being logged in**. The file is readable only by you (mode 600); **keep it out of git, don't send it to anyone, delete it when done**.
+- The session values are **never** written to any output file.
+- Links that act when merely visited (logout, delete, cancel, unsubscribe…) are skipped, and the health check's link checker never requests such URLs, logged in or not.
+- Logged-in screenshots and text may contain personal data: the handoff and dashboard are marked "captured while logged in" and are **not stored in the history database**. Do not publish these outputs.
+- Use only on accounts and sites you are entitled to access.
+
 ## Commands
 
 | Command | What it does |
@@ -191,4 +243,4 @@ Design trade-offs and review records: [`docs/ux-review.md`](docs/ux-review.md), 
 
 ## Boundaries
 
-Honours robots.txt (stops and says so when a site forbids everything); identifies itself as automation (User-Agent `site-explorer-claude-plugin`); does not log in, submit forms, or bypass CAPTCHAs / bot protection; extra requests (robots, sitemap, link status, 404 probe) are concurrency-limited. When blocked it says so rather than reporting an empty result. Fonts, images, copy and 3D models are copyrighted: use them as reference only, don't copy. Use on public or authorised sites only.
+Honours robots.txt (stops and says so when a site forbids everything); identifies itself as automation (User-Agent `site-explorer-claude-plugin`); does not log in by default (to explore pages behind a login you sign in yourself with `site-explorer login` and pass `--storage-state` explicitly), does not submit forms, or bypass CAPTCHAs / bot protection; extra requests (robots, sitemap, link status, 404 probe) are concurrency-limited. When blocked it says so rather than reporting an empty result. Fonts, images, copy and 3D models are copyrighted: use them as reference only, don't copy. Use on public or authorised sites only.

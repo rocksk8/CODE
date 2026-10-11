@@ -16,6 +16,7 @@ import { probe } from './diagnose.mjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
+import { loadAuthState, skipLink } from './auth-state.mjs';
 
 const __n = normalizeFlags(process.argv.slice(2)); if (__n.error) { console.error(__n.error); process.exit(1); }
 const args = __n.args;
@@ -239,7 +240,7 @@ async function snapshotPrivacy(page, ctx, net) {
   try {
     const dom = await page.evaluate(resourceUrlsInPage).catch(() => []); const n = net.summary(page.url());
     const urls = [...dom, ...(n.hostList || []).map((h) => `https://${h}/`), ...(n.failedUrls || [])];
-    return { vendors: classifyUrls(urls), cookies: analyzeCookies(await ctx.cookies(), new URL(page.url()).hostname, { https: page.url().startsWith('https:') }), consent: await page.evaluate(detectConsentInPage).catch(() => ({ detected: false, kind: null })) };
+    return { vendors: classifyUrls(urls), cookies: analyzeCookies((await ctx.cookies()).filter((c) => !auth || !auth.cookieKeys.has(`${c.name}|${String(c.domain || '').replace(/^\./, '')}`)), new URL(page.url()).hostname, { https: page.url().startsWith('https:') }), consent: await page.evaluate(detectConsentInPage).catch(() => ({ detected: false, kind: null })) };
   } catch { return null; }
 }
 async function dismissConsent(page) { // only ever clicks inside the box detectConsentInPage marked: never "any button on a page whose <body> mentions cookies"
@@ -328,7 +329,7 @@ async function discoverMore(fromUrl) {
   }
   add(origin + '/', '首頁');
   const startPath = new URL(fromUrl).pathname.replace(/\/[^/]*$/, '/'); // same section as the page you gave first, then the rest
-  const skip = (u) => /(wp-admin|wp-login|\/admin|\/login|\/ghost\/|\/administrator|logout|signin|sign-in)/i.test(new URL(u).pathname) || /\.(pdf|zip|jpe?g|png|gif|svg|webp|mp4|css|js|xml|json|txt)(\?|$)/i.test(u);
+  const skip = (u) => skipLink(u, { authed: !!auth }) || /\.(xml|json|txt)(\?|$)/i.test(u);
   const list = [...found.values()].filter((f) => !skip(f.url) && !seen.has(norm(f.url))).sort((a, b) => (new URL(b.url).pathname.startsWith(startPath) ? 1 : 0) - (new URL(a.url).pathname.startsWith(startPath) ? 1 : 0));
   let added = 0; const bySource = {};
   for (const f of list) { if (added >= maxPages * 3) break; try { if (!allowed(f.url)) continue; } catch { continue; } seen.add(norm(f.url)); queue.push([stripHash(f.url), 1]); added++; bySource[f.why] = (bySource[f.why] || 0) + 1; }
@@ -354,7 +355,10 @@ if (!allowed(startUrl)) {
 const headed = args.includes('--headed'); // visible browser window: real GPU, and you can click an "enter" button yourself
 const browser = await launchBrowser({ headless: !headed });
 const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
-const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA });
+const authFile = opt('storage-state', null);
+let auth = null;
+if (authFile) { try { auth = loadAuthState(authFile); } catch (e) { console.error(e.message); await browser.close(); process.exit(1); } for (const w of auth.warnings) console.error('⚠️  ' + w); console.error('🔐 以登入狀態探索：輸出（截圖、文字、儀表板）可能含個人資料，請勿公開分享。已略過登出、刪除、取消等會改變資料的連結。'); }
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA, ...(auth ? { storageState: auth.file } : {}) });
 await guardInternal(ctx, startUrl); // a public site (or a redirect from it) cannot make the browser read localhost / the LAN
 const stripHash = (u) => { const x = new URL(u); x.hash = ''; return x.href; };
 const queue = [[stripHash(startUrl), 0]], seen = new Set([norm(startUrl)]), pages = [], headers = {};
@@ -521,8 +525,7 @@ while (pages.length < maxPages) {
       for (const l of data.content.links) {
         try {
           if (!/^https?:/.test(l.href) || !sameSite(l.href, origin)) continue;
-          if (/(wp-admin|wp-login|\/admin|\/login|\/ghost\/|\/administrator|logout|signin|sign-in)/i.test(new URL(l.href).pathname)) continue;
-          if (/\.(pdf|zip|jpe?g|png|gif|svg|webp|mp4|css|js)(\?|$)/i.test(l.href)) continue;
+          if (skipLink(l.href, { authed: !!auth })) continue;
           // dedupe on the normalised key, but FETCH the URL as the site wrote it (some hosts serve only /dir/, not /dir)
           const n = norm(l.href);
           if (!seen.has(n)) { seen.add(n); queue.push([stripHash(l.href), depth + 1]); }
@@ -584,7 +587,7 @@ const designer = {
 };
 const toolVersion = (() => { try { return JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version; } catch { return null; } })();
 const site = {
-  schemaVersion: 3, tool: { name: 'site-explorer', version: toolVersion }, userAgent: UA, requestedUrl: startUrl, finalOrigin: origin,
+  schemaVersion: 3, authenticated: !!auth, tool: { name: 'site-explorer', version: toolVersion }, userAgent: UA, requestedUrl: startUrl, finalOrigin: origin,
   startUrl, crawledAt: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), robotsDisallow: robotsList(), robotsTxt: { status: robotsInfo.status, text: (robotsInfo.text || '').slice(0, 20000) }, consentAction, redirects: redirectLog, nonHtmlSkipped: nonHtmlLog, blockedPages: pages.filter((p) => p.blocked).map((p) => ({ url: p.url, reason: p.blocked })), skippedByRobots,
   server: { server: headers.main?.server, poweredBy: headers.main?.['x-powered-by'], generator: pages[0]?.meta.generator },
   editing: { platforms, contenteditablePages: pages.filter((p) => p.editing.contenteditable).map((p) => p.url), loginOrAdminLinks: [...new Map(pages.flatMap((p) => p.editing.editLinks).map((l) => [l.href, l])).values()].slice(0, 15) },

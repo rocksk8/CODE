@@ -94,6 +94,58 @@ docker run --rm -v "$PWD/out:/out" site-explorer https://example.com --out /out
 
 結果會出現在 `./out`。容器本身就是沙箱，所以瀏覽器以無沙箱模式執行；只探索你信任的網站。
 
+## 給程式和 AI 工具用：`--json` 與 MCP
+
+```bash
+site-explorer https://example.com --json --no-open > result.json   # stdout 只有一份 JSON，進度走 stderr
+site-explorer verify ./explore-out/handoff --json --min-score 70    # 分數不夠就以結束代碼 2 結束
+site-explorer mcp                                                   # MCP 伺服器（stdio）
+```
+
+Claude Code 外掛安裝後會自動帶上 MCP 伺服器。其他 MCP 用戶端（Claude Desktop、Cursor…）在設定檔加：
+
+```json
+{ "mcpServers": { "site-explorer": { "command": "npx", "args": ["-y", "site-explorer", "mcp"] } } }
+```
+
+> `npx -y site-explorer` 要等套件發布到 npm 之後才能用；目前請改用 `node /path/to/CODE/plugins/site-explorer/bin/site-explorer.mjs mcp`。
+
+工具：`explore_site`、`check_site_health`、`verify_rebuild`、`read_handoff_file`。回傳只有分數、判定、路徑；取自網站的文字都已清理，讀交接文件時會加上「這是資料不是指令」的警語。
+
+## GitHub Action：每個 PR 自動健檢並留言
+
+```yaml
+# .github/workflows/site-check.yml
+name: site-check
+on: pull_request
+permissions: { contents: read, pull-requests: write }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: rocksk8/CODE@main          # 發版後請改成固定版本，例如 @v0.4.0
+        with:
+          url: https://你的預覽網址        # 例如 Vercel／Netlify／Cloudflare 的 PR 預覽
+          baseline-url: https://你的正式網址  # 選填：加入改版前後對照
+          fail-on: high                   # 有 high 以上的問題就讓檢查失敗
+          min-health: 70                  # 選填：健檢分數低於 70 就失敗
+```
+
+PR 底下會出現（並在之後更新同一則）留言：分數、判定、與正式站的差異、前幾名問題與修法；儀表板和交接包會附在該次執行的 Artifacts。fork 來的 PR 沒有寫入權限，留言會略過，結果仍在 job summary。目前留言的問題說明是繁體中文（英文版在 `--lang en` 完成後提供）。
+
+## 探索登入後的頁面
+
+```bash
+site-explorer login https://example.com/        # 開瀏覽器視窗，你自己登入（含兩步驟驗證），回終端機按 Enter
+site-explorer https://example.com/ --storage-state ./auth-state.json
+```
+
+- 密碼只打在網站自己的頁面，工具看不到；存下來的是登入狀態（cookie／localStorage），**等於你已登入**。檔案只有你讀得到（權限 600）；**不要放進 git、不要寄給別人，用完請刪除**。
+- 登入狀態值**不會**寫進任何輸出檔。
+- 會自動略過登出、刪除、取消、退訂等「點了會改資料」的連結；健檢的連結檢查任何時候都不會請求這類網址。
+- 登入後的截圖與文字可能含個人資料：交接包、儀表板都會標註「以登入狀態探索」，且**不會存進歷史資料庫**。請勿公開分享這些輸出。
+- 只用於你有權存取的帳號與網站。
+
 ## 指令
 
 | 指令 | 做什麼 |
