@@ -32,7 +32,13 @@ export function claimOutputDir(dir, markerFile) {
   const entries = fs.readdirSync(abs);
   if (entries.length && !ours) refuse(_t`資料夾不是空的（有 ${entries.length} 個項目，例如 ${entries.slice(0, 3).join(_t('、'))}），而且不是先前由本工具產生的交接包`);
   let decisions = null;
-  for (const f of HANDOFF_PRESERVED) { const p = path.join(abs, f); if (fs.existsSync(p)) decisions = fs.readFileSync(p, 'utf8'); }
+  for (const f of HANDOFF_PRESERVED) {
+    const p = path.join(abs, f);
+    let st = null; try { st = fs.lstatSync(p); } catch {}
+    if (!st) continue;
+    if (st.isSymbolicLink() || !st.isFile()) { fs.rmSync(p, { recursive: true, force: true }); continue; } // a planted link must neither be read nor written through: drop the link itself
+    decisions = fs.readFileSync(p, 'utf8');
+  }
   for (const name of HANDOFF_GENERATED) fs.rmSync(path.join(abs, name), { recursive: true, force: true });
   return { decisions, existed: true };
 }

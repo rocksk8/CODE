@@ -50,11 +50,12 @@ const HELP = _t`site-explorer ${version} — 探索網站：設計、內容、�
 `;
 
 import { assertNode } from '../scripts/util.mjs';
+import { normalizeUrl } from '../scripts/args.mjs';
 // --lang en|zh is consumed here: it selects the output language for this process and every child process, and is not passed on to the scripts
 process.env.SITE_EXPLORER_LANG = LANG;
 const argv = (() => { const a = process.argv.slice(2), o = []; for (let i = 0; i < a.length; i++) { if (a[i] === '--lang') { i++; continue; } if (a[i].startsWith('--lang=')) continue; o.push(a[i]); } return o; })();
 const [cmd, ...rest] = argv;
-const looksLikeUrl = (s) => !!s && !s.startsWith('-') && /^(https?:\/\/|localhost\b|[\w-]+(\.[\w-]+)+(:\d+)?(\/|$))/i.test(s);
+const looksLikeUrl = (s) => !!s && !s.startsWith('-') && !!normalizeUrl(s); // exactly what the explorer itself accepts (IPv6, IDN, ?query hosts too)
 
 const ROUTES = {
   explore: (a) => [script('explore.mjs'), a], handoff: (a) => [script('explore.mjs'), a],

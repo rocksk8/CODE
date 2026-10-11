@@ -12,6 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from './util.mjs';
+import { requireExtension, UnsafeOutputError } from './safe-out.mjs';
 import { BANNER, sanitizeDoc, clean } from './untrusted.mjs';
 
 export const DB_PATH = process.env.SITE_EXPLORER_DB || path.join(os.homedir(), '.site-explorer', 'explorations.db');
@@ -197,7 +198,7 @@ if (isMain(import.meta.url)) {
   const db = await openDb();
   if (!db) { console.error(_t('此功能需要 Node ≥ 22.13（內建 node:sqlite）。目前版本：') + process.version + _t('。請升級：brew install node')); process.exit(2); }
   const fmt = (r) => _t`#${String(r.id).padEnd(3)} ${r.host.padEnd(30)} ${String(r.crawled_at || '').slice(0, 10)}  頁${r.pages ?? '-'}  健檢 ${r.health_score ?? '-'}  主色 ${r.brand || '-'}  字型 ${r.heading_font || '-'}  3D/動畫 ${r.motion_targets}`;
-  switch (cmd) {
+  try { switch (cmd) {
     case 'ingest': { const id = ingest(db, { siteDir: opt('site'), motionDir: opt('motion') }); console.log(_t`已存入資料庫 run #${id}  (${DB_PATH})`); break; }
     case 'list': { const rows = db.prepare('SELECT * FROM runs ORDER BY id DESC').all(); console.log(rows.length ? rows.map(fmt).join('\n') : _t('（資料庫是空的）')); break; }
     case 'search': {
@@ -210,20 +211,21 @@ if (isMain(import.meta.url)) {
       runs.forEach((r, i) => { console.log(fmt(r)); if (i) for (const c of diffRuns(db, runs[i - 1].id, r.id)) console.log(`    ↳ ${c.label}: ${c.from} → ${c.to}`); }); break;
     }
     case 'compare': {
-      const [a, b] = rest.map(Number); const A = describeRun(db, a), B = describeRun(db, b); if (!A || !B) { console.error(_t('找不到 run')); process.exit(1); }
+      const [a, b] = rest.map(Number); if (!Number.isInteger(a) || !Number.isInteger(b)) { console.error(_t('用法：site-explorer history compare <runA> <runB> [--md 對照.md]（run 編號見 site-explorer history list）')); process.exit(1); }
+      const A = describeRun(db, a), B = describeRun(db, b); if (!A || !B) { console.error(_t('找不到 run')); process.exit(1); }
       console.log(`A: ${fmt(A.run)}\nB: ${fmt(B.run)}\n`);
       const ch = diffRuns(db, a, b); const pd = diffPages(db, a, b);
       console.log(ch.length ? ch.map((c) => `- ${c.label}: ${c.from} → ${c.to}`).join('\n') : _t('設計／技術沒有明顯差異'));
       console.log(_t`\n頁面：消失 ${pd.removed.length}・新增 ${pd.added.length}・內容有變 ${pd.changed.length}・沒變 ${pd.unchanged}`);
       for (const r of pd.removed.slice(0, 10)) console.log(_t`  ✖ ${r.path}（需要 301）`);
       for (const c of pd.changed.slice(0, 10)) console.log(_t`  ✎ ${c.path}：${c.changes.map((x) => x.field).join(_t('、'))}`);
-      const md = opt('md'); if (md) { fs.writeFileSync(md, renderChangesMd(db, a, b)); console.log(_t('已寫入改版前後對照：') + md); }
+      const md = opt('md'); if (md) { fs.writeFileSync(requireExtension(md, /\.md$/i, '*.md'), renderChangesMd(db, a, b)); console.log(_t('已寫入改版前後對照：') + md); }
       break;
     }
     case 'export': {
       const dump = Object.fromEntries(['runs', 'colors', 'pages', 'platforms', 'libs', 'motion'].map((t) => [t, db.prepare(`SELECT * FROM ${t}`).all()]));
-      const out = opt('out'); if (out) { fs.writeFileSync(out, JSON.stringify(dump, null, 2)); console.log(_t('已匯出'), out); } else console.log(JSON.stringify(dump, null, 2)); break;
+      const out = opt('out'); if (out) { fs.writeFileSync(requireExtension(out, /\.json$/i, '*.json'), JSON.stringify(dump, null, 2)); console.log(_t('已匯出'), out); } else console.log(JSON.stringify(dump, null, 2)); break;
     }
     default: console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1).filter((l) => l.startsWith('//')).slice(0, 8).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
-  }
+  } } catch (e) { console.error('✖ ' + String(e.message || e).split('\n')[0]); process.exit(1); } // one line, not a stack trace
 }
