@@ -86,15 +86,17 @@ export async function verifyHandoff(handoffDir, { page: only, outDir, minScore =
       const pg = await ctx.newPage();
       await pg.goto(pathToFileURL(path.join(starterDir, f)).href, { waitUntil: 'load', timeout: 20000 });
       await pg.evaluate(() => document.fonts?.ready).catch(() => {});
-      const sections = [];
+      const sections = []; const seen = {};
       for (const d of declared) {
         const row = { name: d.name, index: d.index };
-        const loc = pg.locator('[data-section]').nth(d.index - 1);
+        const nth = seen[d.name] = (seen[d.name] ?? -1) + 1; // match by section name (the 2nd "cta" comment ↔ the 2nd cta), so inserting a section does not shift everything
+        const loc = pg.locator(`[data-section="${d.name}"]`).nth(nth);
         if (!d.ref || !(await loc.count())) { row.status = d.ref ? '重建頁面少了這個區塊' : '沒有參考圖'; sections.push(row); continue; }
         const got = await loc.screenshot({ timeout: 10000 }).catch(() => null);
         if (!got) { row.status = '無法截圖'; sections.push(row); continue; }
         const refBuf = fs.readFileSync(d.ref);
-        const r = await cmp.evaluate(compareInBrowser, { a: 'data:image/png;base64,' + refBuf.toString('base64'), b: 'data:image/png;base64,' + got.toString('base64') });
+        const r = await cmp.evaluate(compareInBrowser, { a: 'data:image/png;base64,' + refBuf.toString('base64'), b: 'data:image/png;base64,' + got.toString('base64') }).catch(() => null);
+        if (!r) { row.status = '參考圖無法讀取（不是有效的 PNG）'; sections.push(row); continue; }
         const gotH = (await loc.boundingBox())?.height ?? 0;
         const s = scoreSection({ ...r, refH: r.refH, gotH: Math.round(gotH * (r.refW / 1440)) || r.refH });
         const diffFile = path.join('diff', `${slug}-${String(d.index).padStart(2, '0')}-${d.name}.png`);

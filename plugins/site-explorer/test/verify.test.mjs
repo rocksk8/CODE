@@ -62,3 +62,16 @@ test('verify: a starter that makes network requests cannot reach the network; th
   const none = spawnSync(process.execPath, [bin, 'verify', path.join(tmp, 'nope')], { encoding: 'utf8' });
   assert.equal(none.status, 1);
 });
+
+test('verify: a corrupt reference image or a hidden section is reported for that section only; inserting a section does not shift the matching', async (t) => {
+  if (!haveBrowser || !fs.existsSync(demo)) return t.skip('no browser or demo');
+  const d = copyDemo('edge');
+  fs.writeFileSync(path.join(d, 'media', 'sections', 'home', '03-features.png'), 'not a png');
+  const f = path.join(d, 'starter', 'index.html'); let html = fs.readFileSync(f, 'utf8');
+  html = html.replace('<section class="sec sec--cta', '<section data-section="extra" hidden><p>x</p></section><section class="sec sec--cta'); // inserted before cta
+  fs.writeFileSync(f, html);
+  const r = await verifyHandoff(d, {});
+  const by = Object.fromEntries(r.pages[0].sections.map((s) => [s.name, s]));
+  assert.match(by.features.status, /PNG/);
+  assert.equal(by.cta.status, 'ok'); assert.ok(by.cta.score >= 70, `cta still matched by name: ${by.cta.score}`);
+});
