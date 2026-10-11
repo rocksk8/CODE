@@ -120,7 +120,8 @@ test('explore --out refuses a non-empty folder it did not create, accepts new/em
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'se-out-')); fs.writeFileSync(path.join(d, 'thesis.docx'), 'x');
   assert.throws(() => checkExploreOut(d), UnsafeOutputError);
   assert.doesNotThrow(() => checkExploreOut(path.join(d, 'new'))); fs.mkdirSync(path.join(d, 'empty')); assert.doesNotThrow(() => checkExploreOut(path.join(d, 'empty')));
-  fs.writeFileSync(path.join(d, 'runs.json'), '[]'); assert.doesNotThrow(() => checkExploreOut(d));
+  fs.writeFileSync(path.join(d, 'runs.json'), '[]'); assert.throws(() => checkExploreOut(d), UnsafeOutputError); // a lone runs.json could be somebody else's
+  fs.mkdirSync(path.join(d, 'site')); assert.doesNotThrow(() => checkExploreOut(d));
   assert.throws(() => checkExploreOut(os.homedir()), UnsafeOutputError); assert.equal(fs.readFileSync(path.join(d, 'thesis.docx'), 'utf8'), 'x');
 });
 
