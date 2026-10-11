@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Maintainer tool (not shipped to users): regenerates docs/demo/ (real output of the current version against the fictional fixture sites),
 // docs/images/ (screenshots for the README) and docs/images/demo.gif.
-//   node tools/make-demo.mjs            (needs: npm install --no-save three@0.170.0 ; devDependencies gifenc + pngjs)
+//   npm install --no-save three@0.170.0 gifenc pngjs   (maintainer-only; not shipped as dependencies)
+//   node tools/make-demo.mjs
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';

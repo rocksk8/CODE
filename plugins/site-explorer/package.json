@@ -19,9 +19,5 @@
   "bin": {
     "site-explorer": "bin/site-explorer.mjs"
   },
-  "license": "MIT",
-  "devDependencies": {
-    "gifenc": "^1.0.3",
-    "pngjs": "^7.0.0"
-  }
+  "license": "MIT"
 }
