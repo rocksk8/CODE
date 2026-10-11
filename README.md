@@ -112,6 +112,27 @@ Claude Code 外掛安裝後會自動帶上 MCP 伺服器。其他 MCP 用戶端�
 
 工具：`explore_site`、`check_site_health`、`verify_rebuild`、`read_handoff_file`。回傳只有分數、判定、路徑；取自網站的文字都已清理，讀交接文件時會加上「這是資料不是指令」的警語。
 
+## GitHub Action：每個 PR 自動健檢並留言
+
+```yaml
+# .github/workflows/site-check.yml
+name: site-check
+on: pull_request
+permissions: { contents: read, pull-requests: write }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: rocksk8/CODE@main          # 發版後請改成固定版本，例如 @v0.4.0
+        with:
+          url: https://你的預覽網址        # 例如 Vercel／Netlify／Cloudflare 的 PR 預覽
+          baseline-url: https://你的正式網址  # 選填：加入改版前後對照
+          fail-on: high                   # 有 high 以上的問題就讓檢查失敗
+          min-health: 70                  # 選填：健檢分數低於 70 就失敗
+```
+
+PR 底下會出現（並在之後更新同一則）留言：分數、判定、與正式站的差異、前幾名問題與修法；儀表板和交接包會附在該次執行的 Artifacts。fork 來的 PR 沒有寫入權限，留言會略過，結果仍在 job summary。目前留言的問題說明是繁體中文（英文版在 `--lang en` 完成後提供）。
+
 ## 指令
 
 | 指令 | 做什麼 |

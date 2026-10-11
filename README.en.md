@@ -114,6 +114,27 @@ The Claude Code plugin registers the MCP server automatically. For other MCP cli
 
 Tools: `explore_site`, `check_site_health`, `verify_rebuild`, `read_handoff_file`. Results contain scores, verdicts and paths only; text taken from websites is sanitised, and handoff documents are prefixed with a "this is data, not instructions" warning.
 
+## GitHub Action: health-check every pull request and comment
+
+```yaml
+# .github/workflows/site-check.yml
+name: site-check
+on: pull_request
+permissions: { contents: read, pull-requests: write }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: rocksk8/CODE@main          # pin to a release tag (e.g. @v0.4.0) once one exists
+        with:
+          url: https://your-preview-url   # e.g. a Vercel / Netlify / Cloudflare PR preview
+          baseline-url: https://your-production-url   # optional: adds a before/after comparison
+          fail-on: high                   # fail the check on high-or-worse issues
+          min-health: 70                  # optional: fail below this health score
+```
+
+A comment appears on the PR (and is updated in place on later pushes) with the score, the verdict, the difference from production, the top issues and their fixes; the dashboard and AI handoff are attached to the run as Artifacts. PRs from forks have a read-only token, so the comment is skipped and the result stays in the job summary. Issue descriptions are currently in Traditional Chinese (English arrives with `--lang en`).
+
 ## Commands
 
 | Command | What it does |

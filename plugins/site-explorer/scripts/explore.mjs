@@ -103,12 +103,13 @@ if (!args.includes('--no-motion') && crawlOk) {
   if (entries.length) { fs.mkdirSync(motionDir, { recursive: true }); fs.writeFileSync(path.join(motionDir, 'pages.json'), JSON.stringify({ pages: entries }, null, 2)); motionOk = motionOk || fs.existsSync(path.join(motionDir, 'motion.json')); }
 }
 
+let runId = null;
 if (!args.includes('--no-db')) {
   console.log(`\n[${++n}/${total}] 存入資料庫`);
   try {
     const db = await openDb();
     if (!db) console.log('   ⚠️ Node < 22.13，略過資料庫（升級後即可累積歷史）');
-    else { const id = ingest(db, { siteDir: crawlOk ? siteDir : null, motionDir: motionOk ? motionDir : null }); console.log(`   ✔ run #${id} → ${DB_PATH}`); steps.push({ label: '存入資料庫', ok: true, s: '0' });
+    else { const id = ingest(db, { siteDir: crawlOk ? siteDir : null, motionDir: motionOk ? motionDir : null }); runId = id; console.log(`   ✔ run #${id} → ${DB_PATH}`); steps.push({ label: '存入資料庫', ok: true, s: '0' });
       try { // a previous run of this same site exists: write the before/after report next to the crawl (what a redesign lost, kept or changed)
         const prev = crawlOk ? runsForHost(db, new URL(url).host).filter((r) => r.id < id && r.pages).pop() : null;
         if (prev) { fs.writeFileSync(path.join(siteDir, 'changes.md'), renderChangesMd(db, prev.id, id)); console.log(`   ✔ 與上次（run #${prev.id}）的前後對照：${path.join(siteDir, 'changes.md')}`); }
@@ -170,5 +171,5 @@ if (failOn && !healthOk) { failCode = 1; console.error(`--fail-on ${failOn} 需�
 try { const hj = path.join(siteDir, 'health.json'); if (healthOk && fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(`驗收結論：${h.verdict?.label ?? '—'}`); if (failOn) { const rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }; if (h.issues.some((i) => rank[i.severity] <= rank[failOn])) { failCode = 4; console.error(`健檢有 ${failOn} 以上的問題，依 --fail-on ${failOn} 以結束代碼 4 結束。`); } } } } catch {}
 if (fs.existsSync(dash)) console.log('\n👉 下一步：先雙擊 dashboard.html 看總覽；要交給 AI 或工程師，就把 handoff 資料夾整個給對方。');
 if (fs.existsSync(path.join(siteDir, 'report.md')) && fs.readFileSync(path.join(siteDir, 'report.md'), 'utf8').includes('被擋住')) console.log('\n⚠️ 部分頁面被擋住，結果可能不完整（見儀表板或 report.md）。');
-if (JSON_MODE) { const { buildSummary } = await import('./summary.mjs'); process.stdout.write(JSON.stringify({ ok: !!(crawlOk || motionOk) && failCode === 0, exitCode: crawlOk || motionOk ? failCode : 1, ...buildSummary({ out, host, steps, url }) }, null, 2) + '\n'); }
+if (JSON_MODE) { const { buildSummary } = await import('./summary.mjs'); process.stdout.write(JSON.stringify({ ok: !!(crawlOk || motionOk) && failCode === 0, exitCode: crawlOk || motionOk ? failCode : 1, ...buildSummary({ out, host, steps, url }), runId }, null, 2) + '\n'); }
 process.exit(crawlOk || motionOk ? failCode : 1);
