@@ -154,6 +154,18 @@ site-explorer https://example.com --a11y
 
 用業界標準的 axe-core 檢查 WCAG 2.2 AA：缺少替代文字、按鈕沒有名稱、對比不足、表單沒有標籤、沒有語言標示…。結果會成為健檢的一個類別「無障礙」（併入總分，只有加 `--a11y` 才會量測，不加則分數與以前完全一樣），也寫在 `site/<網站>/a11y.json`，每項違規附修法連結與出現位置。自動檢查只能發現一部分問題，不能取代人工檢查。GitHub Action 對應的選項是 `a11y: true`。
 
+## 轉成 React／Vue／Astro 專案或 shadcn/ui 主題
+
+```bash
+site-explorer https://example.com --framework react       # react | vue | astro | shadcn | all
+site-explorer framework ./explore-out/handoff --to all    # 對已有的交接包事後轉換
+cd explore-out/handoff/frameworks/react && npm install && npm run dev
+```
+
+每個頁面的每個區塊會變成一個元件（`src/components/<頁面>/<區塊>`），文字與圖片仍是佔位內容，間距與顏色是量到的數值；設計 token 一併帶入專案。React／Vue 專案用 Vite，Astro 用 Astro 4；版本都固定在實測過的版本。`shadcn` 會產生 `globals-theme.css`（shadcn/ui 讀的 HSL 變數，品牌色成為 primary）與 Tailwind 設定片段，深色配色是推算的，請目視確認。
+
+我們實際安裝並建置過三種專案，再用瀏覽器逐區塊比對，畫面與純 HTML 的 starter **完全一致**（CI 的 Node 22 會重跑這項檢查）。再次產生時，你改過的專案會被搬到 `<名稱>.backup-<時間>`，不會被覆蓋。
+
 ## 指令
 
 | 指令 | 做什麼 |

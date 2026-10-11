@@ -26,6 +26,7 @@ const USAGE = `用法：site-explorer explore <網址> [更多網址…] [選項
   --no-db              不存入歷史資料庫          --wait 4000   3D 擷取前等待毫秒
   --json               stdout 只輸出一份機器可讀的 JSON 結果（人看的進度改走 stderr；給程式、CI、MCP 用）
   --storage-state f.json  用 site-explorer login 產生的登入狀態探索登入後的頁面（輸出可能含個人資料，請勿公開）
+  --framework react    交接包之外，另產生 React／Vue／Astro 專案或 shadcn/ui 主題（react|vue|astro|shadcn|all）
   --a11y               加做無障礙檢查（axe-core，WCAG 2.2 AA）；結果併入健檢分數與報告
   --verify             交接包產生後，順便驗證 starter 骨架和原站像不像（逐區塊相似度＋差異圖，結果進儀表板）
   --motion-pages 5     3D／動畫擷取的頁數上限（含起始頁；1 = 只擷取起始頁）
@@ -35,7 +36,7 @@ const USAGE = `用法：site-explorer explore <網址> [更多網址…] [選項
 結束代碼：0 成功；1 失敗或參數錯誤；4 健檢未達 --fail-on 門檻`;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 if (!url) {
-  const flagsWithValue = new Set(['--max-pages', '--out', '--wait', '--motion-pages', '--fail-on', '--storage-state']);
+  const flagsWithValue = new Set(['--max-pages', '--out', '--wait', '--motion-pages', '--fail-on', '--storage-state', '--framework']);
   const bad = args.find((a, i) => !a.startsWith('-') && !flagsWithValue.has(args[i - 1]));
   if (bad) console.error(`「${bad}」不是有效的網址。請給完整網站位址，例如：site-explorer explore https://example.com\n`);
   console.error(USAGE); process.exit(1);
@@ -43,6 +44,9 @@ if (!url) {
 const stateFile = opt('storage-state', null); // logged-in exploration: the session file is passed to the crawler and the 3D capture only
 const authArgs = stateFile ? ['--storage-state', path.resolve(stateFile)] : [];
 const noDb = args.includes('--no-db') || !!stateFile; // logged-in content must not be kept in the shared history database
+const framework = opt('framework', null);
+if (framework && !['react', 'vue', 'astro', 'shadcn', 'all'].includes(framework)) { console.error('--framework 需要 react／vue／astro／shadcn／all 其中之一'); process.exit(1); }
+if (framework && args.includes('--no-handoff')) { console.error('--framework 需要交接包，不能和 --no-handoff 一起用。'); process.exit(1); }
 const failOn = opt('fail-on', null);
 if (failOn && args.includes('--no-health')) { console.error('--fail-on 需要健檢，不能和 --no-health 一起用。'); process.exit(1); }
 if (failOn && !['critical', 'high', 'medium', 'low'].includes(failOn)) { console.error('--fail-on 需要 critical／high／medium／low 其中之一'); process.exit(1); }
@@ -57,7 +61,7 @@ const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
 const siteDir = path.join(siteRoot, host), motionDir = path.join(motionRoot, host);
 const steps = [];
-const total = 7 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
+const total = 7 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
 let n = 0;
 
 function run(label, script, a) {
@@ -142,6 +146,7 @@ let handoffOk = false;
 const handoffDir = path.join(out, 'handoff');
 if ((crawlOk || motionOk) && crawlOk && !args.includes('--no-handoff')) handoffOk = await run('產生交接包（AI 簡報、完整規格、決策紀錄、圖片）', 'build-handoff.mjs', ['--site', siteDir, ...(motionOk ? ['--motion', motionDir] : []), '--out', handoffDir]);
 if (handoffOk && args.includes('--verify')) await run('驗證重建（starter 對照原站，逐區塊相似度）', 'verify.mjs', [handoffDir]);
+if (handoffOk && framework) await run(`轉成 ${framework} 專案（handoff/frameworks/）`, 'frameworks.mjs', [handoffDir, '--to', framework]);
 const dash = path.join(out, 'dashboard.html');
 if (!crawlOk && !motionOk) console.log('\n探索沒有成功，略過儀表板與交接包。請先處理上面的錯誤（可執行 site-explorer doctor 檢查環境），再重新執行。');
 else await run('產生圖形化儀表板', 'build-report.mjs', [...(crawlOk ? ['--site', siteDir] : []), ...(motionOk ? ['--motion', motionDir] : []), '--out', dash, ...(handoffOk ? ['--handoff', handoffDir] : []), ...(args.includes('--no-standalone') ? [] : ['--standalone'])]);
