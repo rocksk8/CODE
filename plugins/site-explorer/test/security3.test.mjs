@@ -91,3 +91,9 @@ test('robots: an HTML page served for /robots.txt counts as "no robots.txt"', as
   await new Promise((res) => srv.listen(0, '127.0.0.1', res));
   try { const r = await fetchRobots(`http://127.0.0.1:${srv.address().port}`); assert.equal(r.parsed, null); assert.equal(r.htmlFallback, true); } finally { srv.close(); }
 });
+
+test('tagList: markup-looking text inside <script>/<style> is not a tag', async () => {
+  const { tagList } = await import('../scripts/util.mjs');
+  const h = '<html><body><script>x("<script type=\\"application/ld+json\\">")</script><script type="application/ld+json">{}</script><style>a>b{}</style><a href=/x>y</a></body></html>';
+  assert.deepEqual(tagList(h).map((t) => t.name), ['html', 'body', 'script', 'script', 'style', 'a']);
+});
