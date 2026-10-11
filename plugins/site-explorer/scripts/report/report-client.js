@@ -7,6 +7,7 @@ const T=D.tokens,S=D.site,M=D.motion;
 const toast=(m)=>{const t=$('#toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1400)};
 const copy=(v)=>{navigator.clipboard?.writeText(v);toast('已複製 '+v)};
 $('#sub').textContent=(S?.startUrl||M?.url||'')+' · '+new Date(D.generatedAt).toLocaleString();
+if(S&&S.authenticated)$('#sub').textContent+=' · 🔐 以登入狀態探索：內容可能含個人資料，請勿公開分享';
 
 const tabs=[['overview','總覽'],['design','設計'],['layout','排版'],['content','內容'],['motion','3D／動畫'],['edit','編輯方式'],['health','健檢'],['history','歷史'],['export','匯出給 AI'],['data','詳細資料'],['about','關於']].filter(([k])=>k==='overview'||(k==='health'?D.health:k==='motion'?(M||D.motionPages):k==='history'?(D.history&&D.history.runs.length>0):k==='export'?D.exportKit:k==='data'||k==='about'?true:S));
 tabs.forEach(([k,l],i)=>{const b=el('<button role="tab">'+l+'</button>');b.dataset.k=k;if(k==='data')b.classList.add('dt-tab');b.onclick=()=>show(k);$('#tabs').append(b)});

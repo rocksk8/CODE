@@ -16,7 +16,7 @@ export function buildSummary({ out, host, steps = [], url = null }) {
   const motionPages = readJSON(path.join(motionDir, 'pages.json'));
   const has = (f) => fs.existsSync(f);
   const raw = {
-    schemaVersion: 1, url, host,
+    schemaVersion: 1, url, host, authenticated: !!site?.authenticated,
     steps: steps.map((s) => ({ name: s.label, ok: !!s.ok, seconds: Number(s.s) })),
     pages: site ? { crawled: (site.pages || []).length, blocked: (site.blockedPages || []).length } : null,
     health: health ? {

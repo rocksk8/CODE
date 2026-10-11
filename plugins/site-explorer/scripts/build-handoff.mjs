@@ -334,7 +334,7 @@ fs.writeFileSync(path.join(starterDir, 'app.js'), appJs);
 if (ms) { fs.mkdirSync(path.join(starterDir, 'motion'), { recursive: true }); fs.writeFileSync(path.join(starterDir, 'motion', 'motion.css'), ms.css); fs.writeFileSync(path.join(starterDir, 'motion', 'motion.js'), ms.js); fs.writeFileSync(path.join(starterDir, 'motion', 'index.html'), ms.html); }
 fs.writeFileSync(path.join(starterDir, '.manifest.json'), JSON.stringify(hashTree(starterDir), null, 2)); // lets the next run tell untouched files from edited ones
 const todayS = new Date().toISOString().slice(0, 10);
-const startHere = startHereMd({ host, srcUrl: site.startUrl, pages: starterPages.map((f) => `starter/${f}`), hasMotion: !!ms, today: todayS });
+const startHere = startHereMd({ host, srcUrl: site.startUrl, pages: starterPages.map((f) => `starter/${f}`), hasMotion: !!ms, today: todayS, authenticated: !!site.authenticated });
 fs.writeFileSync(path.join(out, 'START-HERE.md'), startHere);
 fs.writeFileSync(path.join(out, 'PROMPT.md'), promptMd({ host, hasMotion: !!ms, pageFiles: starterPages, base: 'handoff' }));
 { const images = [...(media.sections[home?.slug] || []).slice(0, 6), ...(media.pages[home?.slug] ? Object.values(media.pages[home.slug]) : []), ...media.motion.slice(0, 4)];

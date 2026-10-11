@@ -2,6 +2,7 @@
 // Detect and visually capture 3D / animated elements (WebGL canvas, three.js, model-viewer,
 // CSS 3D transforms, Lottie, video): frame sequences over time, on scroll, and on mouse interaction,
 // plus a screen recording, a motion report and an HTML contact sheet.
+import { loadAuthState } from './auth-state.mjs';
 import { guardInternal } from './util.mjs';
 import { launchBrowser } from './launch.mjs';
 import { findUrl, intOpt, robotsBlocks } from './args.mjs';
@@ -43,9 +44,11 @@ const browser = await launchBrowser({
   args: args.includes('--headed') ? ['--ignore-gpu-blocklist', '--enable-webgl'] : ['--use-angle=swiftshader', '--use-gl=angle', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'], // headed: let Chromium use the real GPU
 });
 let wantVideo = !args.includes('--no-video');
+const authFile = (() => { const i = args.indexOf('--storage-state'); return i >= 0 ? args[i + 1] : null; })();
+let auth = null; if (authFile) { try { auth = loadAuthState(authFile); } catch (e) { console.error(e.message); await browser.close(); process.exit(1); } }
 const newCtx = async (video) => {
   const c = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
+    viewport: { width: 1440, height: 900 }, ...(auth ? { storageState: auth.file } : {}),
     ...(video ? { recordVideo: { dir: path.join(out, 'video'), size: { width: 1280, height: 800 } } } : {}),
   });
   await guardInternal(c, url);

@@ -135,6 +135,19 @@ jobs:
 
 A comment appears on the PR (and is updated in place on later pushes) with the score, the verdict, the difference from production, the top issues and their fixes; the dashboard and AI handoff are attached to the run as Artifacts. PRs from forks have a read-only token, so the comment is skipped and the result stays in the job summary. Issue descriptions are currently in Traditional Chinese (English arrives with `--lang en`).
 
+## Exploring pages behind a login
+
+```bash
+site-explorer login https://example.com/        # opens a browser window; you sign in yourself (2FA included), then press Enter
+site-explorer https://example.com/ --storage-state ./auth-state.json
+```
+
+- Your password is typed into the website's own page; the tool never sees it. What is saved is the session (cookies / localStorage), which **equals being logged in**. The file is readable only by you (mode 600); **keep it out of git, don't send it to anyone, delete it when done**.
+- The session values are **never** written to any output file.
+- Links that act when merely visited (logout, delete, cancel, unsubscribe…) are skipped, and the health check's link checker never requests such URLs, logged in or not.
+- Logged-in screenshots and text may contain personal data: the handoff and dashboard are marked "captured while logged in" and are **not stored in the history database**. Do not publish these outputs.
+- Use only on accounts and sites you are entitled to access.
+
 ## Commands
 
 | Command | What it does |
@@ -230,4 +243,4 @@ Design trade-offs and review records: [`docs/ux-review.md`](docs/ux-review.md), 
 
 ## Boundaries
 
-Honours robots.txt (stops and says so when a site forbids everything); identifies itself as automation (User-Agent `site-explorer-claude-plugin`); does not log in, submit forms, or bypass CAPTCHAs / bot protection; extra requests (robots, sitemap, link status, 404 probe) are concurrency-limited. When blocked it says so rather than reporting an empty result. Fonts, images, copy and 3D models are copyrighted: use them as reference only, don't copy. Use on public or authorised sites only.
+Honours robots.txt (stops and says so when a site forbids everything); identifies itself as automation (User-Agent `site-explorer-claude-plugin`); does not log in by default (to explore pages behind a login you sign in yourself with `site-explorer login` and pass `--storage-state` explicitly), does not submit forms, or bypass CAPTCHAs / bot protection; extra requests (robots, sitemap, link status, 404 probe) are concurrency-limited. When blocked it says so rather than reporting an empty result. Fonts, images, copy and 3D models are copyrighted: use them as reference only, don't copy. Use on public or authorised sites only.

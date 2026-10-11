@@ -302,8 +302,9 @@ Do prompt A first, then prompt B, in the same project. Wire the motion starters 
 `;
 }
 
-export function startHereMd({ host, srcUrl, pages, hasMotion, files, today }) {
+export function startHereMd({ host, srcUrl, pages, hasMotion, files, today, authenticated = false }) {
   return `# START HERE — ${host}
+${authenticated ? '\n> 🔐 **Captured while logged in.** Screenshots and text may contain personal or private data. Do not publish this folder, and do not paste it into a service you do not trust.\n' : ''}
 
 Reference: ${srcUrl} (captured ${today}). This folder is everything an AI needs to **start building the pages${hasMotion ? ' and the motion/3D' : ''}** — no guessing, no browsing.
 
