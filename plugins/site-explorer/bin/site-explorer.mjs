@@ -38,6 +38,13 @@ const HELP = _t`site-explorer ${version} — 探索網站：設計、內容、�
 選項（explore）
   --max-pages 6   --out ./explore-out   --no-motion   --no-health   --no-handoff   --no-db
   --no-link-check   --open | --no-open   --no-standalone   --wait 4000
+  --json   --a11y   --verify   --framework react|vue|astro|shadcn|all   --storage-state f.json
+  --fail-on high|critical|medium|low   --motion-pages 5   --headed
+
+全域
+  --lang zh|en     輸出語言（預設繁體中文；en = 英文，含報告、儀表板、交接包）
+
+每個子指令都可加 --help 看詳細用法。
 
 更多：https://github.com/rocksk8/code
 `;
