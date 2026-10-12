@@ -16,6 +16,7 @@ export const METRICS = {
   lcpMs: ['LCP', 'ms', (p) => p.seo?.perf?.lcpMs],
   loadMs: ['load', 'ms', (p) => p.seo?.perf?.loadMs],
   cls: ['CLS', '', (p) => p.seo?.perf?.cls],
+  tbtMs: ['TBT', 'ms', (p) => p.seo?.perf?.tbtMs],
   totalKB: ['transfer', 'KB', (p) => (p.seo?.perf?.totalBytes != null ? Math.round(p.seo.perf.totalBytes / 1024) : null)],
   requests: ['requests', '', (p) => p.seo?.perf?.requests],
   thirdPartyRequests: ['third-party hosts', '', (p) => p.seo?.perf?.thirdPartyCount],

@@ -105,8 +105,16 @@ export function warnNoSandboxOnce() {
   console.error(_t('⚠️  以無沙箱模式啟動瀏覽器（root／容器環境或 SITE_EXPLORER_NO_SANDBOX=1）；請只探索你信任的網站，或改用一般使用者執行。'));
 }
 
+export const ENGINES = ['chromium', 'firefox', 'webkit'];
+export const currentEngine = () => (ENGINES.includes(process.env.SITE_EXPLORER_BROWSER) ? process.env.SITE_EXPLORER_BROWSER : 'chromium');
+
 export async function launchBrowser(options = {}) {
-  const { chromium } = await loadPlaywright();
+  const pw = await loadPlaywright(); const { chromium } = pw;
+  const engine = currentEngine();
+  if (engine !== 'chromium') { // experimental: Firefox / WebKit come from Playwright's own downloads (site-explorer setup --browser firefox|webkit)
+    try { return await pw[engine].launch({ headless: options.headless !== false, ...(process.env.SITE_EXPLORER_PROXY ? { proxy: { server: process.env.SITE_EXPLORER_PROXY } } : {}) }); }
+    catch (e) { throw new Error(_t`無法啟動 ${engine}：${String(e.message).split('\n')[0].slice(0, 100)}\n請先安裝：site-explorer setup --browser ${engine}`); }
+  }
   // behind a corporate proxy: SITE_EXPLORER_PROXY=http://host:port (Playwright does not read HTTPS_PROXY by itself)
   // Chromium's OS sandbox stays ON. It is turned off only where it cannot run (root, e.g. in containers) or when asked for explicitly.
   const noSandbox = willRunWithoutSandbox();

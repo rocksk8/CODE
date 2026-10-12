@@ -40,3 +40,10 @@ test('valid markup that looks odd is not reported (quoted > in attributes, omitt
 test('many comments without a doctype cannot hang the checker', () => {
   const t0 = Date.now(); checkHtml('<!---->'.repeat(60) + '<p>x'); checkHtml('<!-- a -->'.repeat(100000)); assert.ok(Date.now() - t0 < 2000);
 });
+
+test('references to ids that do not exist: label for, aria-*, #fragment links (decoded, top and # are fine)', () => {
+  const ok = wrap('<label for="a">x</label><input id="a"><div id="p" aria-labelledby="h1x h2x"><h2 id="h1x"></h2><h3 id="h2x"></h3></div><a href="#a">1</a><a href="#top">2</a><a href="#">3</a><a href="#%E4%B8%AD">4</a><div id="中"></div>');
+  assert.deepEqual(ids(ok), []);
+  const r = checkHtml(wrap('<label for="nope">x</label><div aria-describedby="gone"></div><a href="#missing">m</a><a href="#missing">again</a>'));
+  assert.deepEqual(r.map((f) => f.id).sort(), ['broken-fragment', 'missing-id-ref']); assert.equal(r.find((f) => f.id === 'broken-fragment').count, 1, 'a repeated reference is reported once');
+});

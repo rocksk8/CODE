@@ -1,0 +1,35 @@
+name: platforms
+# The main workflow runs on Linux. This one runs the same tests on Windows and macOS runners, so path handling, file locking and browser launching
+# are checked on the systems people actually use. Reported separately: a failure here does not block a merge, but it is a real bug on that system.
+on: [push, pull_request]
+permissions: { contents: read }
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: { os: [windows-latest, macos-latest] }
+    defaults:
+      run:
+        shell: bash
+        working-directory: plugins/site-explorer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: plugins/site-explorer/package-lock.json }
+      - run: npm ci
+      - run: npm install --no-save three@0.170.0   # only the 3D tests need it
+      - run: npx playwright-core install chromium
+      - run: |
+          set -o pipefail
+          npm test 2>&1 | tee test.log
+      - name: Which tests failed (the log is long; this prints only the failures)
+        if: failure()
+        run: grep -n -E "^\s*not ok" -A14 test.log | head -150
+      - name: Where does a crawl spend its time on this runner? (diagnostic)
+        if: always()
+        working-directory: .
+        continue-on-error: true
+        run: node .github/diag/crawl-timing.mjs

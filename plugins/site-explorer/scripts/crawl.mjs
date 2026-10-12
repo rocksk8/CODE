@@ -7,7 +7,9 @@ import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
 import { parseRules, extractCssInPage, extractRegex, toCsv } from './custom-extract.mjs';
+import { parseScenarios, runScenarios } from './scenarios.mjs';
 import { checkHtml } from './html-validity.mjs';
+import { WarcRecorder, buildWarc } from './warc.mjs';
 import { archiveInPage } from './page-archive.mjs';
 import { extractMarkdownInPage, renderPageMarkdown } from './page-markdown.mjs';
 import { extractTechInPage } from './techstack.mjs';
@@ -23,7 +25,7 @@ import { probe } from './diagnose.mjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { loadAuthState, skipLink } from './auth-state.mjs';
+import { loadAuthState, skipLink, credContextOptions, applyCredentialRoutes } from './auth-state.mjs';
 
 const __n = normalizeFlags(process.argv.slice(2)); if (__n.error) { console.error(__n.error); process.exit(1); }
 const args = __n.args;
@@ -41,6 +43,10 @@ const maxDepth = intOpt(args, 'depth', 2, { min: 0, max: 6 });
 const interactMax = args.includes('--no-interact') ? 0 : intOpt(args, 'interact-pages', 3, { min: 0, max: 30 }); let interactedPages = 0, abProbes = 0; // pages we walk through click/scroll/key states on
 const contentWaitMs = intOpt(args, 'wait', 12000, { min: 0, max: 120000 }); // how long to wait for a script-built page to put something on screen
 const shots = !args.includes('--no-screenshots');
+const hideSel = []; for (let k = 0; k < args.length; k++) if (args[k] === '--hide' && args[k + 1]) { if (/^[^{};<>@\\]{1,200}$/.test(args[k + 1])) hideSel.push(args[k + 1]); k++; } // elements that always change (clocks, ads) are hidden in the screenshots
+let scenarioList = null; if (opt('scenarios', null)) { try { scenarioList = parseScenarios(fs.readFileSync(opt('scenarios', null), 'utf8')); } catch (e) { console.error(String(e.message).split('\n')[0]); process.exit(1); } }
+const warcOn = args.includes('--warc');
+const perfRuns = intOpt(args, 'perf-runs', 1, { min: 1, max: 7 }); const throttle = opt('throttle', null) === 'mobile';
 let extractRules = null; if (opt('extract', null)) { try { extractRules = parseRules(fs.readFileSync(opt('extract', null), 'utf8')); } catch (e) { console.error(String(e.message).split('\n')[0]); process.exit(1); } }
 let origin = new URL(startUrl).origin; // follows the first redirect (example.com -> www.example.com)
 const host = new URL(startUrl).host.replace(/[^a-z0-9.-]/gi, '_');
@@ -139,8 +145,11 @@ function extractInPage() {
     };
     if (s.display.includes('flex')) n.flex = { direction: s.flexDirection, wrap: s.flexWrap, justify: s.justifyContent, align: s.alignItems, gap: s.gap };
     if (s.display.includes('grid')) n.grid = { columns: s.gridTemplateColumns, gap: s.gap };
-    const text = el.children.length === 0 ? el.innerText?.trim().slice(0, 60) : undefined;
-    if (text) n.text = text;
+    const text = el.children.length === 0 ? el.innerText?.trim().slice(0, 300) : undefined;
+    if (text) { n.text = text; n.type = { color: s.color, size: s.fontSize, weight: s.fontWeight, family: s.fontFamily.split(',')[0].replace(/["']/g, '').trim().slice(0, 40), lineHeight: s.lineHeight, align: s.textAlign }; }
+    if (s.borderRadius && s.borderRadius !== '0px') n.radius = s.borderRadius;
+    if (s.padding && s.padding !== '0px') n.padding = s.padding;
+    if (el.tagName === 'IMG') { n.src = (el.currentSrc || el.src || '').slice(0, 400); n.alt = (el.alt || '').slice(0, 80); }
     if (depth < 5) {
       const kids = [...el.children].filter((c) => cs(c).display !== 'none' && c.getBoundingClientRect().height > 0 && (interesting(c) || depth < 2)).slice(0, 25);
       if (kids.length) n.children = kids.map((c) => node(c, depth + 1));
@@ -374,7 +383,9 @@ const UA = 'Mozilla/5.0 (compatible; site-explorer-claude-plugin)';
 const authFile = opt('storage-state', null);
 let auth = null;
 if (authFile) { try { auth = loadAuthState(authFile); } catch (e) { console.error(e.message); await browser.close(); process.exit(1); } for (const w of auth.warnings) console.error('⚠️  ' + w); console.error(_t('🔐 以登入狀態探索：輸出（截圖、文字、儀表板）可能含個人資料，請勿公開分享。已略過登出、刪除、取消等會改變資料的連結。')); }
-const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA, ...(auth ? { storageState: auth.file } : {}) });
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA, ...(auth ? { storageState: auth.file } : {}), ...credContextOptions(startUrl) });
+await applyCredentialRoutes(ctx, startUrl);
+const warc = warcOn && !authFile ? new WarcRecorder() : null; if (warc) warc.attach(ctx); if (warcOn && authFile) console.error(_t('⚠️  --warc 不會錄製登入狀態的探索（回應內容會含個人資料）。'));
 await guardInternal(ctx, startUrl);
 await ctx.addInitScript(fingerprintHooks).catch(() => {}); // passive recorders for tracking-behaviors.mjs (canvas / WebGL / audio / font probing) // a public site (or a redirect from it) cannot make the browser read localhost / the LAN
 const stripHash = (u) => { const x = new URL(u); x.hash = ''; return x.href; };
@@ -465,6 +476,19 @@ while (pages.length < maxPages) {
     data.status = resp?.status();
     // --- SEO / indexability signals ---
     data.seo = await page.evaluate(extractSeoInPage).catch((e) => { console.log('   (seo data skipped:', e.message.split('\n')[0] + ')'); return null; });
+    if (data.seo?.perf && !auth && (perfRuns > 1 || throttle)) { // repeated (and optionally throttled) cold loads on throwaway pages; the page's numbers become the median of the runs
+      const runs = throttle ? [] : [data.seo.perf];
+      for (let k = 0; k < Math.max(perfRuns, throttle ? 1 : 2) - (throttle ? 0 : 1); k++) {
+        const p2 = await ctx.newPage();
+        try {
+          if (browser.browserType().name() === 'chromium') { const cdp = await ctx.newCDPSession(p2); await cdp.send('Network.enable'); await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
+          if (throttle) { await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: (1.6 * 1024 * 1024) / 8, uploadThroughput: (750 * 1024) / 8 }); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 }); } }
+          await p2.goto(url, { waitUntil: 'load', timeout: throttle ? 60000 : 30000 }); await p2.waitForTimeout(600);
+          const s2 = await p2.evaluate(extractSeoInPage); if (s2?.perf) runs.push(s2.perf);
+        } catch {} finally { await p2.close().catch(() => {}); }
+      }
+      if (runs.length) { const med = (a) => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; }; const base = runs[0]; const merged = { ...base }; for (const key of ['ttfbMs', 'domContentLoadedMs', 'loadMs', 'fcpMs', 'lcpMs', 'cls', 'tbtMs', 'totalBytes', 'requests']) { const m = med(runs.map((r) => r[key])); if (m != null) merged[key] = m; } data.seo.perf = merged; data.seo.perfRuns = runs.length; data.seo.perfThrottled = throttle; }
+    }
     if (data.seo) {
       const hops = await redirectHops(resp);
       const timing = resp?.request().timing();
@@ -505,6 +529,7 @@ while (pages.length < maxPages) {
     const homeUrl = page.url(); // some sites redirect when the window is resized (e.g. to an m. site): measurements taken there are not this page's
     const jumped = async (name) => { if (page.url() === homeUrl) return false; data.responsiveSkipped = _t`頁面在視窗縮到「${name}」寬度時自己跳轉到別的網址，手機／平板的量測與截圖略過`; delete data.responsive[name]; await page.setViewportSize({ width: 1440, height: 900 }).catch(() => {}); await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {}); return true; };
     if (shots) {
+      if (hideSel.length) await page.addStyleTag({ content: hideSel.map((x) => `${x}{visibility:hidden !important}`).join('\n') }).catch(() => {});
       for (const [name, [w, h]] of Object.entries(VIEWPORTS)) {
         await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(250);
         if (name !== 'desktop' && await jumped(name)) break;
@@ -552,6 +577,7 @@ while (pages.length < maxPages) {
     delete data._ariaText;
     if (data._markdown) { try { fs.writeFileSync(path.join(dir, 'content.md'), sanitizeDoc(renderPageMarkdown(data, data._markdown, BANNER)) + '\n'); data.contentWords = data._markdown.words; } catch {} }
     delete data._markdown;
+    if (warc) { const w = warc.take(page); if (w.records.length) { try { fs.writeFileSync(path.join(dir, 'archive.warc.gz'), buildWarc(w.records, { startUrl: page.url() })); data.warc = { file: 'archive.warc.gz', records: w.records.length, bytes: w.bytes, skipped: w.skipped }; } catch {} } }
     fs.writeFileSync(path.join(dir, 'page.json'), JSON.stringify(data, null, 2));
     data.slug = slugOf(url);
     pages.push(data);
@@ -567,10 +593,17 @@ while (pages.length < maxPages) {
         } catch {}
       }
     }
-  } catch (e) { console.log('failed:', url, e.message.split('\n')[0]); }
+  } catch (e) {
+    // some browsers turn a PDF / file response into a "download" and abort the navigation: ask the server what it is, and report it as a skipped non-HTML file like any other
+    let handled = false;
+    if (/Download is starting|ERR_ABORTED/i.test(e.message)) { try { if (mayFetch(url, startUrl)) { const r = await gfetch(url, { method: 'GET', headers: { 'user-agent': UA }, signal: AbortSignal.timeout(15000) }); const ct = (r.headers.get('content-type') || '').toLowerCase(); await r.body?.cancel().catch(() => {}); if (ct && !/html/.test(ct)) { nonHtmlLog.push({ url, contentType: ct.split(';')[0] }); console.log(`   (skipped, not an HTML page: ${ct.split(';')[0]})`); handled = true; } } } catch {} }
+    if (!handled) console.log('failed:', url, e.message.split('\n')[0]);
+  }
   clearTimeout(watchdog);
   await page.close().catch(() => {});
 }
+let scenarioResults = null;
+if (scenarioList) { try { scenarioResults = await runScenarios(ctx, startUrl, scenarioList, outDir, { log: (r) => console.log(r.error ? `   ⚠ ${r.name}: ${r.error}` : `   ✔ ${r.name}`) }); } catch (e) { console.log('   (scenarios skipped:', String(e.message).split('\n')[0] + ')'); } }
 await browser.close();
 
 
@@ -622,6 +655,7 @@ const designer = {
 };
 const toolVersion = (() => { try { return JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version; } catch { return null; } })();
 const site = {
+  scenarios: scenarioResults,
   schemaVersion: 3, authenticated: !!auth, tool: { name: 'site-explorer', version: toolVersion }, userAgent: UA, requestedUrl: startUrl, finalOrigin: origin,
   startUrl, crawledAt: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), robotsDisallow: robotsList(), robotsTxt: { status: robotsInfo.status, text: (robotsInfo.text || '').slice(0, 20000) }, consentAction, redirects: redirectLog, nonHtmlSkipped: nonHtmlLog, blockedPages: pages.filter((p) => p.blocked).map((p) => ({ url: p.url, reason: p.blocked })), skippedByRobots,
   server: { server: headers.main?.server, poweredBy: headers.main?.['x-powered-by'], generator: pages[0]?.meta.generator },

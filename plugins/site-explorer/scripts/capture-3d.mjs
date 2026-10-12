@@ -3,7 +3,7 @@
 // CSS 3D transforms, Lottie, video): frame sequences over time, on scroll, and on mouse interaction,
 // plus a screen recording, a motion report and an HTML contact sheet.
 import { _t } from './i18n.mjs';
-import { loadAuthState } from './auth-state.mjs';
+import { loadAuthState, credContextOptions, applyCredentialRoutes } from './auth-state.mjs';
 import { guardInternal } from './util.mjs';
 import { launchBrowser } from './launch.mjs';
 import { findUrl, intOpt, robotsBlocks } from './args.mjs';
@@ -49,9 +49,10 @@ const authFile = (() => { const i = args.indexOf('--storage-state'); return i >=
 let auth = null; if (authFile) { try { auth = loadAuthState(authFile); } catch (e) { console.error(e.message); await browser.close(); process.exit(1); } }
 const newCtx = async (video) => {
   const c = await browser.newContext({
-    viewport: { width: 1440, height: 900 }, ...(auth ? { storageState: auth.file } : {}),
+    viewport: { width: 1440, height: 900 }, ...(auth ? { storageState: auth.file } : {}), ...credContextOptions(url),
     ...(video ? { recordVideo: { dir: path.join(out, 'video'), size: { width: 1280, height: 800 } } } : {}),
   });
+  await applyCredentialRoutes(c, url);
   await guardInternal(c, url);
   await c.addInitScript(initScript);
   await c.addInitScript(threeHookInit);

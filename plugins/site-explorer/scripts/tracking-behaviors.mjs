@@ -11,7 +11,7 @@ import { clean, BANNER } from './untrusted.mjs';
 
 /** Browser-side, added with addInitScript: records, never changes behaviour. Result: window.__seFp. */
 export function fingerprintHooks() {
-  const rec = (window.__seFp = window.__seFp || { canvas: [], webgl: [], audio: [], measureText: 0, measureSrc: '' });
+  const rec = (window.__seFp = window.__seFp || { canvas: [], webgl: [], audio: [], keys: [], measureText: 0, measureSrc: '' });
   const src = () => { try { const m = (new Error().stack || '').split('\n').slice(3).join(' ').match(/https?:\/\/[^\s)]+/); if (!m) return ''; const u = new URL(m[0].replace(/:\d+:\d+$/, '').replace(/:\d+$/, '')); return u.origin + u.pathname; } catch { return ''; } };
   const wrap = (proto, name, fn) => { try { const orig = proto && proto[name]; if (typeof orig !== 'function') return; proto[name] = function (...a) { try { fn.call(this, a); } catch {} return orig.apply(this, a); }; } catch {} };
   const C2D = window.CanvasRenderingContext2D && CanvasRenderingContext2D.prototype, CV = window.HTMLCanvasElement && HTMLCanvasElement.prototype;
@@ -22,6 +22,9 @@ export function fingerprintHooks() {
   const read = (api) => function () { const c = this.canvas || this; if (c && drewText.has(c) && c.width <= 700 && c.height <= 300 && rec.canvas.length < 20) rec.canvas.push({ api, w: c.width, h: c.height, src: src() }); };
   wrap(CV, 'toDataURL', read('toDataURL')); wrap(CV, 'toBlob', read('toBlob')); wrap(C2D, 'getImageData', read('getImageData'));
   for (const Ctx of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) wrap(Ctx && Ctx.prototype, 'getParameter', function (a) { if ((a[0] === 37445 || a[0] === 37446) && rec.webgl.length < 10) rec.webgl.push({ param: a[0] === 37446 ? 'UNMASKED_RENDERER' : 'UNMASKED_VENDOR', src: src() }); });
+  // page-wide keyboard listeners (document / window / body): the way key loggers and some replay scripts see what is typed anywhere on the page
+  const KEYS = new Set(['keydown', 'keypress', 'keyup', 'input', 'paste']);
+  wrap(window.EventTarget && EventTarget.prototype, 'addEventListener', function (a) { if (!KEYS.has(a[0]) || rec.keys.length >= 20) return; const t = this === document ? 'document' : this === window ? 'window' : this === document.body ? 'body' : null; if (t) rec.keys.push({ api: String(a[0]), param: t, src: src() }); });
   try { if (window.OfflineAudioContext) { const O = window.OfflineAudioContext; window.OfflineAudioContext = new Proxy(O, { construct(t, a, nt) { try { if (rec.audio.length < 5) rec.audio.push({ src: src() }); } catch {} return Reflect.construct(t, a, nt); } }); } } catch {}
 }
 
@@ -30,7 +33,7 @@ export async function collectBehaviors(page, { auth = false } = {}) {
   const fp = await page.evaluate(() => window.__seFp || null).catch(() => null);
   // the page can overwrite window.__seFp with anything: keep only well-formed entries
   const list = (a) => (Array.isArray(a) ? a.filter((x) => x && typeof x === 'object').slice(0, 20).map((x) => ({ api: typeof x.api === 'string' ? x.api.slice(0, 30) : '', src: typeof x.src === 'string' ? x.src.slice(0, 300) : '', param: typeof x.param === 'string' ? x.param.slice(0, 30) : '' })) : []);
-  const out = { fp: fp && typeof fp === 'object' ? { canvas: list(fp.canvas), webgl: list(fp.webgl), audio: list(fp.audio), measureText: Number.isFinite(fp.measureText) ? Math.min(fp.measureText, 1e6) : 0, measureSrc: typeof fp.measureSrc === 'string' ? fp.measureSrc.slice(0, 300) : '' } : null, keystrokes: { tested: false, reason: null, leaks: [] } };
+  const out = { fp: fp && typeof fp === 'object' ? { canvas: list(fp.canvas), webgl: list(fp.webgl), audio: list(fp.audio), keys: list(fp.keys), measureText: Number.isFinite(fp.measureText) ? Math.min(fp.measureText, 1e6) : 0, measureSrc: typeof fp.measureSrc === 'string' ? fp.measureSrc.slice(0, 300) : '' } : null, keystrokes: { tested: false, reason: null, leaks: [] } };
   if (auth) { out.keystrokes.reason = 'logged-in session'; return out; }
   try {
     const target = await page.evaluateHandle(() => {
@@ -61,7 +64,7 @@ export async function collectBehaviors(page, { auth = false } = {}) {
 const REPLAY = [
   ['Hotjar', /static\.hotjar\.com|script\.hotjar\.com|hotjar\.io/i], ['Microsoft Clarity', /clarity\.ms/i], ['FullStory', /fullstory\.com/i], ['Mouseflow', /mouseflow\.com/i],
   ['LogRocket', /logrocket\.(com|io)|lr-ingest\.io|lr-in\.com|lr-in-prod\.com/i], ['Smartlook', /smartlook\.com/i], ['Lucky Orange', /luckyorange\.(com|net)/i], ['Inspectlet', /inspectlet\.com/i],
-  ['Crazy Egg', /crazyegg\.com/i], ['Heap', /heapanalytics\.com|heap-api\.com/i], ['PostHog', /posthog\.com|i\.posthog/i],
+  ['Crazy Egg', /crazyegg\.com/i], ['Contentsquare', /contentsquare\.(net|com)|c\.contentsquare|t\.contentsquare/i], ['Quantum Metric', /quantummetric\.com/i], ['Glassbox', /glassboxdigital\.com|gbqofs\.com/i], ['Datadog RUM', /datadoghq-browser-agent|browser-intake-datadoghq/i], ['UXCam / Userlytics', /uxcam\.com|userlytics\.com/i], ['Heap', /heapanalytics\.com|heap-api\.com/i], ['PostHog', /posthog\.com|i\.posthog/i],
 ];
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
 const SLD = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'or', 'ne', 'go', 'idv', 'mil']);
@@ -80,6 +83,7 @@ export function analyzeBehaviors(pages) {
       const party = (s) => (sameSite(hostOf(s), here) ? 'first-party' : 'third-party');
       for (const s of scripts(f.canvas)) fingerprint.push({ kind: 'canvas', src: clean(s, 120), party: party(s), page: p.url });
       for (const s of scripts(f.webgl)) fingerprint.push({ kind: 'webgl', src: clean(s, 120), party: party(s), page: p.url });
+      for (const k of (f.keys || [])) if (k.src) fingerprint.push({ kind: 'keys', src: clean(k.src, 120), party: party(k.src), page: p.url, detail: clean(`${k.api} ${k.param}`, 30) });
       for (const s of scripts(f.audio)) fingerprint.push({ kind: 'audio', src: clean(s, 120), party: party(s), page: p.url });
       if (f.measureText > 40) fingerprint.push({ kind: 'fonts', src: clean(f.measureSrc || '', 120), party: f.measureSrc ? party(f.measureSrc) : 'unknown', page: p.url, count: f.measureText });
     }
@@ -87,7 +91,7 @@ export function analyzeBehaviors(pages) {
   }
   const uniq = (list, key) => [...new Map(list.map((x) => [key(x), x])).values()];
   const fp = uniq(fingerprint, (x) => x.kind + x.src);
-  const flags = { replay: replay.size > 0, fingerprintThirdParty: fp.some((x) => x.party !== 'first-party'), keystrokeLeak: keystroke.leaks.length > 0 };
+  const flags = { replay: replay.size > 0, fingerprintThirdParty: fp.some((x) => x.kind !== 'keys' && x.party !== 'first-party'), keyListenerThirdParty: fp.some((x) => x.kind === 'keys' && x.party === 'third-party'), keystrokeLeak: keystroke.leaks.length > 0 };
   return { pagesChecked: live.length, replay: [...replay].map(([name, evidence]) => ({ name, evidence })), fingerprint: fp, keystroke: { pagesTested: keystroke.tested, leaks: uniq(keystroke.leaks, (x) => x.host + x.where) }, flags };
 }
 
@@ -95,7 +99,7 @@ export function renderBehaviorsMd(r) {
   const L = [BANNER, '', _t('# 追蹤行為檢查'), '', _t('這不只看有哪些追蹤服務，而是看頁面實際做了什麼：有沒有錄製訪客操作、有沒有讀取瀏覽器指紋、輸入的文字會不會被送到別的網站。這些是啟發式判斷：有命中是「值得查」的理由，不是濫用的證據（防詐騙與支付腳本也會讀 canvas）。'), ''];
   L.push(_t('## 錄製訪客操作／熱點圖的服務'), '', ...(r.replay.length ? r.replay.map((x) => `- **${x.name}** — \`${x.evidence.replace(/`/g, '')}\``) : [_t('（沒有發現）')]), '');
   L.push(_t('## 瀏覽器指紋'), '');
-  const K = { canvas: _t('讀取畫了文字的 canvas（canvas 指紋）'), webgl: _t('讀取顯示卡型號（WebGL 指紋）'), audio: _t('使用離線音訊運算（音訊指紋的常見手法）'), fonts: _t('大量量測文字寬度（字型探測）') };
+  const K = { canvas: _t('讀取畫了文字的 canvas（canvas 指紋）'), webgl: _t('讀取顯示卡型號（WebGL 指紋）'), audio: _t('使用離線音訊運算（音訊指紋的常見手法）'), fonts: _t('大量量測文字寬度（字型探測）'), keys: _t('監聽整頁的鍵盤事件（鍵盤記錄手法）') };
   L.push(...(r.fingerprint.length ? r.fingerprint.map((x) => `- ${K[x.kind]}：\`${(x.src || '?').replace(/`/g, '')}\`（${x.party === 'first-party' ? _t('同網站') : x.party === 'third-party' ? _t('第三方') : _t('來源不明')}）`) : [_t('（沒有發現）')]), '');
   L.push(_t('## 輸入文字是否被送到別的網站'), '');
   if (!r.keystroke.pagesTested) L.push(_t('（沒有可測的文字輸入框，或這次是登入狀態所以略過。）'));

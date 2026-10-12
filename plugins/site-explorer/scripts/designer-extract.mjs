@@ -48,7 +48,7 @@ export function extractDesignerInPage() {
     seen.add(el);
     const s = cs(el), fg = parseC(s.color) || [0, 0, 0, 1];
     picked.push({
-      role, tag: el.tagName.toLowerCase(), text: (el.innerText || el.alt || '').trim().replace(/\s+/g, ' ').slice(0, 50),
+      role, tag: el.tagName.toLowerCase(), text: (el.innerText || el.alt || '').trim().replace(/\s+/g, ' ').slice(0, 200),
       x: Math.round(r.left + scrollX), y: Math.round(r.top + scrollY), w: Math.round(r.width), h: Math.round(r.height),
       font: s.fontFamily.split(',')[0].replace(/["']/g, '').trim(), size: s.fontSize, weight: s.fontWeight, lh: s.lineHeight, ls: s.letterSpacing,
       color: hex(fg), bg: hex(effBg(el)), pad: s.padding, margin: s.margin, radius: s.borderRadius,

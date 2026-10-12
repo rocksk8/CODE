@@ -8,7 +8,7 @@ import { launchBrowser, axeSource, pinnedAxe } from './launch.mjs';
 import { guardInternal, isMain } from './util.mjs';
 import { intOpt } from './args.mjs';
 import { clean, cleanDeep } from './untrusted.mjs';
-import { loadAuthState } from './auth-state.mjs';
+import { loadAuthState, credContextOptions, applyCredentialRoutes } from './auth-state.mjs';
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 export const IMPACT_TO_SEVERITY = { critical: 'high', serious: 'medium', moderate: 'low', minor: 'low' };
@@ -33,7 +33,8 @@ export async function runA11y(siteDir, { maxPages = 10, storageState = null } = 
   const browser = await launchBrowser();
   const pages = [];
   try {
-    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...(auth ? { storageState: auth.file } : {}) });
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...(auth ? { storageState: auth.file } : {}), ...credContextOptions(site.startUrl) });
+    await applyCredentialRoutes(ctx, site.startUrl);
     await guardInternal(ctx, site.startUrl);
     for (const t of targets) {
       const page = await ctx.newPage();
