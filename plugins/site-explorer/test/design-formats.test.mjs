@@ -40,3 +40,8 @@ test('empty tokens still produce valid, harmless files', () => {
   assert.match(tailwindV4Theme({}), /@theme \{\n\}/);
   assert.ok(designMd({}).startsWith('---\n'));
 });
+
+test('designMd: a keyword font weight is left out instead of written as an empty string', () => {
+  const md = designMd({ typography: { scale: { h1: { size: '40px', weight: 'bold' }, p: { size: '16px', weight: '400' } } } });
+  assert.match(md, /h1: \{ size: "40px" \}/); assert.match(md, /p: \{ size: "16px", weight: "400" \}/); assert.ok(!md.includes('weight: ""'));
+});
