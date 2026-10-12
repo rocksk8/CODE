@@ -98,3 +98,4 @@ nav .grp{align-self:center;font-size:11px;letter-spacing:.08em;color:var(--mute)
 .vs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}.vs figure{margin:0}.vs img{width:100%;border:1px solid var(--line);border-radius:8px;background:#888}.vs figcaption{font-size:12px;color:var(--mute);margin-top:3px}
 .lnk{display:inline-block;margin:3px 8px 3px 0}
 .tf ol{margin:0;padding-left:20px}.tf li{margin:8px 0}.tf small{color:var(--mute)}.tfc{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:4px 12px;font:inherit;cursor:pointer;margin-top:4px}
+.ef{border:1px solid var(--line);border-radius:99px;padding:0 8px}.ef.e1{color:#0a7d3b}.ef.e3{color:#b45309}

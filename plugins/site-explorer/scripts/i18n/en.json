@@ -2466,5 +2466,13 @@
 "請直接給出修改後的程式碼或設定，並說明改了哪裡。": "Give me the changed code or settings directly, and explain what you changed.",
 "重要程度": "Importance",
 "複製給 AI 的指令": "Copy the instruction for an AI",
-"請手動複製：見 top-fixes.md": "Copy it by hand: see top-fixes.md"
+"請手動複製：見 top-fixes.md": "Copy it by hand: see top-fixes.md",
+"難度": "Effort",
+"問題": "Problem",
+"很快": "Quick",
+"需要一點時間": "Takes some time",
+"較費工": "Real work",
+"很快（改一行或一個設定）": "Quick (one line or one setting)",
+"較費工（要改程式或架構）": "Real work (code or structure changes)",
+"依「影響大小 × 影響頁數 ÷ 修起來的難度」排序：影響大又容易修的排在前面。每一項附一段可以直接貼給 AI 或工程師的指令。這只是挑出最值得先看的幾項，完整清單見 health.md。": "Ranked by how much each matters x how many pages it touches / how hard it is to fix: big and easy comes first. Each comes with an instruction you can paste to an AI or an engineer. This only picks what is worth looking at first; the full list is in health.md."
 }

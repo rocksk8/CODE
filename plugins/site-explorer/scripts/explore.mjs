@@ -261,7 +261,7 @@ try {
     _t('## 重新產生'), '```bash', _t('site-explorer <網址> --out ') + JSON.stringify(path.relative(process.cwd(), out) || '.'), '```', '',
     _t('工具說明與安裝：https://github.com/rocksk8/code'), ''].join('\n'));
 } catch {}
-if (crawlOk) { try { const { computeTopFixes, renderTopFixesConsole, renderTopFixesMd } = await import('./top-fixes.mjs'); const tf = computeTopFixes(siteDir); fs.writeFileSync(path.join(siteDir, 'top-fixes.json'), JSON.stringify(tf, null, 2)); fs.writeFileSync(path.join(siteDir, 'top-fixes.md'), renderTopFixesMd(tf) + '\n'); if (!JSON_MODE) { const b = renderTopFixesConsole(tf); if (b) console.log(b); } } catch {} }
+if (crawlOk) { try { const { computeTopFixes, renderTopFixesConsole, renderTopFixesMd } = await import('./top-fixes.mjs'); const tf = computeTopFixes(siteDir); fs.writeFileSync(path.join(siteDir, 'top-fixes.json'), JSON.stringify(tf, null, 2)); fs.writeFileSync(path.join(siteDir, 'top-fixes.md'), renderTopFixesMd(tf) + '\n'); if (!JSON_MODE) { const b = renderTopFixesConsole(tf.slice(0, 3)); if (b) console.log(b); } } catch {} }
 let handoffOk = false;
 const handoffDir = path.join(out, 'handoff');
 if ((crawlOk || motionOk) && crawlOk && !args.includes('--no-handoff')) handoffOk = await run(_t('產生交接包（AI 簡報、完整規格、決策紀錄、圖片）'), 'build-handoff.mjs', ['--site', siteDir, ...(motionOk ? ['--motion', motionDir] : []), '--out', handoffDir]);
