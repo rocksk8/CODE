@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // One command: check → crawl → design bundle → SEO health → 3D capture → database → dashboard → handoff package.
-//   explore.mjs <url> [--max-pages 6] [--out ./explore-out] [--no-motion] [--no-db] [--wait 4000]
+//   explore.mjs <url> [--max-pages 12] [--out ./explore-out] [--no-motion] [--no-db] [--wait 4000]
 import { _t, LANG } from './i18n.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
@@ -34,7 +34,7 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
   site-explorer explore example.com --compare          和你核准過的樣子比較（要先用 --approve 存一次基準）
 
 【基本】
-  --max-pages 6        最多爬幾頁
+  --max-pages 12       最多爬幾頁
   --out ./explore-out  輸出資料夾（預設：目前資料夾下的 explore-out；也可設環境變數 SITE_EXPLORER_OUT 一次指定）
   --open | --no-open   完成後是否自動開啟儀表板  --no-standalone  儀表板不內嵌圖片
   --browser firefox    （實驗性）改用 Firefox 或 WebKit 探索；要先執行 site-explorer setup --browser firefox。3D／動畫與行動網路模擬仍只支援 Chromium
@@ -50,8 +50,11 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
   --a11y               加做無障礙檢查（axe-core，WCAG 2.2 AA）；結果併入健檢分數與報告
   --verify             交接包產生後，順便驗證 starter 骨架和原站像不像（逐區塊相似度＋差異圖，結果進儀表板）
   --framework react    交接包之外，另產生 React／Vue／Astro 專案或 shadcn/ui 主題（react|vue|astro|shadcn|all）
-  --motion-pages 5     3D／動畫擷取的頁數上限（含起始頁；1 = 只擷取起始頁）
+  --motion-pages 30    3D／動畫擷取的頁數上限（含起始頁；預設是爬到的每一頁都擷取；1 = 只擷取起始頁）
   --tech-rules <規則.json> 加入你自己的技術辨識規則（辨識公司內部系統或較冷門的工具）
+  --brand-guide        另外產生可列印的品牌手冊（design-bundle/brand-guide.html 與 .pdf：顏色、字型、間距、對比）
+  --tokens <檔案>      用你的設計規範（W3C Design Tokens 的 JSON）檢查網站的顏色、圓角、字級有沒有符合（輸出 token-check.md）
+  --max-off-token <百分比> 不符合的比例超過這個值就以結束代碼 4 結束（要搭配 --tokens）
   --perf-runs 3        速度重複量測次數（取中位數，雜訊較小；預設 1）；--throttle mobile 模擬行動網路與較慢的 CPU
   --scenarios <情境.json> 畫面情境：先點、懸停、捲動…再截圖（例如選單展開），和整頁截圖一起存基準、一起比對
   --hide <選擇器>      截圖時隱藏一直在變的區塊（時鐘、廣告…，可重複）
@@ -83,10 +86,10 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
 `;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 { // a misspelled flag must fail loudly: "--fial-on high" silently turning a CI gate off is worse than an error
-  const KNOWN = new Set(['--a11y', '--archive', '--warc', '--har', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
+  const KNOWN = new Set(['--a11y', '--archive', '--warc', '--har', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--tokens', '--max-off-token', '--brand-guide', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
   const unknown = args.filter((a) => a.startsWith('--') && !KNOWN.has(a) && !/^--lang=/.test(a));
   if (unknown.length) { const near = (u) => [...KNOWN].find((k) => k.length > 3 && (k.startsWith(u) || u.startsWith(k) || [...u].filter((c) => k.includes(c)).length >= k.length - 2 && Math.abs(k.length - u.length) <= 2)); console.error(_t`不認得的選項：${unknown.join(' ')}${near(unknown[0]) ? _t`（是不是 ${near(unknown[0])}？）` : ''}\n執行 site-explorer explore --help 看全部選項。`); process.exit(1); }
-  if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--browser'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
+  if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--tokens', '--max-off-token', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--browser'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
 }
 if (!url) {
   const flagsWithValue = new Set(['--max-pages', '--out', '--wait', '--motion-pages', '--fail-on', '--storage-state', '--framework', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser']);
@@ -126,6 +129,8 @@ const approveFlag = args.includes('--approve'), compareFlag = args.includes('--c
 if (approveFlag && compareFlag) { console.error(_t('--approve 和 --compare 不能一起用：先 --compare 確認沒問題，再另外 --approve。')); process.exit(1); }
 if ((approveFlag || compareFlag) && args.includes('--no-health')) { console.error(_t('--approve／--compare 需要健檢，不能和 --no-health 一起用。')); process.exit(1); }
 const visualThresholdOpt = Number(opt('visual-threshold', '0.5')); if (!(visualThresholdOpt >= 0 && visualThresholdOpt <= 100)) { console.error(_t('--visual-threshold 必須是 0–100 的數字（百分比）')); process.exit(1); }
+if (opt('tokens', null)) { try { const tf = path.resolve(opt('tokens')); if (fs.statSync(tf).size > 1_000_000) throw new Error(_t('token 檔太大（上限 1 MB）。')); (await import('./token-check.mjs')).parseTokenFile(fs.readFileSync(tf, 'utf8')); } catch (e) { console.error(_t`--tokens 檔案有問題：` + String(e.code === 'ENOENT' ? _t('找不到檔案') : e.message).split('\n')[0]); process.exit(1); } }
+if (opt('max-off-token', null) != null && !(Number(opt('max-off-token')) >= 0 && Number(opt('max-off-token')) <= 100)) { console.error(_t('--max-off-token 必須是 0 到 100 的數字。')); process.exit(1); }
 if (opt('tech-rules', null)) { try { (await import('./techstack.mjs')).parseTechRules(fs.readFileSync(path.resolve(opt('tech-rules', null)), 'utf8')); } catch (e) { console.error(_t`--tech-rules 規則檔有問題：` + String(e.code === 'ENOENT' ? _t('找不到檔案') : e.message).split('\n')[0]); process.exit(1); } }
 if (opt('scenarios', null)) { try { (await import('./scenarios.mjs')).parseScenarios(fs.readFileSync(path.resolve(opt('scenarios', null)), 'utf8')); } catch (e) { console.error(_t`--scenarios 情境檔有問題：` + String(e.code === 'ENOENT' ? _t('找不到檔案') : e.message).split('\n')[0]); process.exit(1); } }
 for (let k = 0; k < args.length; k++) if (args[k] === '--hide') { if (!args[k + 1] || !/^[^{};<>@\\]{1,200}$/.test(args[k + 1])) { console.error(_t('--hide 需要一個 CSS 選擇器（不能含 { } ; < > @ \\）。')); process.exit(1); } k++; }
@@ -142,7 +147,7 @@ const failOnNewOpt = opt('fail-on-new', 'high'); if (!['critical', 'high', 'medi
 const budgetFile = opt('budget', null); let budgetCfg = null;
 if (budgetFile) { try { const { parseBudget } = await import('./perf-budget.mjs'); budgetCfg = parseBudget(fs.readFileSync(path.resolve(budgetFile), 'utf8')); } catch (e) { console.error(_t`預算檔無法使用：${String(e.code === 'ENOENT' ? _t('找不到檔案') : e.message).split('\n')[0]}`); process.exit(1); } }
 const urlsGiven = findUrls(args).filter((u) => { try { return sameSite(u, url); } catch { return false; } }).length; // only URLs the crawler will accept (same site as the first) raise the limits
-const maxPages = Math.max(intOpt(args, 'max-pages', 6, { min: 1, max: 500 }), urlsGiven), waitMs = intOpt(args, 'wait', 4000, { min: 0, max: 60000 });
+const maxPages = Math.max(intOpt(args, 'max-pages', 12, { min: 1, max: 500 }), urlsGiven), waitMs = intOpt(args, 'wait', 4000, { min: 0, max: 60000 });
 
 const out = path.resolve(opt('out', process.env.SITE_EXPLORER_OUT || './explore-out'));
 if (isInside(out, path.resolve(here, '..'))) { console.error(_t`輸出資料夾不能放在外掛目錄內（${out}）：外掛更新或重新安裝時會被清掉。請改用你專案裡的資料夾，例如 --out ./explore-out`); process.exit(1); }
@@ -153,7 +158,7 @@ const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
 const siteDir = path.join(siteRoot, host), motionDir = path.join(motionRoot, host);
 const steps = [];
-const total = 12 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
+const total = 12 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--tokens') ? 1 : 0) + (args.includes('--brand-guide') ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
 let n = 0;
 
 let current = null; // the stage that is running: Ctrl-C / SIGTERM (CI timeout, MCP kill) must stop it too, not leave a browser crawling
@@ -182,7 +187,7 @@ if (checks.some((c) => c.level === 'fail')) {
 
 { // results of stages that do not run this time must not be shown as if they were fresh (an old health score, a11y report, verify result or changes.md)
   const rm = (f) => { try { fs.rmSync(f, { recursive: true, force: true }); } catch {} };
-  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'techstack.json')); rm(path.join(siteDir, 'tracking-behaviors.json')); rm(path.join(siteDir, 'security.json')); rm(path.join(siteDir, 'figma')); rm(path.join(siteDir, 'scenarios')); rm(path.join(siteDir, 'extractions.json')); rm(path.join(siteDir, 'extractions.csv')); rm(path.join(siteDir, 'security.md')); rm(path.join(siteDir, 'tracking-behaviors.md')); rm(path.join(siteDir, 'performance.json')); rm(path.join(siteDir, 'performance.md')); rm(path.join(siteDir, 'top-fixes.json')); rm(path.join(siteDir, 'top-fixes.md')); rm(path.join(siteDir, 'techstack.md')); // a failed re-run must not report the previous run's pages
+  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'techstack.json')); rm(path.join(siteDir, 'tracking-behaviors.json')); rm(path.join(siteDir, 'security.json')); rm(path.join(siteDir, 'figma')); rm(path.join(siteDir, 'scenarios')); rm(path.join(siteDir, 'extractions.json')); rm(path.join(siteDir, 'extractions.csv')); rm(path.join(siteDir, 'security.md')); rm(path.join(siteDir, 'tracking-behaviors.md')); rm(path.join(siteDir, 'performance.json')); rm(path.join(siteDir, 'performance.md')); rm(path.join(siteDir, 'top-fixes.json')); rm(path.join(siteDir, 'token-check.json')); rm(path.join(siteDir, 'token-check.md')); rm(path.join(siteDir, 'top-fixes.md')); rm(path.join(siteDir, 'techstack.md')); // a failed re-run must not report the previous run's pages
   if (args.includes('--no-health')) { rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); }
   if (!args.includes('--a11y')) rm(path.join(siteDir, 'a11y.json'));
   if (!compareFlag && !opt('approve-visual', null)) for (const f of ['visual.json', 'visual.md', 'visual-review.html', 'visual-diff', 'drift.md']) rm(path.join(out, f)); // a comparison from an earlier run must not be shown as this run's result
@@ -191,6 +196,10 @@ if (checks.some((c) => c.level === 'fail')) {
 const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--archive') ? ['--archive'] : []), ...(args.includes('--warc') ? ['--warc'] : []), ...(args.includes('--har') ? ['--har'] : []), ...(opt('scenarios', null) ? ['--scenarios', path.resolve(opt('scenarios'))] : []), ...args.flatMap((a, i) => (a === '--hide' && args[i + 1] ? ['--hide', args[i + 1]] : [])), ...(opt('perf-runs', null) ? ['--perf-runs', opt('perf-runs')] : []), ...(opt('throttle', null) ? ['--throttle', opt('throttle')] : []), ...(opt('extract', null) ? ['--extract', path.resolve(opt('extract', null))] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
 const crawlOk = crawlRan && (() => { try { return (JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []).length > 0; } catch { return false; } })(); // a crawl that exits 0 but saved no page is a failure
 if (crawlOk) await run(_t('整理設計包（tokens、Tailwind、W3C）'), 'export-design.mjs', [siteDir]);
+if (crawlOk && args.includes('--brand-guide')) await run(_t('品牌手冊（HTML 與 PDF）'), 'brand-guide.mjs', ['--site', siteDir, '--pdf']);
+let tokenCheckFailed = false;
+if (crawlOk && opt('tokens', null)) { await run(_t('對照你的設計規範（token 檔）'), 'token-check.mjs', ['--site', siteDir, '--tokens', path.resolve(opt('tokens')), ...(opt('max-off-token', null) != null ? ['--max-off-token', String(opt('max-off-token'))] : [])]); try { tokenCheckFailed = !!JSON.parse(fs.readFileSync(path.join(siteDir, 'token-check.json'), 'utf8')).failed; } catch {} }
+if (opt('max-off-token', null) != null && !opt('tokens', null)) { console.error(_t('--max-off-token 要搭配 --tokens 使用。')); process.exit(1); }
 let healthOk = false;
 if (crawlOk && args.includes('--a11y')) await run(_t('無障礙檢查（axe-core）'), 'a11y.mjs', ['--site', siteDir, ...authArgs, ...(args.includes('--max-pages') ? ['--max-pages', String(maxPages)] : [])]);
 if (crawlOk && !args.includes('--no-health')) healthOk = await run(_t('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）'), 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
@@ -203,9 +212,9 @@ let motionOk = false;
 if (!crawlOk && !args.includes('--no-motion')) console.log(_t`\n沒有任何頁面被爬取，略過其餘階段。請檢查網址有沒有打錯、網路是否正常，或執行：site-explorer doctor ${url}`);
 else if (!args.includes('--no-motion')) motionOk = await run(_t('擷取 3D／動畫畫格'), 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])]);
 
-// 3D／motion is per page: also capture the other crawled pages (--motion-pages N, default 5 pages in total; 1 = only the start page)
+// 3D／motion is per page: every crawled page is captured (--motion-pages N caps it, default 30 in total; 1 = only the start page). Two pages are captured at a time and one that hangs is stopped after PAGE_LIMIT_MS.
 if (!args.includes('--no-motion') && crawlOk) {
-  const nPages = Math.max(intOpt(args, 'motion-pages', 5, { min: 1, max: 30 }), urlsGiven);
+  const nPages = Math.max(intOpt(args, 'motion-pages', 30, { min: 1, max: 30 }), urlsGiven);
   const entries = [];
   const addEntry = (pageUrl, slug, title, dir) => {
     try {
@@ -217,13 +226,16 @@ if (!args.includes('--no-motion') && crawlOk) {
   let pg = []; try { pg = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []; } catch {}
   const extra = pg.filter((p, i) => i > 0 && p.status === 200).slice(0, nPages - 1); // pages[0] is the start page after redirects (naked host -> www)
   if (pg[0] && entries[0]) entries[0].url = pg[0].url;
-  for (const p of extra) {
+  const PAGE_LIMIT_MS = 240000, workers = Math.max(1, Math.min(2, (os.cpus() || []).length >> 1)); let done = 0;
+  const captureOne = async (p) => {
     const dest = path.join(motionRoot, '_pages', p.slug), t0 = Date.now();
-    console.log(_t`   3D／動畫：${p.url}`);
-    const ok = await new Promise((resolve) => { const c = spawn(process.execPath, [path.join(here, 'capture-3d.mjs'), p.url, '--out', dest, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])], { env: process.env, stdio: 'ignore' }); c.on('close', (code) => resolve(code === 0)); });
+    console.log(_t`   3D／動畫 [${++done}/${extra.length}]：${p.url}`);
+    const ok = await new Promise((resolve) => { const c = spawn(process.execPath, [path.join(here, 'capture-3d.mjs'), p.url, '--out', dest, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])], { env: process.env, stdio: 'ignore' }); const kill = setTimeout(() => { try { c.kill(); } catch {} }, PAGE_LIMIT_MS); c.on('close', (code) => { clearTimeout(kill); resolve(code === 0); }); c.on('error', () => { clearTimeout(kill); resolve(false); }); });
     const hostDir = path.join(dest, new URL(p.url).host.replace(/[^a-z0-9.-]/gi, '_'));
-    if (ok) { addEntry(p.url, p.slug, p.title, hostDir); console.log(`     ✔ ${((Date.now() - t0) / 1000).toFixed(1)}s`); } else console.log(_t('     ✖ 略過（失敗或被 robots.txt 擋住）'));
-  }
+    if (ok) { addEntry(p.url, p.slug, p.title, hostDir); console.log(`     ✔ ${p.slug} ${((Date.now() - t0) / 1000).toFixed(1)}s`); } else console.log(_t`     ✖ 略過 ${p.slug}（失敗、逾時或被 robots.txt 擋住）`);
+  };
+  { const queue = [...extra]; await Promise.all(Array.from({ length: workers }, async () => { while (queue.length) await captureOne(queue.shift()); })); }
+  entries.sort((a, b) => (a.slug === '(start)' ? -1 : b.slug === '(start)' ? 1 : pg.findIndex((x) => x.slug === a.slug) - pg.findIndex((x) => x.slug === b.slug))); // crawl order, whatever finished first
   if (entries.length) { fs.mkdirSync(motionDir, { recursive: true }); fs.writeFileSync(path.join(motionDir, 'pages.json'), JSON.stringify({ pages: entries }, null, 2)); motionOk = motionOk || fs.existsSync(path.join(motionDir, 'motion.json')); }
 }
 
@@ -303,6 +315,7 @@ if (failOn && !healthOk) { failCode = 1; console.error(_t`--fail-on ${failOn} �
 try { const hj = path.join(siteDir, 'health.json'); if (healthOk && fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(_t`驗收結論：${h.verdict?.label ?? '—'}`); if (failOn) { const rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }; if (h.issues.some((i) => rank[i.severity] <= rank[failOn])) { failCode = 4; console.error(_t`健檢有 ${failOn} 以上的問題，依 --fail-on ${failOn} 以結束代碼 4 結束。`); } } } } catch {}
 if (budgetCfg && crawlOk) { try { const pj = JSON.parse(fs.readFileSync(path.join(siteDir, 'performance.json'), 'utf8')); if (pj.result?.failed) { failCode = failCode || 4; console.error(_t`效能預算有 ${pj.result.violations.filter((v) => v.level === 'fail').length} 項超標，以結束代碼 4 結束（見 performance.md）。`); } } catch { failCode = failCode || 1; console.error(_t('--budget 需要效能檢查成功，但沒有拿到結果。')); } }
 let drift = null;
+if (tokenCheckFailed) { failCode = failCode || 4; console.error(_t('設計規範不符合比例超過門檻，以結束代碼 4 結束（見 token-check.md）。')); }
 if (opt('approve-visual', null)) { // accept some screenshots as the new baseline (named in visual.md / the review page), leaving the rest as they are
   try {
     const { approveVisualItems, visualDirFor } = await import('./visual-regression.mjs');

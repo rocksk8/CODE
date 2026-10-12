@@ -58,10 +58,11 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
       blocks: full.designer?.blocks || [], elements: full.designer?.elements || [],
     });
   }
-  for (const f of ['palette.svg', 'tokens.studio.json', 'tokens.css', 'tailwind.config.js', 'tailwind-v4.css', 'DESIGN.md', 'tokens.w3c.json', 'tokens.json', 'README.md']) {
+  for (const f of ['palette.svg', 'tokens.studio.json', 'tokens.css', 'tailwind.config.js', 'tailwind-v4.css', 'DESIGN.md', 'tokens.w3c.json', 'tokens.json', 'brand-guide.html', 'brand-guide.pdf', 'README.md']) {
     const fp = path.join(siteDir, 'design-bundle', f);
     if (exists(fp)) data.files.push({ name: f, href: ref(fp) });
   }
+  try { const tc = JSON.parse(fs.readFileSync(path.join(siteDir, 'token-check.json'), 'utf8')); const part = (k) => (tc.checked || []).includes(k) ? { on: tc[k].on, total: tc[k].total, off: (tc[k].off || []).slice(0, 8).map((o) => ({ value: String(o.value), uses: o.uses, nearest: o.nearest ? { name: String(o.nearest.name), delta: o.nearest.delta } : null })) } : null; data.tokenCheck = { failed: !!tc.failed, maxOff: tc.maxOff ?? null, offPct: tc.offPct, colors: part('colors'), radii: part('radii'), fontSizes: part('fontSizes') }; } catch {}
   // the newer checks: raw results for their own tabs, plus one plain-language verdict each for the overview
   data.verdicts = computeVerdicts(siteDir, outDir);
   data.topFixes = (() => { try { return readJSON(path.join(siteDir, 'top-fixes.json')); } catch { return []; } })();
@@ -101,7 +102,7 @@ try {
   if (db) {
     const runs = runsForHost(db, host);
     if (runs.length) {
-      data.history = { host, runs: runs.map((r) => ({ id: r.id, date: r.crawled_at, pages: r.pages, brand: r.brand, font: r.heading_font, targets: r.motion_targets })),
+      data.history = { host, runs: runs.map((r) => ({ id: r.id, date: r.crawled_at, pages: r.pages, brand: r.brand, font: r.heading_font, targets: r.motion_targets, score: Number.isFinite(r.health_score) ? r.health_score : null, grade: r.health_grade || null, urgent: (r.issues_critical || 0) + (r.issues_high || 0) })),
         changes: runs.length > 1 ? diffRuns(db, runs.at(-2).id, runs.at(-1).id) : [] };
     }
     db.close();

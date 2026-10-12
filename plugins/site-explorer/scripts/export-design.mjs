@@ -5,6 +5,7 @@
 import { _t } from './i18n.mjs';
 import { BANNER, sanitizeDoc } from './untrusted.mjs';
 import { tailwindV4Theme, designMd } from './design-formats.mjs';
+import { clusterColors, colorDistance } from './color-science.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -49,6 +50,9 @@ const addColors = (list, w = 1, tag) => {
 };
 addColors(d.textColors, 1, 'text'); addColors(d.backgrounds, 2, 'bg'); addColors(d.borderColors || [], 0.5, 'border');
 for (const b of c.buttons || []) { const p = parse(b.backgroundColor); if (p && p.a > 0.5) addColors([{ value: b.backgroundColor, count: 8 }], 1, 'button'); }
+// colours the eye cannot tell apart (CIEDE2000 <= 2, "just noticeable") are one colour: the most used one stands for the group and the others are listed as merged
+{ const groups = clusterColors([...weights.values()].map((e) => ({ rgb: e.rgb, weight: e.count, e })), 2); weights.clear();
+  for (const g of groups) { const rep = g.rep.e; const tags = new Set(); for (const m of g.members) for (const t of m.e.tags) tags.add(t); weights.set(rep.hex, { ...rep, count: g.weight, tags, merged: g.members.filter((m) => m !== g.rep).map((m) => m.e.hex) }); } }
 const all = [...weights.values()].map((e) => ({ ...e, ...hsl(e.rgb) })).sort((a, b) => b.count - a.count);
 const neutral = (e) => e.s < 0.14;
 const saturated = all.filter((e) => !neutral(e) && e.l > 0.12 && e.l < 0.92);
@@ -78,7 +82,7 @@ const colors = {
   border: neutrals.find((e) => e.tags.has('border'))?.hex,
 };
 for (const k of Object.keys(colors)) if (!colors[k]) delete colors[k];
-const palette = all.slice(0, 16).map((e) => ({ hex: e.hex, uses: Math.round(e.count), kind: neutral(e) ? 'neutral' : 'chromatic' }));
+const palette = all.slice(0, 16).map((e) => ({ hex: e.hex, uses: Math.round(e.count), kind: neutral(e) ? 'neutral' : 'chromatic', ...(e.merged && e.merged.length ? { merged: e.merged.slice(0, 8) } : {}) }));
 
 // contrast audit
 const audit = [];
@@ -103,11 +107,25 @@ const radii = (d.radii || []).map((r) => r.value);
 const shadows = (d.shadows || []).map((r) => r.value);
 const breakpoints = (d.breakpoints || []).map((b) => b.px).sort((a, b) => a - b);
 
+// ---- dark mode: its own colour set (what the page really uses when the visitor prefers dark), not only the body colours ----
+let darkSet = null;
+if (d.darkMode?.supported) {
+  const dw = new Map(), addDark = (list, w, tag) => { for (const { value, count } of list || []) { const p = parse(value); if (!p || p.a < 0.5) continue; const k = hex(p); const e = dw.get(k) || { hex: k, rgb: p, count: 0, tags: new Set() }; e.count += count * w; e.tags.add(tag); dw.set(k, e); } };
+  const dd = d.darkMode.design || {}; addDark(dd.textColors, 1, 'text'); addDark(dd.backgrounds, 2, 'bg'); addDark(dd.borderColors, 0.5, 'border');
+  const groups = clusterColors([...dw.values()].map((e) => ({ rgb: e.rgb, weight: e.count, e })), 2).map((g) => ({ ...g.rep.e, count: g.weight, tags: new Set(g.members.flatMap((m) => [...m.e.tags])) })).map((e) => ({ ...e, ...hsl(e.rgb) })).sort((a, b) => b.count - a.count);
+  const fb = parse(d.darkMode.dark.background), ft = parse(d.darkMode.dark.color);
+  const bg = (fb && fb.a > 0.5 ? { hex: hex(fb), rgb: fb, ...hsl(fb) } : null) || groups.find((e) => e.tags.has('bg') && e.l < 0.4); // the page background itself (what <body> paints), not the most used card colour
+  if (bg) {
+    const tx = groups.filter((e) => e.tags.has('text') && contrast(e.rgb, bg.rgb) >= 4.5)[0] || (ft && ft.a > 0.5 && contrast(ft, bg.rgb) >= 4.5 ? { hex: hex(ft), rgb: ft } : null);
+    const surface = groups.find((e) => e.tags.has('bg') && colorDistance(e.rgb, bg.rgb) > 2 && e.l < 0.45), border = groups.find((e) => e.tags.has('border') && e.hex !== bg.hex);
+    darkSet = { colors: Object.fromEntries(Object.entries({ background: bg.hex, text: tx?.hex, surface: surface?.hex, border: border?.hex }).filter(([, v]) => v)), palette: groups.slice(0, 10).map((e) => ({ hex: e.hex, uses: Math.round(e.count) })), contrast: tx ? contrast(tx.rgb, bg.rgb) : null };
+  }
+}
 const tokens = {
   $description: `Extracted from ${site.startUrl} on ${site.crawledAt}`,
   color: colors, palette, typography: { fontStack, scale: typeScale, sizesObserved: sizes, scaleRatio: ratio },
   spacing, radius: radii, shadow: shadows, breakpoints,
-  cssVariables: d.cssVars, darkMode: d.darkMode, buttonHover: d.buttonHover, contrastAudit: audit,
+  cssVariables: d.cssVars, darkMode: d.darkMode ? { supported: d.darkMode.supported, light: d.darkMode.light, dark: d.darkMode.dark, ...(darkSet ? { colors: darkSet.colors, palette: darkSet.palette, contrast: darkSet.contrast } : {}) } : d.darkMode, buttonHover: d.buttonHover, contrastAudit: audit,
 };
 
 // ---- fonts: where they come from, and what to use if you cannot license them ----
@@ -193,7 +211,7 @@ const css = [':root {',
   ...Object.entries(typeScale).map(([k, v]) => `  --text-${k}: ${v.size};`),
   `  --space-unit: ${spacing.baseUnit}px;`, ...sp.slice(0, 8).map((n, i) => `  --space-${i + 1}: ${n}px;`),
   ...radii.slice(0, 4).map((r, i) => `  --radius-${i + 1}: ${r};`), ...shadows.slice(0, 3).map((s, i) => `  --shadow-${i + 1}: ${s};`),
-  '}', ...(d.darkMode?.supported ? ['@media (prefers-color-scheme: dark) {', `  :root { --color-background: ${d.darkMode.dark.background}; --color-text: ${d.darkMode.dark.color}; }`, '}'] : []),
+  '}', ...(d.darkMode?.supported ? ['@media (prefers-color-scheme: dark) {', `  :root { --color-background: ${darkSet?.colors.background || d.darkMode.dark.background}; --color-text: ${darkSet?.colors.text || d.darkMode.dark.color};${darkSet?.colors.surface ? ` --color-surface: ${darkSet.colors.surface};` : ''}${darkSet?.colors.border ? ` --color-border: ${darkSet.colors.border};` : ''} }`, '}'] : []),
 ].filter(Boolean).join('\n');
 fs.writeFileSync(path.join(out, 'tokens.css'), sanitizeDoc(css, { markup: false, code: 'css' }) + '\n');
 fs.writeFileSync(path.join(out, 'tailwind-v4.css'), sanitizeDoc(tailwindV4Theme(tokens, { source: site.startUrl }), { markup: false, code: 'css' })); // Tailwind v4: CSS-first @theme (OKLCH colours)

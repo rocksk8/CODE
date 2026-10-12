@@ -54,6 +54,8 @@ export function computeVerdicts(siteDir, outDir = null) {
     const changed = (vis.rows || []).filter((r) => r.status !== 'same').length;
     push({ id: 'visual', title: _t('畫面和基準比對'), status: changed ? 'bad' : 'ok', headline: changed ? _t`${changed} 張截圖和基準不同（共 ${(vis.rows || []).length} 張）` : _t`${(vis.rows || []).length} 張截圖都和基準一致`, next: changed ? _t('逐張看差異；確認是想要的改版後用 --approve 更新基準。') : '', tab: 'visual', file: 'visual.md' });
   }
+  const tc = rd(path.join(siteDir, 'token-check.json'));
+  if (tc && Number.isFinite(tc.offPct)) push({ id: 'tokens', title: _t('設計規範符合度'), status: tc.failed ? 'bad' : tc.offPct <= 5 ? 'ok' : tc.offPct <= 20 ? 'warn' : 'bad', headline: _t`${(100 - tc.offPct).toFixed(1)}% 的顏色、圓角、字級符合你的 token 檔`, next: tc.offPct > 0 ? _t('看 token-check.md 列出的不符合項目。') : '', tab: 'design', file: 'token-check.md' });
   const ex = outDir || siteDir ? rd(path.join(siteDir, 'extractions.json')) : null;
   if (ex) push({ id: 'extract', title: _t('自訂擷取'), status: 'info', headline: _t`${(ex.rules || []).length} 條規則・${(ex.rows || []).length} 頁`, next: '', tab: 'extract', file: 'extractions.csv' });
   return out;

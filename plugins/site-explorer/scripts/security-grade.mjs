@@ -94,8 +94,26 @@ function certInfo(host, port, legacy = false) {
   });
 }
 
+/** Which TLS 1.2-and-older cipher suites the server accepts: every suite this Node build knows is offered on its own (so the answer is complete, not just the one that happened to be negotiated).
+ *  Weak families that this OpenSSL build does not contain (RC4, 3DES, NULL, export) cannot be probed from here; see the "weak" row. */
+export async function enumerateCiphers(host, port, { names = tls.getCiphers().filter((c) => !/^tls_/i.test(c)), connect = tls.connect, timeout = 4000, concurrency = 8 } = {}) {
+  const accepted = []; const queue = [...names];
+  const one = (name) => new Promise((resolve) => {
+    let done = false; const fin = (ok) => { if (!done) { done = true; resolve(ok); } };
+    let sock; try { sock = connect({ host, port, servername: host, ciphers: `${String(name).toUpperCase()}:@SECLEVEL=0`, minVersion: 'TLSv1', maxVersion: 'TLSv1.2', rejectUnauthorized: false, timeout }, () => { fin(true); sock.end(); }); } catch { return fin(false); }
+    sock.on('error', () => fin(false)); sock.on('timeout', () => { fin(false); sock.destroy(); });
+  });
+  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, async () => { while (queue.length) { const n = queue.shift(); if (await one(n)) accepted.push(n); } }));
+  return accepted.sort();
+}
+/** accepted = suite names (OpenSSL spelling). noFs: no forward secrecy (plain RSA key exchange); cbc: not authenticated encryption. */
+export function classifyCiphers(accepted) {
+  const list = (accepted || []).map((c) => String(c).toLowerCase());
+  return { total: list.length, noFs: list.filter((c) => !/^(ecdhe|dhe|edh|tls_)/.test(c)), cbc: list.filter((c) => !/(gcm|chacha|poly1305|ccm)/.test(c)) };
+}
+
 /** versions: { 'TLS 1.0': bool, ... }, cert: certInfo result. Pure grading, so it can be tested without a network. */
-export function gradeTls(versions, cert) {
+export function gradeTls(versions, cert, ciphers = null) {
   const tests = []; let cap = 'A+'; const order = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'F'];
   const lower = (g) => { if (order.indexOf(g) > order.indexOf(cap)) cap = g; };
   const t = (id, name, result, grade, fix) => { tests.push({ id, name, result, cap: grade || null, fix: fix || null }); if (grade) lower(grade); };
@@ -114,6 +132,12 @@ export function gradeTls(versions, cert) {
   else if (cert.eph && (cert.eph.type === 'ECDH' || cert.eph.type === 'DH')) t('keyexchange', _t('金鑰交換'), _t`具備前向保密（${cert.eph.type} ${cert.eph.name || cert.eph.size || ''}）`);
   else if (cipher) t('keyexchange', _t('金鑰交換'), _t('沒有前向保密（協商到的加密套件不是 ECDHE／DHE）'), 'B', _t('優先啟用 ECDHE 加密套件。'));
   if (cipher && proto !== 'TLSv1.3') { if (/GCM|CHACHA20|POLY1305/i.test(cipher)) t('cipher', _t('加密套件'), _t`${clean(cipher, 40)}（認證式加密）`); else t('cipher', _t('加密套件'), _t`${clean(cipher, 40)}（不是認證式加密）`, 'A-', _t('優先使用 AES-GCM 或 ChaCha20-Poly1305。')); }
+  if (Array.isArray(ciphers) && ciphers.length) {
+    const c = classifyCiphers(ciphers);
+    if (c.noFs.length) t('nofs', _t('沒有前向保密的套件'), _t`仍接受 ${c.noFs.length} 個沒有前向保密的套件（例：${c.noFs.slice(0, 3).map((x) => clean(x, 40)).join(_t('、'))}）`, 'B', _t('停用 RSA 金鑰交換的套件，只留 ECDHE／DHE。'));
+    else t('nofs', _t('沒有前向保密的套件'), _t('沒有（所有被接受的套件都有前向保密）'));
+    t('cbc', _t('非認證式加密套件'), c.cbc.length ? _t`接受 ${c.cbc.length} 個 CBC 套件（建議優先使用 AES-GCM 或 ChaCha20）` : _t('沒有（全部是認證式加密）'));
+  }
   t('weak', _t('過時的加密套件'), _t('未測試：這個環境的加密函式庫不提供 RC4／3DES／匯出級套件，無法主動試探；請用 SSL Labs 補測'));
   if (cert.bits && cert.bits < 2048 && !/^(256|384|521)$/.test(String(cert.bits))) t('keysize', _t('金鑰長度'), _t`${cert.bits} 位元太短`, 'B', _t('改用 2048 位元以上的 RSA 或 ECDSA。'));
   if (versions['TLS 1.0'] || versions['TLS 1.1']) t('legacy', _t('舊版協定'), _t`仍接受 ${['TLS 1.0', 'TLS 1.1'].filter((v) => versions[v]).join(_t('、'))}`, 'B', _t('停用 TLS 1.0 / 1.1。'));
@@ -128,7 +152,8 @@ export async function gradeTlsLive(host, port = 443) {
   let cert = await certInfo(host, port); if (!cert.ok) cert = await certInfo(host, port, true); // a server that only speaks TLS 1.0 / 1.1 needs the legacy probe
   if (!cert.ok) return gradeTls({}, cert);
   const versions = {}; for (const [v, label] of VERSIONS) versions[label] = (await tryVersion(host, port, v)).ok;
-  return gradeTls(versions, cert);
+  const accepted = await enumerateCiphers(host, port).catch(() => []);
+  return gradeTls(versions, cert, accepted);
 }
 
 export function renderSecurityMd(r) {
