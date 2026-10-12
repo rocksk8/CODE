@@ -2654,5 +2654,9 @@
 "搜尋引擎與 AI 爬蟲拿到的內容，和訪客在瀏覽器裡看到的有沒有差別。": "Whether search-engine and AI crawlers get the same content as visitors in a browser.",
 "結論": "Conclusion",
 "發現的差異": "Differences found",
-"身分只是名稱，不是這些爬蟲的真實來源位址；會驗證來源的防火牆可能因此給不同回應。": "The identities are only names, not the crawlers' real network addresses; a firewall that verifies the source may answer differently."
+"身分只是名稱，不是這些爬蟲的真實來源位址；會驗證來源的防火牆可能因此給不同回應。": "The identities are only names, not the crawlers' real network addresses; a firewall that verifies the source may answer differently.",
+"⚠️ 這一頁很慢（或結構很大），動態擷取在時間預算（{} 秒）內提前結束，已保留完成的部分。": "⚠️ This page is slow (or very large); motion capture ended early within its time budget ({} s) and kept what was finished.",
+"捲動取樣…": "Sampling while scrolling…",
+"略過目標 {}/{}（時間預算用完）：{}": "Skipped target {}/{} (time budget used up): {}",
+"目標 {}/{}：{}": "Target {}/{}: {}"
 }

@@ -15,8 +15,13 @@ import crypto from 'node:crypto';
 const args = process.argv.slice(2);
 const url = findUrl(args);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
-if (!url) { console.error('Usage: capture-3d.mjs <url> [--out DIR] [--frames 12] [--interval 250] [--max-targets 6] [--wait 2500] [--no-video]'); process.exit(1); }
+if (!url) { console.error('Usage: capture-3d.mjs <url> [--out DIR] [--frames 12] [--interval 250] [--max-targets 6] [--wait 2500] [--budget-ms 170000] [--no-video]'); process.exit(1); }
 const FRAMES = intOpt(args, 'frames', 12, { min: 1, max: 60 }), INTERVAL = intOpt(args, 'interval', 250, { min: 16, max: 5000 }), MAX = intOpt(args, 'max-targets', 6, { min: 1, max: 20 }), WAIT = intOpt(args, 'wait', 2500, { min: 0, max: 60000 });
+// A page that renders slowly (software WebGL on a machine without a GPU, a heavy real site) must still finish: a time budget, progress lines so it never looks frozen, and cheaper sampling once screenshots turn out slow.
+const BUDGET = intOpt(args, 'budget-ms', 170000, { min: 1000, max: 1800000 }), T0 = Date.now();
+const timeLeft = () => BUDGET - (Date.now() - T0); let shotMs = 0, shots = 0, truncated = false;
+const slowMachine = () => shots >= 2 && shotMs / shots > 1500;
+const say = (m) => console.log('   ' + m);
 const blockedBy = await robotsBlocks(url);
 if (blockedBy) { console.error(_t`robots.txt 不允許存取此頁面（Disallow: ${blockedBy}），已依網站設定停止。`); process.exit(3); }
 const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
@@ -129,14 +134,18 @@ const targets = detected.targets.sort((a, b) => (order[a.kind] ?? 9) - (order[b.
 const hash = (b) => crypto.createHash('sha1').update(b).digest('hex').slice(0, 10);
 const sleep = (ms) => page.waitForTimeout(ms);
 const pad = (i) => String(i).padStart(2, '0');
-async function shoot(loc, file) { const buf = await loc.screenshot({ animations: 'allow', timeout: 8000 }); fs.writeFileSync(file, buf); return { h: hash(buf), buf }; }
+async function shoot(loc, file) { const a = Date.now(); const buf = await loc.screenshot({ animations: 'allow', timeout: 8000 }); shotMs += Date.now() - a; shots++; fs.writeFileSync(file, buf); return { h: hash(buf), buf }; }
 
 // three.js facts (scene graph, camera, which objects move) — gathered once, attached to the main WebGL target
 const threeInfo = await page.evaluate(summarizeThreeInPage).catch(() => null);
 if (threeInfo) console.log(`three.js scene captured: ${threeInfo.scene.objects} objects, ${threeInfo.movingCount} moving`);
 
 const buffers = {}; // target id -> { idle:[], hover:[], drag:[], video:[] } PNG buffers (for analysis + filmstrip)
+let ti = 0;
 for (const t of targets) {
+  ti++;
+  if (timeLeft() < BUDGET * 0.2) { t.skipped = 'time budget'; truncated = true; say(_t`略過目標 ${ti}/${targets.length}（時間預算用完）：${t.kind}`); continue; }
+  say(_t`目標 ${ti}/${targets.length}：${t.kind}`);
   const dir = path.join(out, 'frames', t.id); fs.mkdirSync(dir, { recursive: true });
   const loc = page.locator(`[data-s3d-id="${t.id}"]`), B = (buffers[t.id] = { idle: [], hover: [], drag: [], video: [] });
   t.intervalMs = INTERVAL;
@@ -144,11 +153,12 @@ for (const t of targets) {
     await loc.scrollIntoViewIfNeeded({ timeout: 4000 }); await sleep(500);
     // 1. idle animation over time
     const idle = [];
-    for (let i = 0; i < FRAMES; i++) { const r = await shoot(loc, path.join(dir, `idle-${pad(i)}.png`)); idle.push(r.h); B.idle.push(r.buf); await sleep(INTERVAL); }
-    t.idleFrames = FRAMES; t.uniqueIdleFrames = new Set(idle).size; t.animatesOnItsOwn = t.uniqueIdleFrames > 1;
+    const nIdle = slowMachine() ? Math.min(FRAMES, 5) : FRAMES;
+    for (let i = 0; i < nIdle; i++) { if (timeLeft() < BUDGET * 0.2 && i >= 2) { truncated = true; break; } const r = await shoot(loc, path.join(dir, `idle-${pad(i)}.png`)); idle.push(r.h); B.idle.push(r.buf); await sleep(INTERVAL); }
+    t.idleFrames = idle.length; t.uniqueIdleFrames = new Set(idle).size; t.animatesOnItsOwn = t.uniqueIdleFrames > 1;
     // 2. mouse interaction: hover sweep, then drag (orbit-style)
     const bb = await loc.boundingBox();
-    if (bb) {
+    if (bb && !slowMachine() && timeLeft() > BUDGET * 0.45) {
       const cx = bb.x + bb.width / 2, cy = bb.y + bb.height / 2;
       for (let i = 0; i < 6; i++) { await page.mouse.move(bb.x + (bb.width * (i + 0.5)) / 6, cy + Math.sin(i) * bb.height * 0.2, { steps: 6 }); await sleep(180); B.hover.push((await shoot(loc, path.join(dir, `hover-${i}.png`))).buf); }
       await page.mouse.move(cx, cy); await page.mouse.down();
@@ -167,9 +177,11 @@ for (const t of targets) {
 
 // 4. scroll-driven sequence: viewport frames while scrolling the whole page, plus each target's own appearance while in view
 const scrollDir = path.join(out, 'frames', 'scroll'); fs.mkdirSync(scrollDir, { recursive: true });
-const steps = Math.min(16, Math.max(4, Math.ceil(detected.docHeight / 700))), scrollHashes = [], scrollBufs = [], perTarget = Object.fromEntries(targets.map((t) => [t.id, []]));
+const steps = Math.min(slowMachine() || timeLeft() < BUDGET * 0.4 ? 6 : 16, Math.max(4, Math.ceil(detected.docHeight / 700))), scrollHashes = [], scrollBufs = [], perTarget = Object.fromEntries(targets.map((t) => [t.id, []]));
 await page.evaluate(() => scrollTo(0, 0)); await sleep(500);
+say(_t`捲動取樣…`);
 for (let i = 0; i <= steps; i++) {
+  if (timeLeft() < BUDGET * 0.05 && i >= 2) { truncated = true; break; }
   await page.mouse.wheel(0, Math.min(detected.docHeight / steps, 1200)); await sleep(600);
   const buf = await page.screenshot({ animations: 'allow' }); fs.writeFileSync(path.join(scrollDir, `s-${pad(i)}.png`), buf); scrollHashes.push(hash(buf)); scrollBufs.push(buf);
   for (const t of targets) {
@@ -201,7 +213,7 @@ const mainWebgl = targets.find((t) => t.kind === 'webgl' || t.kind === 'webgpu')
 for (const t of targets) {
   t.ai = describeTarget(t, stats[t.id], threeInfo && t === mainWebgl ? threeInfo : null);
   const B = buffers[t.id];
-  if (B && (await buildFilmstrip(browser, [{ label: _t('靜置'), files: B.idle }, { label: _t('滑鼠掃過'), files: B.hover }, { label: _t('拖曳'), files: B.drag }, { label: _t('影片位置'), files: B.video }], path.join(out, 'frames', t.id, 'filmstrip.png'), _t`${t.kind} ${t.selector}（${t.box.w}×${t.box.h}）— 每格間隔 ${INTERVAL} ms`))) t.filmstrip = `frames/${t.id}/filmstrip.png`;
+  if (B && B.idle.length && (await buildFilmstrip(browser, [{ label: _t('靜置'), files: B.idle }, { label: _t('滑鼠掃過'), files: B.hover }, { label: _t('拖曳'), files: B.drag }, { label: _t('影片位置'), files: B.video }], path.join(out, 'frames', t.id, 'filmstrip.png'), _t`${t.kind} ${t.selector}（${t.box.w}×${t.box.h}）— 每格間隔 ${INTERVAL} ms`))) t.filmstrip = `frames/${t.id}/filmstrip.png`;
 }
 const scrollFilmstrip = (await buildFilmstrip(browser, [{ label: _t('捲動位置'), files: scrollBufs }], path.join(scrollDir, 'filmstrip.png'), _t('整頁捲動序列（由上到下）'))) ? 'frames/scroll/filmstrip.png' : null;
 
@@ -224,5 +236,6 @@ ${targets.map((t) => `<h2>${t.kind} <code>${String(t.selector).replace(/[&<>"]/g
 <h2>Scroll sequence</h2><div class=row>${imgs(scrollDir).map((f) => `<img src="frames/scroll/${f}">`).join('')}</div>`;
 fs.writeFileSync(path.join(out, 'contact-sheet.html'), html);
 
+if (truncated) console.log(_t`⚠️ 這一頁很慢（或結構很大），動態擷取在時間預算（${Math.round(BUDGET / 1000)} 秒）內提前結束，已保留完成的部分。`);
 console.log(_t`已擷取目標：${targets.map((t) => `${t.kind}${t.animatesOnItsOwn ? '*' : ''}`).join(', ') || _t('無')}   （* = 自己會動）`);
 console.log(_t`AI 可讀：${path.join(out, 'motion.md')}\n報告：${path.join(out, 'motion.json')}\n縮圖總覽：${path.join(out, 'contact-sheet.html')}${videoFile ? _t('\n影片：') + videoFile : ''}`);
