@@ -131,6 +131,8 @@ jobs:
           baseline-url: https://your-production-url   # optional: adds a before/after comparison
           fail-on: high                   # fail the check on high-or-worse issues
           min-health: 70                  # optional: fail below this health score
+          max-drop: 5                     # optional (needs baseline-url): fail when more than 5 points below production
+          fail-on-new: high               # optional (needs baseline-url): fail on a new high-or-worse issue production does not have
 ```
 
 A comment appears on the PR (and is updated in place on later pushes) with the score, the verdict, the difference from production, the top issues and their fixes; the dashboard and AI handoff are attached to the run as Artifacts. PRs from forks have a read-only token, so the comment is skipped and the result stays in the job summary. The comment frame (title, column names) is always English; `lang: zh` only switches the issue titles and fixes inside it to Traditional Chinese.
@@ -216,7 +218,7 @@ Everything goes into `motion.md`, each item marked "an AI cannot watch this dire
 | `DECISIONS.md` | **Living** decision log, open questions, assumptions, provenance (who read which pages, when, as whom) |
 | `CLAUDE.md` | For an AI working in this folder: how to read it, what not to do, log every decision |
 | `inventory.csv` | Every page (opens in Excel): URL inventory for redirect planning |
-| `tokens/`, `media/` | css / W3C / Tokens Studio / Tailwind / palette SVG; section crops, filmstrips, brand assets |
+| `tokens/`, `media/` | css / W3C / Tokens Studio / Tailwind (v3 config and v4 `@theme`, OKLCH colours) / `DESIGN.md` (design rules for AI coding tools) / palette SVG; section crops, filmstrips, brand assets |
 
 The whole package is relocatable: every file referenced in a document is inside it (tests guarantee that). Regenerating never deletes your work: an edited `starter/` is kept as `starter.backup-<time>`, and `DECISIONS.md` is only appended to.
 

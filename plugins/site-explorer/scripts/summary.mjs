@@ -26,6 +26,7 @@ export function buildSummary({ out, host, steps = [], url = null, fresh = true }
       score: health.score, grade: health.grade, verdict: health.verdict?.status ?? null, verdictLabel: health.verdict?.label ?? null,
       issueCounts: Object.fromEntries(sev.map((s) => [s, (health.issues || []).filter((i) => i.severity === s).length])),
       blocking: (health.verdict?.blocking || []).map((b) => ({ id: b.id, severity: b.severity, title: b.title })),
+      issueList: (health.issues || []).slice(0, 300).map((i) => ({ id: i.id, severity: i.severity })), // every issue (id + severity), for regression gates
       topIssues: (health.issues || []).slice(0, 10).map((i) => ({ id: i.id, severity: i.severity, category: i.category, title: i.title, affected: i.affected, fix: i.fix })),
     } : null,
     a11y: a11y ? { pagesChecked: a11y.pagesChecked, ruleViolations: a11y.rules.length, byImpact: Object.fromEntries(['critical', 'serious', 'moderate', 'minor'].map((k) => [k, a11y.rules.filter((r) => r.impact === k).length])), top: a11y.rules.slice(0, 5).map((r) => ({ id: r.id, impact: r.impact, help: r.help, pages: r.pages, nodes: r.nodes })) } : null,

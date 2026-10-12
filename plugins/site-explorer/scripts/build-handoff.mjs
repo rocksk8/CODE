@@ -128,7 +128,7 @@ catch (e) { if (e instanceof UnsafeOutputError) { console.error(e.message); proc
 for (const d of ['tokens', 'media/sections', 'media/pages', 'media/motion', 'media/assets']) fs.mkdirSync(path.join(out, d), { recursive: true });
 const copy = (src, dst) => { if (has(src)) { fs.mkdirSync(path.dirname(dst), { recursive: true }); if (/\.(css|md|js)$/i.test(src)) fs.writeFileSync(dst, sanitizeDoc(fs.readFileSync(src, 'utf8'), { markup: /\.md$/i.test(src), code: /\.css$/i.test(src) ? 'css' : /\.js$/i.test(src) ? 'js' : null })); else fs.copyFileSync(src, dst); return true; } return false; };
 const rel = (p) => p.split(path.sep).join('/');
-for (const f of ['tokens.css', 'tokens.json', 'tokens.w3c.json', 'tokens.studio.json', 'tailwind.config.js', 'palette.svg', 'components.json']) copy(path.join(siteDir, 'design-bundle', f), path.join(out, 'tokens', f));
+for (const f of ['tokens.css', 'tokens.json', 'tokens.w3c.json', 'tokens.studio.json', 'tailwind.config.js', 'tailwind-v4.css', 'DESIGN.md', 'palette.svg', 'components.json']) copy(path.join(siteDir, 'design-bundle', f), path.join(out, 'tokens', f));
 for (const a of site.assets || []) copy(path.join(siteDir, a.file), path.join(out, 'media', 'assets', path.basename(a.file)));
 const media = { sections: {}, pages: {}, motion: [], assets: (site.assets || []).map((a) => `media/assets/${path.basename(a.file)}`) };
 for (const p of pages) {

@@ -57,7 +57,7 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
       blocks: full.designer?.blocks || [], elements: full.designer?.elements || [],
     });
   }
-  for (const f of ['palette.svg', 'tokens.studio.json', 'tokens.css', 'tailwind.config.js', 'tokens.w3c.json', 'tokens.json', 'README.md']) {
+  for (const f of ['palette.svg', 'tokens.studio.json', 'tokens.css', 'tailwind.config.js', 'tailwind-v4.css', 'DESIGN.md', 'tokens.w3c.json', 'tokens.json', 'README.md']) {
     const fp = path.join(siteDir, 'design-bundle', f);
     if (exists(fp)) data.files.push({ name: f, href: ref(fp) });
   }
