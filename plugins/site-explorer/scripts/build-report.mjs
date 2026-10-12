@@ -8,6 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { openDb, runsForHost, diffRuns } from './db.mjs';
+import { computeVerdicts } from './verdicts.mjs';
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
@@ -34,7 +35,7 @@ const ref = (file, allowEmbed = true) => {
 const readJSON = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const exists = fs.existsSync;
 
-const data = { standalone, embed, generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, health: null, files: [], motionPages: null, exportKit: null, verify: null };
+const data = { standalone, embed, generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, health: null, files: [], motionPages: null, exportKit: null, verify: null, verdicts: [], checks: {} };
 
 if (siteDir && exists(path.join(siteDir, 'site.json'))) {
   data.site = readJSON(path.join(siteDir, 'site.json'));
@@ -61,6 +62,12 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
     const fp = path.join(siteDir, 'design-bundle', f);
     if (exists(fp)) data.files.push({ name: f, href: ref(fp) });
   }
+  // the newer checks: raw results for their own tabs, plus one plain-language verdict each for the overview
+  data.verdicts = computeVerdicts(siteDir, outDir);
+  for (const [k, f] of [['tech', 'techstack.json'], ['perf', 'performance.json'], ['security', 'security.json'], ['privacy', 'tracking-behaviors.json'], ['extract', 'extractions.json']]) { try { const j = readJSON(path.join(siteDir, f)); if (j) data.checks[k] = j; } catch {} }
+  try { data.checks.visual = readJSON(path.join(outDir, 'visual.json')); if (data.checks.visual) for (const r of data.checks.visual.rows || []) { r.diff = r.diff && exists(path.join(outDir, r.diff)) ? ref(path.join(outDir, r.diff)) : null; const cur = path.join(siteDir, 'pages', String(r.slug).replace(/[^A-Za-z0-9._-]/g, ''), r.viewport + '.png'); r.now = exists(cur) ? ref(cur) : null; } } catch {}
+  data.checks.files = [];
+  for (const p of data.site.pages) { for (const [k, f, label] of [['archive', 'archive.html', 'archive'], ['figma', null, 'figma']]) { if (k === 'archive' && exists(path.join(siteDir, 'pages', p.slug, f))) data.checks.files.push({ kind: 'archive', slug: p.slug, href: ref(path.join(siteDir, 'pages', p.slug, f), false) }); } if (exists(path.join(siteDir, 'figma', p.slug + '.svg'))) data.checks.files.push({ kind: 'figma', slug: p.slug, href: ref(path.join(siteDir, 'figma', p.slug + '.svg'), false) }); }
   if (data.site.assets) data.site.assets = data.site.assets.map((a) => ({ ...a, src: ref(path.join(siteDir, a.file)) }));
 }
 if (motionDir && exists(path.join(motionDir, 'motion.json'))) {
@@ -129,7 +136,7 @@ if (handoffDir && exists(path.join(handoffDir, 'START-HERE.md'))) {
 
 // UI lives in plain files (report/report.css, report/report-client.js) so it is editable without template-literal escaping.
 const read = (f) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'report', f), 'utf8');
-const clientSrc = read('report-client.js');
+const clientSrc = read('report-client.js') + '\n' + read('report-checks.js');
 // English dashboards carry the part of the dictionary that the browser-side code uses (keys are the Chinese source strings)
 const enDict = Object.fromEntries(Object.entries(dictionary()).filter(([k]) => WHY_KEYS.includes(k) || (() => { const piece = k.split('{}').sort((a, b) => b.length - a.length)[0]; return piece && clientSrc.includes(piece); })()));
 const html = `<!doctype html>
@@ -142,7 +149,7 @@ ${read('report.css')}
 <nav><div class="in" id="tabs"></div></nav>
 <main>
 <section id="s-overview"></section><section id="s-design"></section><section id="s-layout"></section>
-<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-health"></section><section id="s-history"></section><section id="s-export"></section><section id="s-data"></section><section id="s-about"></section>
+<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-health"></section><section id="s-security"></section><section id="s-perf"></section><section id="s-privacy"></section><section id="s-tech"></section><section id="s-visual"></section><section id="s-extract"></section><section id="s-history"></section><section id="s-export"></section><section id="s-data"></section><section id="s-about"></section>
 </main><div class="toast" id="toast"></div>
 <script id="data" type="application/json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>
 <script>window.__EN=${JSON.stringify(enDict).replace(/</g, '\\u003c')}</script>

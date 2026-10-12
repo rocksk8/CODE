@@ -25,6 +25,15 @@ test('approve stores screenshots; same page passes; a visual change fails with a
     extra = '<p>' + 'More text that moves everything below it and changes the page height. '.repeat(40) + '</p>';
     const bad = await run([url, '--compare', '--baseline', bf, '--out', out]); assert.equal(bad.status, 4, bad.out); assert.match(bad.out, /pixels differ/);
     assert.match(fs.readFileSync(path.join(out, 'visual.md'), 'utf8'), /✖ changed/); assert.ok(fs.readdirSync(path.join(out, 'visual-diff')).some((f) => /\.png$/.test(f)));
+    { // the dashboard shows the comparison too: a "Screens" tab, a red card on the overview, the difference image
+      const { launchBrowser } = await import('../scripts/launch.mjs'); const b = await launchBrowser(); const pg = await b.newPage({ viewport: { width: 1280, height: 900 } });
+      try {
+        const errs = []; pg.on('pageerror', (e) => errs.push(e.message)); await pg.goto('file://' + path.join(out, 'dashboard.html'));
+        assert.ok(await pg.locator('#tabs button[data-k="visual"]').count(), 'visual tab'); assert.ok(await pg.locator('.vc.bad[data-tab="visual"]').count(), 'red overview card');
+        await pg.locator('.vc[data-tab="visual"]').click(); await pg.waitForTimeout(200);
+        assert.ok(await pg.locator('#s-visual img').count() >= 1, 'difference image shown'); assert.deepEqual(errs, []);
+      } finally { await b.close(); }
+    }
     const skip = await run([url, '--compare', '--baseline', bf, '--no-visual', '--out', out]); assert.equal(skip.status, 0, skip.out);
     const loose = await run([url, '--compare', '--baseline', bf, '--visual-threshold', '100', '--out', out]); assert.equal(loose.status, 0, loose.out);
     const badv = await run([url, '--compare', '--baseline', bf, '--visual-threshold', 'abc', '--out', out]); assert.equal(badv.status, 1);

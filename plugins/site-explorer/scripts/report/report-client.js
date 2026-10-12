@@ -11,8 +11,10 @@ const copy=(v)=>{navigator.clipboard?.writeText(v);toast(_t('已複製 ')+v)};
 $('#sub').textContent=(S?.startUrl||M?.url||'')+' · '+new Date(D.generatedAt).toLocaleString();
 if(S&&S.authenticated)$('#sub').textContent+=_t(' · 🔐 以登入狀態探索：內容可能含個人資料，請勿公開分享');
 
-const tabs=[['overview',_t('總覽')],['design',_t('設計')],['layout',_t('排版')],['content',_t('內容')],['motion',_t('3D／動畫')],['edit',_t('編輯方式')],['health',_t('健檢')],['history',_t('歷史')],['export',_t('匯出給 AI')],['data',_t('詳細資料')],['about',_t('關於')]].filter(([k])=>k==='overview'||(k==='health'?D.health:k==='motion'?(M||D.motionPages):k==='history'?(D.history&&D.history.runs.length>0):k==='export'?D.exportKit:k==='data'||k==='about'?true:S));
-tabs.forEach(([k,l],i)=>{const b=el('<button role="tab">'+l+'</button>');b.dataset.k=k;if(k==='data')b.classList.add('dt-tab');b.onclick=()=>show(k);$('#tabs').append(b)});
+const CK=D.checks||{};
+const GROUPS={overview:_t('開始'),design:_t('看網站'),layout:_t('看網站'),content:_t('看網站'),motion:_t('看網站'),edit:_t('看網站'),health:_t('檢查'),security:_t('檢查'),perf:_t('檢查'),privacy:_t('檢查'),tech:_t('檢查'),visual:_t('比較'),history:_t('比較'),extract:_t('比較'),export:_t('交付'),data:_t('交付'),about:_t('交付')};
+const tabs=[['overview',_t('總覽')],['design',_t('設計')],['layout',_t('排版')],['content',_t('內容')],['motion',_t('3D／動畫')],['edit',_t('編輯方式')],['health',_t('健檢')],['security',_t('安全')],['perf',_t('速度')],['privacy',_t('隱私')],['tech',_t('技術')],['visual',_t('畫面比對')],['history',_t('歷史')],['extract',_t('自訂擷取')],['export',_t('匯出給 AI')],['data',_t('詳細資料')],['about',_t('關於')]].filter(([k])=>k==='overview'||(k==='health'?D.health:k==='motion'?(M||D.motionPages):k==='history'?(D.history&&D.history.runs.length>0):k==='export'?D.exportKit:k==='security'||k==='perf'||k==='privacy'||k==='tech'||k==='visual'||k==='extract'?CK[k]:k==='data'||k==='about'?true:S));
+{let lastG=null;tabs.forEach(([k,l])=>{const g=GROUPS[k];if(g&&g!==lastG){$('#tabs').append(el('<span class="grp">'+esc(g)+'</span>'));lastG=g}const b=el('<button role="tab">'+l+'</button>');b.dataset.k=k;if(k==='data')b.classList.add('dt-tab');b.onclick=()=>show(k);$('#tabs').append(b)})}
 function show(k){if(k==='data'&&!document.body.classList.contains('detail'))setDetail(true);document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='s-'+k));document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.k===k));history.replaceState(null,'','#'+k)}
 
 // ---------- overview ----------
