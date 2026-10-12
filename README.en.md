@@ -256,6 +256,14 @@ The report opens with a **verdict** (pass / conditional / fail). For automation:
 
 **Security header and TLS grade.** Every exploration writes `security.md/json` — a Mozilla-Observatory / SSL-Labs-style configuration check: CSP strength, HSTS, nosniff, framing protection, Referrer-Policy, login-cookie flags, subresource integrity of external scripts, plus which TLS versions the server accepts and the certificate's validity / domain / trust / key size, each with its score effect and how to fix it, graded A+ to F. It is a configuration check on public information, not a vulnerability scan; the grade is for comparing runs, not a certification.
 
+**CI output (SARIF / JUnit).** `--sarif <file>` and `--junit <file>` write health issues, performance-budget violations, security-grade deductions, TLS problems and (when a comparison ran) visual differences as SARIF 2.1.0 (GitHub code scanning and others) and JUnit XML (Jenkins, GitLab, CircleCI, Azure DevOps). The GitHub Action always produces `results.sarif` / `results.xml`; their paths are the outputs `sarif-file` / `junit-file`, ready for `github/codeql-action/upload-sarif`.
+
+**Figma files.** Every exploration writes one layered SVG per page into `figma/` (real positions, sizes, fills, corner radii and text) that you drag into Figma and edit; import design variables with Tokens Studio from `design-bundle/tokens.studio.json`. It is a layout draft built from the measured elements (up to 240), not a pixel-exact copy: text is limited to the first 50 characters and images are grey placeholders.
+
+**HTML validity.** The health check inspects the raw HTML the server sends — unclosed or mis-nested tags, stray closing tags, duplicate ids / attributes, nested links or buttons, block elements inside `<p>`, list / table children in the wrong parent, deprecated elements, missing doctype, late charset. It is conservative (reports only what is certainly wrong), not a full W3C validator.
+
+**Custom extraction rules.** `--extract rules.json`, e.g. `{"price": {"css": ".price"}, "sku": {"css": "[itemprop=sku]", "attr": "content"}, "order": {"regex": "order-(\\d+)"}}`. css rules run on the rendered page (up to 50 matches); regex rules run on the visible text (or on the HTML with `"in": "html"`); the result is `extractions.csv/json`, one row per page. The rules file is parsed strictly (rule names, counts and regexes that could hang are rejected).
+
 **Verify masks.** `verify` accepts `--ignore <selector>` (repeatable) to exclude dynamic regions (ads, clocks, carousels); elements marked `data-verify-ignore` are excluded too; `--min-section <0-100>` fails the run when any single section scores below the threshold.
 
 **Per-page Markdown.** The readable text of every page is written in document order to `content/<page>.md` (plus `INDEX.md`); links are written as `text (url)`, so the files never contain a clickable or tracking element.

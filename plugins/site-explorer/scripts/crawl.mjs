@@ -6,6 +6,8 @@ import { findUrl, findUrls, intOpt, sameSite, loadRobots, CRAWLER_UA_TOKEN, norm
 import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
+import { parseRules, extractCssInPage, extractRegex, toCsv } from './custom-extract.mjs';
+import { checkHtml } from './html-validity.mjs';
 import { archiveInPage } from './page-archive.mjs';
 import { extractMarkdownInPage, renderPageMarkdown } from './page-markdown.mjs';
 import { extractTechInPage } from './techstack.mjs';
@@ -39,6 +41,7 @@ const maxDepth = intOpt(args, 'depth', 2, { min: 0, max: 6 });
 const interactMax = args.includes('--no-interact') ? 0 : intOpt(args, 'interact-pages', 3, { min: 0, max: 30 }); let interactedPages = 0, abProbes = 0; // pages we walk through click/scroll/key states on
 const contentWaitMs = intOpt(args, 'wait', 12000, { min: 0, max: 120000 }); // how long to wait for a script-built page to put something on screen
 const shots = !args.includes('--no-screenshots');
+let extractRules = null; if (opt('extract', null)) { try { extractRules = parseRules(fs.readFileSync(opt('extract', null), 'utf8')); } catch (e) { console.error(String(e.message).split('\n')[0]); process.exit(1); } }
 let origin = new URL(startUrl).origin; // follows the first redirect (example.com -> www.example.com)
 const host = new URL(startUrl).host.replace(/[^a-z0-9.-]/gi, '_');
 const outDir = path.join(opt('out', './site-report'), host);
@@ -320,6 +323,7 @@ async function fetchRaw(u) {
       canonical: tags.some((t) => t.name === 'link' && /canonical/i.test(attrValue(t.attrs, 'rel') || '')),
       jsonld: tags.filter((t) => t.name === 'script' && /application\/ld\+json/i.test(attrValue(t.attrs, 'type') || '')).length,
       metaRobots: metaRobots ? (attrValue(metaRobots.attrs, 'content') || '') : null,
+      validity: checkHtml(html).slice(0, 14).map((f) => ({ id: f.id, severity: f.severity, count: f.count, examples: f.examples })),
       csrShell: tags.some((t) => t.name === 'div' && /^(root|app|__next|__nuxt)$/i.test(attrValue(t.attrs, 'id') || '') && /^\s*<\/div>/i.test(html.slice(t.end, t.end + 40))),
     };
   } catch (e) { return { error: String(e.message).slice(0, 100) }; }
@@ -486,7 +490,14 @@ while (pages.length < maxPages) {
       } catch {}
     }
     const dir = path.join(outDir, 'pages', slugOf(url)); fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'page.html'), await page.content());
+    const __html = await page.content(); fs.writeFileSync(path.join(dir, 'page.html'), __html);
+    if (extractRules) { // --extract: the user's own rules, on the rendered page
+      try {
+        const css = await page.evaluate(extractCssInPage, extractRules.filter((r) => r.css).map(({ name, css, attr, all }) => ({ name, css, attr, all })));
+        const text = extractRules.some((r) => r.regex && r.in === 'text') ? await page.evaluate(() => (document.body ? document.body.innerText : '').slice(0, 300000)) : '';
+        data.extract = { ...css, ...extractRegex(extractRules, { text, html: __html }) };
+      } catch { data.extract = null; }
+    }
     if (args.includes('--archive')) { // opt-in single-file offline copy (rendered DOM, CSS and images inlined, scripts removed)
       try { const a = await page.evaluate(archiveInPage, { maxBytes: 12e6, maxOne: 2e6, pageUrl: page.url(), when: new Date().toISOString().slice(0, 10) }); fs.writeFileSync(path.join(dir, 'archive.html'), a.html); data.archive = { file: 'archive.html', bytes: a.bytes, embedded: a.embedded, linked: a.linked }; } catch (e) { data.archive = { error: String(e.message).split('\n')[0].slice(0, 100) }; }
     }
@@ -621,6 +632,11 @@ const site = {
   pages: pages.map((p) => ({ responsive: p.responsive || null, privacy: p.privacy || null, states: p.states || null, network: p.network || null, aria: p.aria || null, deep: p.deep || null, emptyPage: !!p.emptyPage, emptyDiag: p.emptyDiag || null, slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
 };
 fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
+if (extractRules) { // one row per page, one column per rule
+  const rows = pages.map((p) => ({ url: p.url, extract: p.extract || {} }));
+  fs.writeFileSync(path.join(outDir, 'extractions.json'), JSON.stringify({ rules: extractRules.map(({ name, css, regex, attr, in: where }) => ({ name, css, regex, attr, in: where })), rows }, null, 2));
+  fs.writeFileSync(path.join(outDir, 'extractions.csv'), toCsv(extractRules, rows));
+}
 
 // markdown report
 const list = (a) => a.map((x) => `\`${x.value}\` (${x.count})`).join(', ') || '—';

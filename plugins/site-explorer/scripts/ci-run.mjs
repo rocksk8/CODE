@@ -58,7 +58,7 @@ export async function main(env = process.env) {
 
   let baseline = null;
   if (baselineUrl) { const b = await cli([baselineUrl, ...common, '--no-handoff', '--out', path.join(out, 'baseline')], dbEnv); baseline = b.json; if (!baseline) console.error('baseline exploration failed; continuing without a comparison'); }
-  const r = await cli([url, ...common, '--out', path.join(out, 'current')], dbEnv);
+  const r = await cli([url, ...common, '--sarif', path.join(out, 'results.sarif'), '--junit', path.join(out, 'results.xml'), '--out', path.join(out, 'current')], dbEnv);
   const result = r.json || { ok: false, url, health: null };
 
   let changesMd = null;
@@ -71,7 +71,7 @@ export async function main(env = process.env) {
   const comment = renderPrComment({ result, baseline, changesMd, minHealth, failOn, gate, runUrl: env.INPUT_RUN_URL || null });
   fs.writeFileSync(path.join(out, 'comment.md'), comment); fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify({ result, baseline, gate }, null, 2));
   if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, comment + '\n');
-  if (env.GITHUB_OUTPUT) fs.appendFileSync(env.GITHUB_OUTPUT, `score=${result.health?.score ?? ''}\nverdict=${result.health?.verdict ?? ''}\nfailed=${gate.failed}\ncomment-file=${path.join(out, 'comment.md')}\nout-dir=${out}\n`);
+  if (env.GITHUB_OUTPUT) fs.appendFileSync(env.GITHUB_OUTPUT, `score=${result.health?.score ?? ''}\nverdict=${result.health?.verdict ?? ''}\nfailed=${gate.failed}\ncomment-file=${path.join(out, 'comment.md')}\nsarif-file=${path.join(out, 'results.sarif')}\njunit-file=${path.join(out, 'results.xml')}\nout-dir=${out}\n`);
   return { gate, result, out };
 }
 

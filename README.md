@@ -251,6 +251,14 @@ AI 只能讀文字和圖片。所以：
 
 **安全標頭與 TLS 評等**：每次探索寫出 `security.md/json`——類似 Mozilla Observatory／SSL Labs 的設定檢查：CSP 強度、HSTS、nosniff、防嵌入、Referrer-Policy、登入類 Cookie 旗標、外部腳本的 integrity，以及伺服器接受哪些 TLS 版本、憑證效期／網域／信任／金鑰長度，各項附分數影響與修正方式，給 A+～F 評等。這是公開資訊的設定檢查，不是漏洞掃描；評等用來比較不同次的結果，不是認證。
 
+**CI 輸出（SARIF／JUnit）**：`--sarif <檔案>`、`--junit <檔案>` 把健檢問題、效能預算超標、安全評等扣分、TLS 問題與（有做比對時的）視覺差異輸出成 SARIF 2.1.0（GitHub code scanning 等）與 JUnit XML（Jenkins、GitLab、CircleCI、Azure DevOps）。GitHub Action 每次都會產生 `results.sarif`／`results.xml`，路徑在輸出 `sarif-file`／`junit-file`，可用 `github/codeql-action/upload-sarif` 上傳。
+
+**Figma 匯入檔**：每次探索在 `figma/` 寫出每頁一個圖層化 SVG（真實位置、大小、填色、圓角與文字），拖進 Figma 即可編輯；設計變數用 Tokens Studio 匯入 `design-bundle/tokens.studio.json`。這是依實測元素（最多 240 個）生成的版面草稿，不是逐像素複製：文字只取前 50 字、圖片為灰色佔位。
+
+**HTML 有效性**：健檢會檢查伺服器送出的原始 HTML——標籤沒關或順序錯、多餘結束標籤、id／屬性重複、連結或按鈕巢狀、`<p>` 內放區塊元素、清單／表格父元素錯誤、已廢棄元素、缺 doctype、charset 太晚。這是保守的檢查（只報確定有問題的），不是完整的 W3C 驗證器。
+
+**自訂擷取規則**：`--extract rules.json`，例：`{"price": {"css": ".price"}, "sku": {"css": "[itemprop=sku]", "attr": "content"}, "order": {"regex": "order-(\\d+)"}}`。css 規則在渲染後的頁面執行（最多 50 筆），regex 規則對可見文字（或加 `"in": "html"` 對 HTML）執行；結果輸出 `extractions.csv/json`，每頁一列。規則檔會先嚴格檢查（規則名稱、數量、可能造成當機的 regex 會被拒絕）。
+
 **驗證遮罩**：`verify` 可用 `--ignore <選擇器>`（可重複）排除動態區域（廣告、時間、輪播），元素加上 `data-verify-ignore` 也會被排除；`--min-section <0-100>` 讓任何單一區塊低於門檻就判定未通過。
 
 **逐頁 Markdown**：每頁的可讀文字依網頁順序輸出成 `content/<頁面>.md`（含 `INDEX.md`）；連結寫成「文字 (網址)」，不會出現可點擊或追蹤用的元素。

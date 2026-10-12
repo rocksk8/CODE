@@ -211,6 +211,13 @@ export async function runHealth(siteDir, opts = {}) {
 
   // ---------------------------------------------------------------- on-page
   const dupe = (get) => { const m = new Map(); for (const p of live) { const v = (get(p) || '').trim().toLowerCase(); if (v) (m.get(v) || m.set(v, []).get(v)).push(p); } return [...m.values()].filter((a) => a.length > 1); };
+  { // HTML validity of what the server sent (conservative checker: only certain errors); one issue per kind, with the pages that have it
+    const KIND = { 'duplicate-id': _t('id 重複使用'), 'duplicate-attribute': _t('同一個元素重複同一個屬性'), 'unclosed': _t('標籤沒有關閉或關閉順序錯誤'), 'stray-end-tag': _t('多餘的結束標籤'), 'nested-interactive': _t('連結或按鈕巢狀在另一個連結或按鈕裡'), 'block-in-p': _t('<p> 裡面放了區塊元素'), 'wrong-parent': _t('清單項目或表格列／格放在錯的父元素'), 'deprecated-tag': _t('使用已廢棄的 HTML 元素'), 'no-doctype': _t('沒有 <!doctype html>（瀏覽器進入怪異模式）'), 'late-charset': _t('字元編碼宣告太晚（超過前 1024 位元組）'), 'unclosed-comment': _t('有未關閉的註解'), 'unclosed-tag-bracket': _t('有標籤缺少結尾的 ">"') };
+    const withRaw = perPage((p) => Array.isArray(p.seo.raw?.validity)); const byKind = new Map();
+    for (const p of withRaw) for (const v of p.seo.raw.validity) { if (!KIND[v.id]) continue; const e = byKind.get(v.id) || { sev: v.severity, pages: [], ex: [] }; e.pages.push(p.url); if (e.ex.length < 3) e.ex.push(`${p.url}：${(v.examples || []).slice(0, 2).join(', ')} (${v.count})`); byKind.set(v.id, e); }
+    for (const [id, e] of byKind) add('onpage', e.sev === 'medium' ? 'medium' : 'low', 'html-' + id, _t`${e.pages.length} 個頁面：${KIND[id]}`, { affected: e.pages.length, scope: 'page', examples: e.ex, impact: _t('瀏覽器會自行修正錯誤的標記，修正的結果不一定是你想要的，也可能讓腳本、無障礙工具與搜尋引擎看到不同的結構。'), fix: _t('用 W3C 驗證器（validator.w3.org）或編輯器的 HTML 檢查，逐項修正伺服器送出的原始 HTML。') });
+    if (withRaw.length && !byKind.size) ok('onpage', _t('伺服器送出的 HTML 沒有發現明確的結構錯誤'));
+  }
   const noTitle = perPage((p) => !p.seo.title.trim()); if (noTitle.length) add('onpage', 'high', 'title-missing', _t`${noTitle.length} 個頁面沒有 <title>`, { affected: noTitle.length, scope: 'page', examples: urls(noTitle), impact: _t('標題是最重要的排名與點擊因素，缺少時搜尋引擎會自行拼湊。'), fix: _t('為每頁撰寫獨特、描述該頁內容的標題。') });
   const tShort = perPage((p) => p.seo.title.trim() && textLen(p.seo.title) < 20), tLong = perPage((p) => textLen(p.seo.title) > 60);
   if (tLong.length) add('onpage', 'low', 'title-long', _t`${tLong.length} 個頁面標題過長（> 60 字元寬）`, { affected: tLong.length, scope: 'page', examples: tLong.map((p) => _t`${textLen(p.seo.title)}：${p.seo.title.slice(0, 70)}`), impact: _t('在搜尋結果中會被截斷。'), fix: _t('把關鍵資訊放前面，控制在約 50–60 字元寬（中日韓字元算 2）。') });
