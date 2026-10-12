@@ -66,6 +66,7 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
   data.verdicts = computeVerdicts(siteDir, outDir);
   for (const [k, f] of [['tech', 'techstack.json'], ['perf', 'performance.json'], ['security', 'security.json'], ['privacy', 'tracking-behaviors.json'], ['extract', 'extractions.json']]) { try { const j = readJSON(path.join(siteDir, f)); if (j) data.checks[k] = j; } catch {} }
   try { data.checks.visual = readJSON(path.join(outDir, 'visual.json')); if (data.checks.visual) for (const r of data.checks.visual.rows || []) { r.diff = r.diff && exists(path.join(outDir, r.diff)) ? ref(path.join(outDir, r.diff)) : null; const cur = path.join(siteDir, 'pages', String(r.slug).replace(/[^A-Za-z0-9._-]/g, ''), r.viewport + '.png'); r.now = exists(cur) ? ref(cur) : null; } } catch {}
+  data.checks.visualReview = exists(path.join(outDir, 'visual-review.html')) ? 'visual-review.html' : null;
   data.checks.files = [];
   for (const p of data.site.pages) { for (const [k, f, label] of [['archive', 'archive.html', 'archive'], ['figma', null, 'figma']]) { if (k === 'archive' && exists(path.join(siteDir, 'pages', p.slug, f))) data.checks.files.push({ kind: 'archive', slug: p.slug, href: ref(path.join(siteDir, 'pages', p.slug, f), false) }); } if (exists(path.join(siteDir, 'figma', p.slug + '.svg'))) data.checks.files.push({ kind: 'figma', slug: p.slug, href: ref(path.join(siteDir, 'figma', p.slug + '.svg'), false) }); }
   if (data.site.assets) data.site.assets = data.site.assets.map((a) => ({ ...a, src: ref(path.join(siteDir, a.file)) }));

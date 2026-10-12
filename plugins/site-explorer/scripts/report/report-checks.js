@@ -100,9 +100,10 @@
   // ---------- screen comparison ----------
   (function () {
     const d = CK.visual, s = sec('visual'); if (!d || !s) return;
-    const VP = { desktop: _t('桌機'), tablet: _t('平板'), mobile: _t('手機') };
+    const VP = { desktop: _t('桌機'), tablet: _t('平板'), mobile: _t('手機'), scenario: _t('情境') };
     const rows = d.rows || [], changed = rows.filter((r) => r.status !== 'same');
     let h = banner(V('visual')) + '<p class="hint">' + _t('每張整頁截圖和你核准過的基準逐像素比對；每張容許 ') + esc(d.threshold) + _t('% 的像素不同（可用 --visual-threshold 調整）。紅色是變動處。') + '</p>';
+    if (CK.visualReview && changed.length) h += '<p><a class="lnk" target="_blank" href="' + esc(CK.visualReview) + '">' + _t('打開逐張審核頁（拖曳比較改版前後，附核准指令）→') + '</a></p>';
     if (!changed.length) h += '<div class="empty">' + _t('所有畫面都和基準一致。') + '</div>';
     h += changed.map((r) => '<div class="card" style="margin-bottom:12px"><h3>' + esc(r.slug) + ' · ' + esc(VP[r.viewport] || r.viewport) + ' · ' + (r.status === 'changed' ? esc(String(r.changedPct)) + _t('% 不同') : r.status === 'missing' ? esc(_t('這次沒有截圖')) : esc(_t('無法比對'))) + '</h3>' + (r.diff || r.now ? '<div class="vs">' + (r.now ? '<figure><img loading="lazy" src="' + esc(r.now) + '"><figcaption>' + _t('現在') + '</figcaption></figure>' : '') + (r.diff ? '<figure><img loading="lazy" src="' + esc(r.diff) + '"><figcaption>' + _t('差異（紅色＝變動處）') + '</figcaption></figure>' : '') + '</div>' : '') + '</div>').join('');
     h += '<div class="card"><h3>' + _t('這個改版是想要的嗎？') + '</h3><p>' + _t('是：重新執行同一個指令並加上 <code>--approve</code>，把現在的樣子存成新的基準。') + '</p><p>' + _t('不是：修好網站後再執行 <code>--compare</code>，直到全部一致。') + '</p></div>';
@@ -123,6 +124,6 @@
     const arch = files.filter((f) => f.kind === 'archive'), fig = files.filter((f) => f.kind === 'figma');
     t.insertAdjacentHTML('afterbegin', '<div class="card" style="margin-bottom:14px"><h3>' + _t('離線封存與 Figma 圖層') + '</h3>' +
       (arch.length ? '<p>' + _t('離線單檔網頁（雙擊就能開，不需要網路）：') + '</p>' + arch.map((f) => '<a class="lnk" target="_blank" href="' + esc(f.href) + '">' + esc(f.slug) + '</a>').join('') : '') +
-      (fig.length ? '<p>' + _t('Figma 圖層 SVG（拖進 Figma 畫布即可編輯）：') + '</p>' + fig.map((f) => '<a class="lnk" target="_blank" href="' + esc(f.href) + '">' + esc(f.slug) + '</a>').join('') : '') + '</div>');
+      (fig.length ? '<p>' + _t('Figma 圖層 SVG（拖進 Figma 畫布即可編輯；要 auto layout 就用 figma/plugin 外掛匯入 *.figma.json）：') + '</p>' + fig.map((f) => '<a class="lnk" target="_blank" href="' + esc(f.href) + '">' + esc(f.slug) + '</a>').join('') : '') + '</div>');
   })();
 })();
