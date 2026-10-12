@@ -16,6 +16,8 @@
 
 </div>
 
+**不會用指令？** 在 GitHub 頁面按 Code → Download ZIP，解壓縮後雙擊 `Start-site-explorer.cmd`（Windows）或 `Start-site-explorer.command`（Mac）。第一次會自動安裝需要的元件（要先裝好 [Node.js](https://nodejs.org) 22），接著會開啟圖形介面，輸入網址就能用；沒有瀏覽器時介面上有「下載瀏覽器」按鈕。
+
 ```bash
 npm i -g git+https://github.com/rocksk8/CODE.git
 site-explorer setup
