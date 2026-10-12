@@ -1,7 +1,8 @@
 // Safety nets for long runs: a time limit per stage, a quiet-for-too-long heartbeat, a low-memory stop and a CPU-saturation notice.
 // Used by explore.mjs (each stage is a child process) and the graphical interface. Pure helpers are exported so they can be tested.
 import os from 'node:os';
-import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import { spawn, execFileSync } from 'node:child_process';
 
 const MIN = 60000;
 /** Default time limit (ms) of one stage; SITE_EXPLORER_STAGE_LIMIT_MS overrides everything (tests, CI), SITE_EXPLORER_STAGE_MINUTES scales the defaults. */
@@ -15,11 +16,27 @@ export function stageLimitMs(script, env = process.env) {
 export function runLimitMs(env = process.env) { const m = Number(env.SITE_EXPLORER_MAX_MINUTES); return (Number.isFinite(m) && m > 0 ? m : 120) * MIN; }
 /** Memory is "low" when what is still available is under 256 MB or under 4 % of the total. */
 export function isLowMemory(availableBytes, totalBytes) { return Number.isFinite(availableBytes) && Number.isFinite(totalBytes) && totalBytes > 0 && availableBytes < Math.max(256 * 1048576, totalBytes * 0.04); }
+/** Linux: "MemAvailable" is what can be used without swapping (os.freemem() is MemFree, which ignores the page cache and is always small on a busy machine). */
+export function parseMeminfo(text) { const m = /^MemAvailable:\s+(\d+)\s*kB/m.exec(text || ''); return m ? Number(m[1]) * 1024 : null; }
+/** macOS: free + inactive + speculative + purgeable pages from `vm_stat` (os.freemem() counts only the truly free ones, so it looks nearly empty on a healthy Mac). */
+export function parseVmStat(text) {
+  const size = /page size of (\d+) bytes/.exec(text || ''); if (!size) return null; const pages = (k) => { const m = new RegExp('^' + k + ':\\s+(\\d+)', 'm').exec(text); return m ? Number(m[1]) : 0; };
+  return (pages('Pages free') + pages('Pages inactive') + pages('Pages speculative') + pages('Pages purgeable')) * Number(size[1]);
+}
+let snapCache = { at: 0, v: null };
+/** { total, avail } in bytes, or avail = Infinity when it cannot be measured reliably (then nothing is ever stopped for memory). */
 export function memorySnapshot() {
-  let total = os.totalmem(), avail = os.freemem();
-  try { const c = process.constrainedMemory?.(); if (c && c > 0 && c < total) total = c; } catch {}
-  try { const a = process.availableMemory?.(); if (a && a > 0) avail = Math.min(avail, a); } catch {}
-  return { total, avail };
+  if (Date.now() - snapCache.at < 3000 && snapCache.v) return snapCache.v;
+  let total = os.totalmem(), avail = Infinity;
+  try {
+    if (process.platform === 'linux') {
+      const a = parseMeminfo(fs.readFileSync('/proc/meminfo', 'utf8')); if (a != null) avail = a;
+      try { const lim = fs.readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim(); if (/^\d+$/.test(lim)) { const cur = Number(fs.readFileSync('/sys/fs/cgroup/memory.current', 'utf8')); total = Math.min(total, Number(lim)); avail = Math.min(avail, Number(lim) - cur); } } catch {}
+    } else if (process.platform === 'darwin') {
+      const a = parseVmStat(execFileSync('vm_stat', { encoding: 'utf8', timeout: 2000 })); if (a != null) avail = a;
+    } else if (process.platform === 'win32') avail = os.freemem();
+  } catch {}
+  snapCache = { at: Date.now(), v: { total, avail } }; return snapCache.v;
 }
 /** Stop a child process and what it started (the browser). */
 export function killTree(child) {
@@ -38,7 +55,7 @@ export function watchChild(child, { limitMs, notify, quietMs = 90000, tickMs = 5
     const ran = Date.now() - t0;
     if (limitMs && ran > limitMs) { stopped = true; clearInterval(timer); killTree(child); notify('timeout', L(`⏱ 超時通知：這個階段已執行超過 ${Math.round(limitMs / MIN)} 分鐘，已停止它並繼續下一階段。`, `⏱ Timeout notice: this stage ran longer than ${Math.round(limitMs / MIN)} minutes; it was stopped and the next stage continues.`)); return; }
     const m = memoryReader(); lowStreak = isLowMemory(m.avail, m.total) ? lowStreak + 1 : 0;
-    if (lowStreak >= 3) { stopped = true; clearInterval(timer); killTree(child); notify('memory', L(`🧠 記憶體不足通知：可用記憶體只剩 ${Math.round(m.avail / 1048576)} MB，為了避免整台電腦卡死，已停止這個階段。請關閉其他程式，或減少頁數（--max-pages）後再試。`, `🧠 Low-memory notice: only ${Math.round(m.avail / 1048576)} MB is available; to keep the computer from freezing this stage was stopped. Close other programs or use fewer pages (--max-pages) and try again.`)); return; }
+    if (lowStreak >= 6) { stopped = true; clearInterval(timer); killTree(child); notify('memory', L(`🧠 記憶體不足通知：可用記憶體只剩 ${Math.round(m.avail / 1048576)} MB，為了避免整台電腦卡死，已停止這個階段。請關閉其他程式，或減少頁數（--max-pages）後再試。`, `🧠 Low-memory notice: only ${Math.round(m.avail / 1048576)} MB is available; to keep the computer from freezing this stage was stopped. Close other programs or use fewer pages (--max-pages) and try again.`)); return; }
     const quiet = Date.now() - (getLastOutputAt ? getLastOutputAt() : t0);
     if (quiet > quietMs && Date.now() - quietSaid > quietMs) { quietSaid = Date.now(); notify('quiet', L(`⏳ 仍在執行：已 ${Math.round(quiet / 1000)} 秒沒有新訊息（已跑 ${Math.round(ran / MIN)} 分鐘，上限 ${Math.round((limitMs || 0) / MIN)} 分鐘）。網站很重時這是正常的。`, `⏳ Still running: no new output for ${Math.round(quiet / 1000)} s (${Math.round(ran / MIN)} min in, limit ${Math.round((limitMs || 0) / MIN)} min). Normal on a heavy site.`)); }
     let load = 0; try { load = loadReader(); } catch {}
