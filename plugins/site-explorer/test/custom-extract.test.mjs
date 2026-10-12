@@ -48,3 +48,11 @@ test('explore --extract writes extractions.csv/json with one row per page; a bad
     const missing = await run([url, '--extract', path.join(dir, 'nope.json'), '--out', path.join(dir, 'o3')]); assert.equal(missing.status, 1); assert.match(missing.out, /file not found/);
   } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('regexes that slip past the screening are stopped by the time limit; __proto__ is not a rule name', () => {
+  assert.throws(() => parseRules('{"__proto__":{"css":"x"}}'));
+  const rules = parseRules('{"a":{"regex":"(a|aa)+$"},"b":{"regex":".*.*.*.*.*x"},"ok":{"regex":"n=(\\\\d+)"}}');
+  const t0 = Date.now(); const out = extractRegex(rules, { text: 'a'.repeat(40) + '!' + ' '.repeat(100000) + 'n=5' });
+  assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`); assert.equal(out.a.error, 'timeout'); assert.deepEqual(out.ok.values, ['5']);
+  assert.ok(toCsv(rules, [{ url: 'u', extract: out }]).includes('#timeout-error'));
+});

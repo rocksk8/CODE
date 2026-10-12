@@ -31,3 +31,12 @@ test('hostile or huge input finishes quickly and never throws', () => {
   checkHtml('<div '.repeat(50000)); checkHtml('<a>'.repeat(60000)); checkHtml('<'.repeat(300000)); checkHtml('<div a="'.repeat(20000)); checkHtml('<!-- ' + 'x'.repeat(100000));
   assert.ok(Date.now() - t0 < 4000, `took ${Date.now() - t0} ms`); assert.deepEqual(checkHtml(''), [{ id: 'no-doctype', severity: 'low', message: checkHtml('')[0].message, count: 1, examples: [] }]);
 });
+
+test('valid markup that looks odd is not reported (quoted > in attributes, omitted </p>, implied ends, template, unquoted trailing slash, iframe content)', () => {
+  for (const b of ['<div data-tpl="<b>x</b>">a</div>', '<div data-x=\'<li>a</li>\'></div>', '<p>b<ul><li>x</li></ul>', '<ul><li><p>a<li>b</ul>', '<table><tr><td><p>a<td>b</table>', '<table><colgroup><col><tr><td>x</table>', '<template><li>x</li></template>', '<a href=/foo/>x</a>', '<iframe><div></iframe>', '<div/>x</div>']) assert.deepEqual(ids(wrap(b)), [], b);
+  assert.ok(ids(wrap('<p>a<div>b</div></p>')).includes('block-in-p'), 'an explicit </p> after a block is the real mistake');
+});
+
+test('many comments without a doctype cannot hang the checker', () => {
+  const t0 = Date.now(); checkHtml('<!---->'.repeat(60) + '<p>x'); checkHtml('<!-- a -->'.repeat(100000)); assert.ok(Date.now() - t0 < 2000);
+});

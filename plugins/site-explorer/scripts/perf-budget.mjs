@@ -51,7 +51,10 @@ export const medians = (rows) => Object.fromEntries(Object.keys(METRICS).map((k)
 export function evaluateBudget(rows, budget) {
   const violations = [];
   for (const r of rows) for (const [k, b] of Object.entries(budget || {})) { const v = r.metrics[k]; if (v != null && v > b.max) violations.push({ url: r.url, metric: k, value: v, max: b.max, level: b.level }); }
-  return { violations, failed: violations.some((v) => v.level === 'fail'), checked: rows.length };
+  // a budget on a metric that was never measured cannot be "within budget": say so, and a fail-level one fails
+  const unmeasured = Object.entries(budget || {}).map(([k, b]) => ({ metric: k, level: b.level, pages: rows.filter((r) => r.metrics[k] == null).length })).filter((u) => u.pages > 0);
+  const blind = unmeasured.some((u) => u.level === 'fail' && u.pages === rows.length);
+  return { violations, unmeasured, failed: violations.some((v) => v.level === 'fail') || blind, checked: rows.length };
 }
 
 /** history: [{ at, url, pages, medians }] newest last, capped. */
@@ -69,6 +72,7 @@ export function renderPerfMd({ rows, budget, result, history }) {
   for (const k of Object.keys(METRICS)) { const a = m[k], b = prev ? prev[k] : null; const d = a != null && b != null ? a - b : null; L.push(`| ${METRICS[k][0]} | ${fmt(k, a)} | ${fmt(k, b)} | ${d == null ? '–' : (d > 0 ? '+' : '') + (Math.round(d * 1000) / 1000)} |`); }
   L.push('');
   if (budget && Object.keys(budget).length) {
+    if (result.unmeasured?.length) L.push(_t('## 沒有量到的指標'), '', ...result.unmeasured.map((u) => '- ' + _t`${METRICS[u.metric][0]}：${u.pages} 頁沒有量到數值，無法判斷是否在預算內${u.level === 'fail' ? _t('（fail 等級，視為未通過）') : ''}`), '');
     L.push(_t('## 預算'), '', result.violations.length ? _t('| 頁面 | 指標 | 實際 | 上限 | 等級 |') : _t('（所有頁面都在預算內）'));
     if (result.violations.length) { L.push('|---|---|---|---|---|'); for (const v of result.violations.slice(0, 60)) L.push(`| ${clean(v.url, 80)} | ${METRICS[v.metric][0]} | ${fmt(v.metric, v.value)} | ${fmt(v.metric, v.max)} | ${v.level === 'fail' ? _t('失敗') : _t('警告')} |`); }
     L.push('');

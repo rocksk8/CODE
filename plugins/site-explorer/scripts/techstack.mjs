@@ -44,7 +44,7 @@ const RULES = [
   ['ghost', 'Ghost', 'cms', { generator: /ghost ?([\d.]+)?/i, header: ['x-ghost-cache-status', /./], global: 'Ghost' }],
   ['hubspot-cms', 'HubSpot CMS', 'cms', { url: /hs-scripts\.com|hubspotusercontent|hs-sites\.com/i, generator: /hubspot/i }],
   ['typo3', 'TYPO3', 'cms', { generator: /typo3/i, url: /\/typo3(conf|temp)\//i }],
-  ['magento', 'Magento', 'commerce', { url: /\/static\/version\d+\/frontend\/|mage\/|\/media\/catalog\//i, cookie: /^(mage-|private_content_version)/ }],
+  ['magento', 'Magento', 'commerce', { url: /\/static\/version\d+\/frontend\/|\/media\/catalog\/|\/mage\/(requirejs|cookies|translate|utils)/i, cookie: /^(mage-|private_content_version)/ }],
   ['bigcommerce', 'BigCommerce', 'commerce', { url: /bigcommerce\.com|cdn11\.bigcommerce/i }],
   ['next', 'Next.js', 'framework', { global: '__NEXT_DATA__', marker: 'next-root', url: /\/_next\/static\//i, header: ['x-powered-by', /next\.js ?([\d.]+)?/i] }],
   ['nuxt', 'Nuxt', 'framework', { global: '__NUXT__', marker: 'nuxt-root', url: /\/_nuxt\//i }],
@@ -54,7 +54,7 @@ const RULES = [
   ['sveltekit', 'SvelteKit', 'framework', { marker: 'sveltekit', url: /\/_app\/immutable\//i }],
   ['angular', 'Angular', 'framework', { marker: 'angular', global: 'angular' }],
   ['vue', 'Vue.js', 'framework', { global: 'Vue', marker: 'vue3-root', url: /vue(\.runtime)?(\.global)?(\.prod)?(\.min)?\.js|\/vue@/i }],
-  ['react', 'React', 'framework', { global: 'React', marker: 'react-root', url: /react(-dom)?(\.production)?(\.min)?\.js|\/react@|\/react-dom@/i }],
+  ['react', 'React', 'framework', { global: 'React', marker: 'react-root', url: /(^|[\/@._-])react(-dom)?(\.production)?(\.min)?\.js|\/react@|\/react-dom@/i }],
   ['jquery', 'jQuery', 'library', { global: 'jQuery', url: /jquery([.-]\d[\d.]*)?(\.min)?\.js/i }],
   ['bootstrap', 'Bootstrap', 'library', { url: /bootstrap(\.bundle)?([.-]\d[\d.]*)?(\.min)?\.(js|css)|\/bootstrap@/i, global: 'bootstrap' }],
   ['tailwind', 'Tailwind CSS', 'library', { url: /tailwind(css)?(\.min)?\.css|cdn\.tailwindcss\.com/i }],
@@ -77,15 +77,15 @@ const RULES = [
   ['php', 'PHP', 'language', { header: ['x-powered-by', /php\/?([\d.]+)?/i], cookie: /^PHPSESSID$/ }],
   ['aspnet', 'ASP.NET', 'language', { header: ['x-powered-by', /asp\.net/i], cookie: /^(ASP\.NET_SessionId|\.AspNetCore)/ }],
   ['express', 'Express', 'framework', { header: ['x-powered-by', /express/i] }],
-  ['laravel', 'Laravel', 'framework', { cookie: /^(laravel_session|XSRF-TOKEN)$/ }],
+  ['laravel', 'Laravel', 'framework', { cookie: /^laravel_session$/ }],
   ['rails', 'Ruby on Rails', 'framework', { cookie: /^_[a-z0-9_]+_session$/, header: ['x-powered-by', /phusion passenger/i] }],
   ['cloudflare', 'Cloudflare', 'cdn', { header: ['cf-ray', /./], cookie: /^__cf(_bm|uid)$/ }],
   ['cloudfront', 'Amazon CloudFront', 'cdn', { header: ['x-amz-cf-id', /./], url: /\.cloudfront\.net/i }],
   ['fastly', 'Fastly', 'cdn', { header: ['x-served-by', /cache-/i] }],
   ['akamai', 'Akamai', 'cdn', { header: ['x-akamai-transformed', /./] }],
-  ['vercel', 'Vercel', 'hosting', { header: ['x-vercel-id', /./], url: /\.vercel\.app/i }],
+  ['vercel', 'Vercel', 'hosting', { header: ['x-vercel-id', /./] }],
   ['netlify', 'Netlify', 'hosting', { header: ['x-nf-request-id', /./], url: /\.netlify\.(app|com)/i }],
-  ['github-pages', 'GitHub Pages', 'hosting', { header: ['x-github-request-id', /./], url: /\.github\.io/i }],
+  ['github-pages', 'GitHub Pages', 'hosting', { header: ['x-github-request-id', /./] }],
   ['wpengine', 'WP Engine', 'hosting', { header: ['x-powered-by', /wp engine/i] }],
 ];
 
@@ -98,7 +98,7 @@ export function detectTech(pages) {
   const found = new Map();
   const add = (rule, how, evidence, version) => {
     const [id, name, category] = rule; const f = found.get(id) || { id, name, category, evidence: [], versions: new Set(), hits: 0, strong: 0 };
-    f.hits++; if (how !== 'url') f.strong++; if (evidence && f.evidence.length < 3 && !f.evidence.includes(evidence)) f.evidence.push(evidence); if (version) f.versions.add(version); found.set(id, f);
+    f.hits++; if (how !== 'url') f.strong++; if (evidence && f.evidence.length < 3 && !f.evidence.includes(evidence)) f.evidence.push(evidence); if (version && /^[0-9A-Za-z][0-9A-Za-z._+-]{0,29}$/.test(String(version))) f.versions.add(String(version)); found.set(id, f);
   };
   for (const p of live) {
     const t = p.tech || {}; const urls = [...(p.editing?.scripts || []), ...(p.editing?.stylesheets || []), ...(t.urls || [])].map(String);

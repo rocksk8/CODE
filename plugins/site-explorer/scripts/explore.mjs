@@ -248,7 +248,8 @@ if (approveFlag || compareFlag) {
     const cur = makeBaseline({ tokens, health, url, pages: (siteJ.pages || []).length });
     if (approveFlag) {
       fs.mkdirSync(path.dirname(bf), { recursive: true }); fs.writeFileSync(bf, JSON.stringify(cur, null, 2) + '\n'); console.log(_t`✔ 已把這次的結果存成基準：${bf}`);
-      if (!args.includes('--no-visual')) { const { saveVisualBaseline, visualDirFor } = await import('./visual-regression.mjs'); const n = saveVisualBaseline(siteDir, visualDirFor(bf)); console.log(_t`✔ 已存下 ${n} 張整頁截圖作為視覺基準：${visualDirFor(bf)}`); }
+      if (args.includes('--no-visual')) { const { removeVisualBaseline, visualDirFor } = await import('./visual-regression.mjs'); removeVisualBaseline(visualDirFor(bf)); } // a stale visual baseline must not outlive the approval it belonged to
+      else { const { saveVisualBaseline, visualDirFor } = await import('./visual-regression.mjs'); const n = saveVisualBaseline(siteDir, visualDirFor(bf)); console.log(_t`✔ 已存下 ${n} 張整頁截圖作為視覺基準：${visualDirFor(bf)}`); }
     }
     else {
       if (!fs.existsSync(bf)) throw new Error(_t`找不到基準檔 ${bf}。請先用 --approve 建立。`);

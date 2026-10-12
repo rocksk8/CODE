@@ -39,3 +39,10 @@ test('extractTechInPage returns only strings, numbers-as-strings and booleans (n
   global.document = { querySelector: () => null, querySelectorAll: () => [] };
   try { const r = extractTechInPage(); assert.equal(r.globals.jQuery, '3.6.0'); assert.equal(r.globals.React, '18.0.0'); assert.equal(r.globals.__NEXT_DATA__, true); assert.ok(Object.values(r.globals).every((v) => v === true || typeof v === 'string')); } finally { delete global.window; delete global.document; }
 });
+
+test('false positives: image paths are not Magento, preact is not React, XSRF-TOKEN alone is not Laravel, third-party *.vercel.app files do not mean the site is hosted there, version text is not markup', () => {
+  const r = detectTech([page({ editing: { scripts: ['https://x.test/assets/image/logo.js', 'https://x.test/preact.min.js', 'https://widgets.vercel.app/a.js', 'https://someone.github.io/b.js'], stylesheets: [] }, privacy: { cookies: [{ name: 'XSRF-TOKEN' }] }, tech: { generator: 'WordPress [x](//evil.example/)', globals: {}, markers: [], urls: [] } })]);
+  for (const id of ['magento', 'react', 'laravel', 'vercel', 'github-pages']) assert.ok(!ids(r).includes(id), id);
+  const wp = r.items.find((i) => i.id === 'wordpress'); assert.ok(!wp || !wp.version || /^[0-9A-Za-z._+-]+$/.test(wp.version));
+  assert.ok(ids(detectTech([page({ editing: { scripts: ['https://x.test/static/version1700/frontend/Magento/luma/en_US/mage/requirejs/mixins.js'], stylesheets: [] } })])).includes('magento'));
+});

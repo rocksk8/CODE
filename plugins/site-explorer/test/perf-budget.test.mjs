@@ -57,3 +57,10 @@ test('explore --budget: exit 4 when a fail-level budget is exceeded, 0 otherwise
     fs.writeFileSync(bf, '{"lcp":5}'); const bad = await run([url, '--budget', bf, '--out', path.join(dir, 'o2')]); assert.equal(bad.status, 1); assert.match(bad.out, /Budget file/i); assert.ok(!fs.existsSync(path.join(dir, 'o2', 'site')), 'no crawl for a bad budget');
   } finally { srv.close(); }
 });
+
+test('a budget on a metric that was never measured is reported, and a fail-level one fails', () => {
+  const rows = [{ url: 'https://x.test/', metrics: { ttfbMs: 100, lcpMs: null } }];
+  const warn = evaluateBudget(rows, { lcpMs: { max: 2500, level: 'warn' } }); assert.equal(warn.failed, false); assert.deepEqual(warn.unmeasured, [{ metric: 'lcpMs', level: 'warn', pages: 1 }]);
+  const fail = evaluateBudget(rows, { lcpMs: { max: 2500, level: 'fail' }, ttfbMs: { max: 800, level: 'fail' } }); assert.equal(fail.failed, true);
+  assert.deepEqual(evaluateBudget(rows, { ttfbMs: { max: 800, level: 'fail' } }).unmeasured, []);
+});

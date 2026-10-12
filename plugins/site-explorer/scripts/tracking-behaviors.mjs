@@ -28,19 +28,29 @@ export function fingerprintHooks() {
 /** Node-side, after the page has loaded: read the hooks and run the keystroke probe on one text box. Never submits anything. */
 export async function collectBehaviors(page, { auth = false } = {}) {
   const fp = await page.evaluate(() => window.__seFp || null).catch(() => null);
-  const out = { fp: fp ? { canvas: fp.canvas || [], webgl: fp.webgl || [], audio: fp.audio || [], measureText: fp.measureText || 0, measureSrc: fp.measureSrc || '' } : null, keystrokes: { tested: false, reason: null, leaks: [] } };
+  // the page can overwrite window.__seFp with anything: keep only well-formed entries
+  const list = (a) => (Array.isArray(a) ? a.filter((x) => x && typeof x === 'object').slice(0, 20).map((x) => ({ api: typeof x.api === 'string' ? x.api.slice(0, 30) : '', src: typeof x.src === 'string' ? x.src.slice(0, 300) : '', param: typeof x.param === 'string' ? x.param.slice(0, 30) : '' })) : []);
+  const out = { fp: fp && typeof fp === 'object' ? { canvas: list(fp.canvas), webgl: list(fp.webgl), audio: list(fp.audio), measureText: Number.isFinite(fp.measureText) ? Math.min(fp.measureText, 1e6) : 0, measureSrc: typeof fp.measureSrc === 'string' ? fp.measureSrc.slice(0, 300) : '' } : null, keystrokes: { tested: false, reason: null, leaks: [] } };
   if (auth) { out.keystrokes.reason = 'logged-in session'; return out; }
   try {
     const target = await page.evaluateHandle(() => {
       const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 20 && r.height > 10 && cs.visibility !== 'hidden' && cs.display !== 'none' && !el.disabled && !el.readOnly; };
-      const ok = (el) => (el.tagName === 'TEXTAREA' || /^(text|search|email|tel|url)$/i.test(el.type || 'text')) && vis(el) && !(el.form && el.form.querySelector('input[type=password]')) && !/pass|card|cvv|iban|ssn|otp|token/i.test(`${el.name} ${el.id} ${el.autocomplete} ${el.placeholder}`);
+      const hasPw = !!document.querySelector('input[type=password]'); // anywhere on the page, form or not: a login box is never probed
+      const SENSITIVE = /pass|pwd|card|cc-|cvv|cvc|iban|ssn|otp|one-time|token|secret|pin\b|credit|account|routing|tax|birth|信用卡|卡號|卡号|密碼|密码|驗證碼|验证码|身分證|身份证|帳號|账号|銀行|银行|付款|支付/i;
+      const ok = (el) => (el.tagName === 'TEXTAREA' || /^(text|search|email|tel|url)$/i.test(el.type || 'text')) && vis(el) && !hasPw && !SENSITIVE.test(`${el.name} ${el.id} ${el.autocomplete} ${el.placeholder} ${el.getAttribute('aria-label') || ''} ${el.inputMode || ''}`) && !(el.form && /(login|signin|sign-in|checkout|payment|登入|結帳)/i.test(`${el.form.id} ${el.form.className} ${el.form.action}`));
       return [...document.querySelectorAll('input:not([type]), input[type], textarea')].find(ok) || null;
     });
     const el = target.asElement(); if (!el) { out.keystrokes.reason = 'no suitable text box'; return out; }
     const token = 'seprobe' + Math.random().toString(16).slice(2, 10); const here = new URL(page.url()).hostname; const seen = [];
-    const onReq = (r) => { try { const u = new URL(r.url()); if (u.hostname === here || !/^https?:$/.test(u.protocol)) return; const body = r.postData() || ''; if (r.url().includes(token)) seen.push({ host: u.hostname, where: 'url' }); else if (body.includes(token)) seen.push({ host: u.hostname, where: 'body' }); } catch {} };
+    const onReq = (r) => { try { const u = new URL(r.url()); if (sameSite(u.hostname, here) || !/^https?:$/.test(u.protocol)) return; const body = r.postData() || ''; if (r.url().includes(token)) seen.push({ host: u.hostname, where: 'url' }); else if (body.includes(token)) seen.push({ host: u.hostname, where: 'body' }); } catch {} };
     page.on('request', onReq);
-    try { await el.focus({ timeout: 2000 }); await page.keyboard.type(token, { delay: 12 }); await page.waitForTimeout(1500); } finally { page.off('request', onReq); }
+    try {
+      await el.focus({ timeout: 2000 });
+      // keyboard input goes to whatever has focus: if the page moved focus elsewhere (a password box, say), type nothing
+      const same = await page.evaluate((e) => document.activeElement === e, el).catch(() => false);
+      if (!same) { out.keystrokes.reason = 'focus moved away'; return out; }
+      await page.keyboard.type(token, { delay: 12 }); await page.waitForTimeout(1500);
+    } finally { page.off('request', onReq); }
     try { await el.fill('', { timeout: 1500 }); } catch {}
     out.keystrokes = { tested: true, reason: null, leaks: [...new Map(seen.map((s) => [s.host + s.where, s])).values()].slice(0, 10) };
   } catch (e) { out.keystrokes.reason = String(e.message).split('\n')[0].slice(0, 80); }
@@ -54,7 +64,9 @@ const REPLAY = [
   ['Crazy Egg', /crazyegg\.com/i], ['Heap', /heapanalytics\.com|heap-api\.com/i], ['PostHog', /posthog\.com|i\.posthog/i],
 ];
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
-const sameSite = (a, b) => { const x = a.split('.').slice(-2).join('.'), y = b.split('.').slice(-2).join('.'); return a === b || x === y; };
+const SLD = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'or', 'ne', 'go', 'idv', 'mil']);
+const site = (h) => { if (/^[\d.]+$/.test(h) || String(h).includes(':')) return String(h); const p = String(h).split('.'); if (p.length >= 3 && p[p.length - 1].length === 2 && SLD.has(p[p.length - 2])) return p.slice(-3).join('.'); return p.slice(-2).join('.'); };
+export const sameSite = (a, b) => a === b || site(a) === site(b);
 
 export function analyzeBehaviors(pages) {
   const live = (pages || []).filter((p) => p && (!p.status || p.status < 400));

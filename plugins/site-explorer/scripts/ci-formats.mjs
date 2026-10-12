@@ -15,7 +15,7 @@ export function collectFindings(siteDir, { visual = null } = {}) {
   const h = rd(path.join(siteDir, 'health.json'));
   for (const i of h?.issues || []) out.push({ id: String(i.id), category: i.category, severity: i.severity, title: clean(String(i.title || i.id), 200), detail: clean([i.detail, ...(i.examples || []).slice(0, 3)].filter(Boolean).join(' · '), 400), url: firstUrl(i.examples), fix: clean(String(i.fix || ''), 300) });
   const p = rd(path.join(siteDir, 'performance.json'));
-  for (const v of p?.result?.violations || []) out.push({ id: `perf-${v.metric}`, category: 'performance-budget', severity: v.level === 'fail' ? 'high' : 'medium', title: clean(`${v.metric}: ${v.value} > budget ${v.max}`, 200), detail: '', url: null, fix: '' });
+  for (const v of p?.result?.violations || []) out.push({ id: `perf-${v.metric}`, category: 'performance-budget', severity: v.level === 'fail' ? 'high' : 'medium', title: clean(`${v.metric}: ${v.value} > budget ${v.max}`, 200), detail: '', url: /^https?:\/\//.test(v.url || '') ? String(v.url).slice(0, 300) : null, fix: '' });
   const s = rd(path.join(siteDir, 'security.json'));
   for (const t of s?.headers?.tests || []) if (t.points < 0) out.push({ id: `security-${t.id}`, category: 'security-headers', severity: SECURITY_SEV(t.points), title: clean(`${t.name}: ${t.result}`, 200), detail: '', url: null, fix: clean(String(t.fix || ''), 300) });
   for (const t of s?.tls?.tests || []) if (t.cap) out.push({ id: `tls-${t.id}`, category: 'tls', severity: t.cap === 'F' ? 'high' : 'medium', title: clean(`${t.name}: ${t.result}`, 200), detail: '', url: null, fix: clean(String(t.fix || ''), 300) });

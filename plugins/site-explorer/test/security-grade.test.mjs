@@ -53,3 +53,27 @@ test('live: a local TLS 1.2+ server with a self-signed certificate is probed and
     assert.equal(g.grade, 'F'); assert.ok(g.tests.some((x) => x.id === 'selfsigned' || x.id === 'untrusted'));
   } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('CSP/Referrer grading: a CSP without script limits earns nothing, the first duplicate directive wins, keywords are case-insensitive, referrer values are judged correctly', () => {
+  const pts = (h, id) => gradeHeaders({ ...good, ...h }, { https: true }).tests.find((t) => t.id === id).points;
+  assert.ok(pts({ 'content-security-policy': "frame-ancestors 'self'" }, 'csp') < 0);
+  assert.ok(pts({ 'content-security-policy': "upgrade-insecure-requests; object-src 'none'; base-uri 'none'" }, 'csp') < 0);
+  assert.ok(pts({ 'content-security-policy': "script-src 'unsafe-inline'; script-src 'self'" }, 'csp') < 0);
+  assert.ok(pts({ 'content-security-policy': "SCRIPT-SRC 'UNSAFE-INLINE'" }, 'csp') < 0);
+  assert.ok(pts({ 'referrer-policy': 'origin' }, 'referrer') >= 0 && pts({ 'referrer-policy': 'origin-when-cross-origin' }, 'referrer') >= 0);
+  assert.ok(pts({ 'referrer-policy': 'no-referrer-when-downgrade' }, 'referrer') < 0 && pts({ 'referrer-policy': 'unsafe-url' }, 'referrer') < 0);
+  const sri = gradeHeaders(good, { https: true, host: 'x.test', scripts: [{ src: 'data:text/javascript,1' }, { src: 'blob:https://x.test/1' }] }); assert.ok(!sri.tests.some((t) => t.id === 'sri'));
+  assert.ok(!gradeHeaders(good, { https: true, cookies: [{ name: 'inside_x', secure: false, httpOnly: false }, { name: 'consider', secure: false, httpOnly: false }] }).tests.some((t) => t.id.startsWith('cookie')));
+});
+
+test('live: a TLS 1.0/1.1-only server is still probed and flagged for legacy protocols', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'se-tls2-'));
+  try { execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'k.pem'), '-out', path.join(dir, 'c.pem'), '-days', '5', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'], { stdio: 'ignore' }); } catch { return t.skip('no openssl'); }
+  const srv = tls.createServer({ key: fs.readFileSync(path.join(dir, 'k.pem')), cert: fs.readFileSync(path.join(dir, 'c.pem')), minVersion: 'TLSv1', maxVersion: 'TLSv1.1', ciphers: 'ALL:@SECLEVEL=0' }, (s) => s.end());
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  try {
+    const g = await gradeTlsLive('localhost', srv.address().port);
+    if (g.grade === null) return t.skip('this OpenSSL build cannot speak TLS 1.0/1.1');
+    assert.equal(g.versions['TLS 1.2'], false); assert.ok(g.tests.some((x) => x.id === 'legacy'));
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});

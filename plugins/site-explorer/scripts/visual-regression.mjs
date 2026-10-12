@@ -13,9 +13,19 @@ const MAX_ROWS = 6000; // pixel rows compared per screenshot (very long pages: t
 
 export function visualDirFor(baselineFile) { return baselineFile.replace(/\.json$/i, '') + '-visual'; }
 
+/** Remove a visual baseline folder, but only one this tool wrote (it has our index.json) or an empty one: never a folder that merely has the same name. */
+export function removeVisualBaseline(dest) {
+  if (!fs.existsSync(dest)) return;
+  if (fs.lstatSync(dest).isSymbolicLink() || !fs.statSync(dest).isDirectory()) throw new Error(_t`${dest} 已存在但不是資料夾，不會覆蓋。`);
+  const entries = fs.readdirSync(dest);
+  let ours = false; try { ours = JSON.parse(fs.readFileSync(path.join(dest, 'index.json'), 'utf8')).schema === 1; } catch {}
+  if (entries.length && !ours) throw new Error(_t`${dest} 已存在而且不是 site-explorer 建立的視覺基準資料夾，不會覆蓋（請改用 --baseline 指定別的位置，或自行移走它）。`);
+  fs.rmSync(dest, { recursive: true, force: true });
+}
+
 /** Copy this run's full-page screenshots into dest/<slug>/<viewport>.png. Returns how many were stored. */
 export function saveVisualBaseline(siteDir, dest) {
-  fs.rmSync(dest, { recursive: true, force: true }); let n = 0;
+  removeVisualBaseline(dest); let n = 0;
   const site = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8'));
   const index = {};
   for (const p of site.pages || []) {
@@ -67,8 +77,8 @@ export async function compareVisual(page, { siteDir, baseDir, outDir, threshold 
       if (!nowSlugs.has(slug) || !fs.existsSync(cur)) { row.status = 'missing'; rows.push(row); continue; }
       const r = await page.evaluate(diffInBrowser, { a: 'data:image/png;base64,' + fs.readFileSync(ref).toString('base64'), b: 'data:image/png;base64,' + fs.readFileSync(cur).toString('base64'), tol: tolerance, maxRows: MAX_ROWS }).catch(() => null);
       if (!r) { row.status = 'error'; rows.push(row); continue; }
-      row.changedPct = Math.round((r.changed / Math.max(r.total, 1)) * 10000) / 100; row.baseSize = r.aSize; row.newSize = r.bSize; row.truncated = r.truncated;
-      row.status = row.changedPct > threshold ? 'changed' : 'same';
+      const pct = (r.changed / Math.max(r.total, 1)) * 100; row.changedPct = Math.round(pct * 10000) / 10000; row.baseSize = r.aSize; row.newSize = r.bSize; row.truncated = r.truncated;
+      row.status = pct > threshold ? 'changed' : 'same';
       if (row.status === 'changed') { fs.mkdirSync(diffDir, { recursive: true }); const f = `${slug}-${vp}.png`; fs.writeFileSync(path.join(diffDir, f), Buffer.from(r.diff.split(',')[1], 'base64')); row.diff = `visual-diff/${f}`; }
       rows.push(row);
     }

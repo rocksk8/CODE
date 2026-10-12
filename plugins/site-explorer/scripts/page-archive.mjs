@@ -8,6 +8,7 @@ export async function archiveInPage({ maxBytes, maxOne, pageUrl, when }) {
   let budget = maxBytes, embedded = 0, linked = 0;
   const abs = (u, base) => { try { return new URL(u, base || document.baseURI).href; } catch { return ''; } };
   const cache = new Map();
+  const noEnd = (css) => String(css).replace(/<\/(style)/gi, '<\\/$1').replace(/<!--/g, '<\\!--'); // CSS text can contain "</style>": it must never close the element it sits in
   const toData = (url) => {
     if (!/^https?:/i.test(url)) return Promise.resolve(null);
     if (cache.has(url)) return cache.get(url);
@@ -37,10 +38,10 @@ export async function archiveInPage({ maxBytes, maxOne, pageUrl, when }) {
   for (let i = 0; i < cLinks.length; i++) {
     const css = liveLinks[i] && liveLinks[i].sheet ? rulesOf(liveLinks[i].sheet) : null;
     if (css == null) { cLinks[i].setAttribute('href', abs(liveLinks[i]?.href || cLinks[i].getAttribute('href'))); linked++; continue; }
-    const st = document.createElement('style'); st.textContent = await inlineUrls(css, liveLinks[i].href); cLinks[i].replaceWith(st);
+    const st = document.createElement('style'); st.textContent = noEnd(await inlineUrls(css, liveLinks[i].href)); cLinks[i].replaceWith(st);
   }
-  for (let i = 0; i < cStyles.length; i++) { const css = liveStyles[i] && liveStyles[i].sheet ? rulesOf(liveStyles[i].sheet) : null; cStyles[i].textContent = await inlineUrls(css ?? cStyles[i].textContent, document.baseURI); }
-  if (document.adoptedStyleSheets && document.adoptedStyleSheets.length) { const st = document.createElement('style'); st.textContent = document.adoptedStyleSheets.map(rulesOf).filter(Boolean).join('\n'); root.querySelector('head')?.appendChild(st); }
+  for (let i = 0; i < cStyles.length; i++) { const css = liveStyles[i] && liveStyles[i].sheet ? rulesOf(liveStyles[i].sheet) : null; cStyles[i].textContent = noEnd(await inlineUrls(css ?? cStyles[i].textContent, document.baseURI)); }
+  if (document.adoptedStyleSheets && document.adoptedStyleSheets.length) { const st = document.createElement('style'); st.textContent = noEnd(document.adoptedStyleSheets.map(rulesOf).filter(Boolean).join('\n')); root.querySelector('head')?.appendChild(st); }
   // images
   const liveImgs = [...document.querySelectorAll('img')], cImgs = [...root.querySelectorAll('img')];
   for (let i = 0; i < cImgs.length && i < 200; i++) {
@@ -52,9 +53,12 @@ export async function archiveInPage({ maxBytes, maxOne, pageUrl, when }) {
   // inline style="background-image:url(...)" is kept as an absolute link
   root.querySelectorAll('[style*="url("]').forEach((e) => { e.setAttribute('style', e.getAttribute('style').replace(/url\(\s*(['"]?)(?!data:|#)([^)'"]+?)\1\s*\)/gi, (m, q, u) => `url(${q}${abs(u.trim())}${q})`)); });
   // links become absolute so they still point somewhere; everything active is removed
-  root.querySelectorAll('a[href]').forEach((a) => { const v = a.getAttribute('href'); if (/^\s*javascript:/i.test(v)) a.removeAttribute('href'); else { const x = abs(v); if (x) a.setAttribute('href', x); } });
+  const js = (v) => /^[\s\u0000-\u001f]*j[\s\u0000-\u001f]*a[\s\u0000-\u001f]*v[\s\u0000-\u001f]*a[\s\u0000-\u001f]*s[\s\u0000-\u001f]*c[\s\u0000-\u001f]*r[\s\u0000-\u001f]*i[\s\u0000-\u001f]*p[\s\u0000-\u001f]*t[\s\u0000-\u001f]*:/i.test(String(v));
+  root.querySelectorAll('a[href]').forEach((a) => { const v = a.getAttribute('href'); if (js(v)) a.removeAttribute('href'); else { const x = abs(v); if (x && /^https?:|^mailto:|^tel:/i.test(x)) a.setAttribute('href', x); else a.removeAttribute('href'); } });
+  root.querySelectorAll('form').forEach((f) => { f.removeAttribute('action'); });
+  root.querySelectorAll('[formaction]').forEach((e) => e.removeAttribute('formaction'));
   root.querySelectorAll('script,noscript,iframe,frame,frameset,object,embed,applet,base,meta[http-equiv],link[rel~="preload"],link[rel~="modulepreload"],link[rel~="prefetch"],link[rel~="preconnect"],link[rel~="dns-prefetch"]').forEach((e) => e.remove());
-  root.querySelectorAll('*').forEach((e) => { for (const a of [...e.attributes]) if (/^on/i.test(a.name) || (/^(src|action|formaction|xlink:href|data)$/i.test(a.name) && /^\s*javascript:/i.test(a.value))) e.removeAttribute(a.name); });
+  root.querySelectorAll('*').forEach((e) => { for (const a of [...e.attributes]) if (/^on/i.test(a.name) || (/^(src|action|formaction|xlink:href|data|href)$/i.test(a.name) && js(a.value))) e.removeAttribute(a.name); });
   const head = root.querySelector('head') || root.insertBefore(document.createElement('head'), root.firstChild);
   const meta = (attrs) => { const m = document.createElement('meta'); for (const [k, v] of Object.entries(attrs)) m.setAttribute(k, v); return m; };
   head.prepend(meta({ 'http-equiv': 'Content-Security-Policy', content: "default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline' https: http:; font-src data: https: http:; media-src data: https: http:" }));

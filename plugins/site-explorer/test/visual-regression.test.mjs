@@ -30,3 +30,16 @@ test('approve stores screenshots; same page passes; a visual change fails with a
     const badv = await run([url, '--compare', '--baseline', bf, '--visual-threshold', 'abc', '--out', out]); assert.equal(badv.status, 1);
   } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+import { removeVisualBaseline, saveVisualBaseline } from '../scripts/visual-regression.mjs';
+test('the visual baseline folder is only removed when it is ours; a user folder with the same name survives', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'se-vrm-'));
+  try {
+    const mine = path.join(d, 'a-visual'); fs.mkdirSync(mine); fs.writeFileSync(path.join(mine, 'notes.txt'), 'x');
+    assert.throws(() => removeVisualBaseline(mine), /not a visual-baseline folder|不是 site-explorer/); assert.ok(fs.existsSync(path.join(mine, 'notes.txt')));
+    fs.writeFileSync(path.join(mine, 'index.json'), '{"schema":1,"pages":{}}'); removeVisualBaseline(mine); assert.ok(!fs.existsSync(mine));
+    const empty = path.join(d, 'b-visual'); fs.mkdirSync(empty); removeVisualBaseline(empty); assert.ok(!fs.existsSync(empty));
+    removeVisualBaseline(path.join(d, 'none'));
+    const file = path.join(d, 'c-visual'); fs.writeFileSync(file, 'x'); assert.throws(() => removeVisualBaseline(file));
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+});

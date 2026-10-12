@@ -2,11 +2,12 @@
 //   --extract rules.json   {"price": {"css": ".price"}, "sku": {"css": "[itemprop=sku]", "attr": "content"}, "order": {"regex": "order-(\\d+)", "in": "html"}}
 // css rules run in the browser on the rendered page (all matches, max 50); regex rules run on the page's visible text (or its HTML with "in": "html").
 // The rules file is yours, the values come from the site: values are length-limited, control characters removed, and CSV cells that could be read as
-// spreadsheet formulas are neutralised. Regexes are checked for catastrophic shapes and only ever see at most 300 000 characters.
+// spreadsheet formulas are neutralised. Regexes are screened for obviously catastrophic shapes, see at most 300 000 characters, and run in a sandboxed context with a 400 ms limit per rule (a rule that hits it reports #timeout-error).
+import vm from 'node:vm';
 import { _t } from './i18n.mjs';
 import { stripControl } from './untrusted.mjs';
 
-const NAME = /^[A-Za-z0-9_-]{1,40}$/;
+const NAME = /^(?!__proto__$|constructor$|prototype$)[A-Za-z0-9_-]{1,40}$/;
 const MAX_RULES = 30, MAX_VALUES = 50, MAX_LEN = 300, MAX_INPUT = 300000;
 
 /** Strict parse of the rules file. Throws a readable error. */
@@ -34,7 +35,7 @@ export function parseRules(text) {
 
 /** Runs in the browser: the css rules. Returns { name: { values:[...], error } }. */
 export function extractCssInPage(rules) {
-  const out = {};
+  const out = Object.create(null);
   for (const r of rules) {
     try {
       const els = [...document.querySelectorAll(r.css)].slice(0, r.all ? 50 : 1);
@@ -44,13 +45,15 @@ export function extractCssInPage(rules) {
   return out;
 }
 
-/** Node-side: the regex rules on text / HTML. */
+/** Node-side: the regex rules on text / HTML. Each rule runs in its own VM context with a time limit, so a pattern that backtracks forever is stopped (value list empty, error "timeout"). */
 export function extractRegex(rules, { text = '', html = '' }) {
-  const out = {};
+  const out = Object.create(null);
   for (const r of rules.filter((x) => x.regex)) {
-    const src = (r.in === 'html' ? html : text).slice(0, MAX_INPUT); const re = new RegExp(r.regex, 'g'); const vals = []; let m;
-    while ((m = re.exec(src)) && vals.length < (r.all ? MAX_VALUES : 1)) { vals.push(String(m[1] ?? m[0]).replace(/\s+/g, ' ').trim().slice(0, MAX_LEN)); if (m[0] === '') re.lastIndex++; }
-    out[r.name] = { values: vals.filter((v) => v !== '') };
+    const src = (r.in === 'html' ? html : text).slice(0, MAX_INPUT); const max = r.all ? MAX_VALUES : 1;
+    try {
+      const vals = vm.runInNewContext(`(() => { const re = new RegExp(pattern, 'g'); const vals = []; let m; while ((m = re.exec(src)) && vals.length < max) { vals.push(String(m[1] ?? m[0])); if (m[0] === '') re.lastIndex++; } return vals; })()`, { pattern: r.regex, src, max }, { timeout: 400 });
+      out[r.name] = { values: [...vals].map((v) => String(v).replace(/\s+/g, ' ').trim().slice(0, MAX_LEN)).filter((v) => v !== '') };
+    } catch { out[r.name] = { values: [], error: 'timeout' }; }
   }
   return out;
 }
@@ -59,5 +62,5 @@ const cell = (v) => { let s = stripControl(String(v ?? '')).replace(/\r?\n/g, ' 
 /** rows = [{ url, extract: {name:{values,error}} }] → CSV with one column per rule (several values joined by " | "). */
 export function toCsv(rules, rows) {
   const head = ['url', ...rules.map((r) => r.name)];
-  return [head.map(cell).join(','), ...rows.map((r) => [r.url, ...rules.map((x) => (r.extract?.[x.name]?.error ? '#selector-error' : (r.extract?.[x.name]?.values || []).join(' | ')))].map(cell).join(','))].join('\n') + '\n';
+  return [head.map(cell).join(','), ...rows.map((r) => [r.url, ...rules.map((x) => (r.extract?.[x.name]?.error ? '#' + r.extract[x.name].error + '-error' : (r.extract?.[x.name]?.values || []).join(' | ')))].map(cell).join(','))].join('\n') + '\n';
 }

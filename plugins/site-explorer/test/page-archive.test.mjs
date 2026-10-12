@@ -38,3 +38,24 @@ test('--archive writes archive.html that has no scripts, embeds CSS and images, 
     try { await pg.goto('file://' + f); const fs1 = await pg.evaluate(() => getComputedStyle(document.getElementById('t')).fontSize + '|' + getComputedStyle(document.getElementById('t')).color + '|' + document.querySelector('img').naturalWidth); assert.equal(fs1, '41px|rgb(200, 10, 20)|1'); } finally { await b.close(); }
   } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('archive: CSS text containing </style> and javascript: tricks cannot become active content', async (t) => {
+  let b0; try { b0 = await launchBrowser(); await b0.close(); } catch { return t.skip('no browser'); }
+  const srv = http.createServer((q, r) => {
+    if (q.url === '/robots.txt') { r.statusCode = 404; return r.end(); }
+    if (q.url === '/h.css') { r.setHeader('content-type', 'text/css'); return r.end(`.q::after{content:"</style><meta http-equiv=refresh content='0;url=https://evil.example/'><img src=x onerror=alert(9)><style>"}`); }
+    r.setHeader('content-type', 'text/html'); r.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Hostile css page</title><meta name="description" content="A page used to test that archives stay inert."><link rel="stylesheet" href="/h.css"></head><body><h1 class="q">Hello</h1><a href="java&#10;script:alert(1)">x</a><form action="https://evil.example/post"><input name="a"></form><p>${'Plain words to make the page real. '.repeat(8)}</p></body></html>`);
+  });
+  await new Promise((res) => srv.listen(0, '127.0.0.1', res)); const url = `http://127.0.0.1:${srv.address().port}/`;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'se-arc2-'));
+  try {
+    const r = await run([url, '--archive', '--out', path.join(dir, 'o')]); assert.equal(r.status, 0, r.out);
+    const site = fs.readdirSync(path.join(dir, 'o', 'site'))[0]; const html = fs.readFileSync(path.join(dir, 'o', 'site', site, 'pages', 'home', 'archive.html'), 'utf8');
+    const b = await launchBrowser(); const pg = await b.newPage();
+    try {
+      await pg.setContent(html);
+      const live = await pg.evaluate(() => ({ metas: document.querySelectorAll('meta[http-equiv]:not([http-equiv="Content-Security-Policy"])').length, imgs: document.querySelectorAll('img[onerror]').length, js: [...document.querySelectorAll('[href]')].filter((e) => /script/i.test(e.getAttribute('href').replace(/\s/g, ''))).length, action: document.querySelector('form').hasAttribute('action') }));
+      assert.deepEqual(live, { metas: 0, imgs: 0, js: 0, action: false });
+    } finally { await b.close(); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});

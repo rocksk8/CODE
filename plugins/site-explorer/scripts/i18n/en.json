@@ -2178,5 +2178,12 @@
 "規則數量必須是 1 到 {} 條。": "The number of rules must be between 1 and {}.",
 "規則檔不是有效的 JSON。": "The rules file is not valid JSON.",
 "規則檔必須是 {\"名稱\": {\"css\": \"...\"}} 這樣的物件。": "The rules file must be an object like {\"name\": {\"css\": \"...\"}}.",
-"--extract 規則檔有問題：": "Problem with the --extract rules file: "
+"--extract 規則檔有問題：": "Problem with the --extract rules file: ",
+"{} 已存在但不是資料夾，不會覆蓋。": "{} already exists but is not a folder; it will not be overwritten.",
+"{} 已存在而且不是 site-explorer 建立的視覺基準資料夾，不會覆蓋（請改用 --baseline 指定別的位置，或自行移走它）。": "{} already exists and is not a visual-baseline folder created by site-explorer; it will not be overwritten (choose another location with --baseline, or move it away yourself).",
+"有設定，但沒有限制 script 來源（沒有 script-src 也沒有 default-src）": "set, but it does not restrict script sources (no script-src and no default-src)",
+"加入 `default-src 'self'` 或 `script-src`。": "Add `default-src 'self'` or a `script-src`.",
+"## 沒有量到的指標": "## Metrics that were not measured",
+"{}：{} 頁沒有量到數值，無法判斷是否在預算內{}": "{}: no value was measured on {} page(s), so the budget cannot be checked{}",
+"（fail 等級，視為未通過）": " (fail level: counted as failed)"
 }

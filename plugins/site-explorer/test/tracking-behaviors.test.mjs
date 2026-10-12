@@ -53,3 +53,31 @@ test('browser: canvas+WebGL reads are recorded, typed text leaking to another ho
     assert.equal((await collectBehaviors(p, { auth: true })).keystrokes.tested, false);
   } finally { await browser.close(); web.close(); other.close(); }
 });
+
+import { sameSite } from '../scripts/tracking-behaviors.mjs';
+test('same-site check understands multi-part public suffixes and IP addresses', () => {
+  assert.equal(sameSite('shop.com.tw', 'fp.vendor.com.tw'), false); assert.equal(sameSite('a.co.uk', 'tracker.co.uk'), false);
+  assert.equal(sameSite('www.shop.com.tw', 'cdn.shop.com.tw'), true); assert.equal(sameSite('a.example.com', 'b.example.com'), true);
+  assert.equal(sameSite('10.0.0.1', '192.168.0.1'), false); assert.equal(sameSite('localhost', '127.0.0.1'), false);
+});
+
+test('browser: sensitive fields, login pages, focus stealing and a hostile window.__seFp are all handled safely', async (t) => {
+  let browser; try { browser = await launchBrowser(); } catch { t.skip('no browser'); return; }
+  const pages = {
+    '/cc': '<input type=text name=num autocomplete="cc-number">',
+    '/zh': '<input type=text placeholder="請輸入信用卡號">',
+    '/login': '<input type=text name=user><input type=password name=p>',
+    '/steal': '<input id=u type=text name=search><input id=pw type=password name=zz style="display:none"><script>document.getElementById("u").addEventListener("focus",()=>{const p=document.getElementById("pw");p.style.display="block";p.focus()})</script>',
+    '/evil': '<input type=text name=q><script>window.__seFp={canvas:"abc",webgl:[null,7],audio:{},measureText:"x"}</script>',
+  };
+  const web = http.createServer((q, r) => { r.setHeader('content-type', 'text/html; charset=utf-8'); r.end(pages[q.url] || ''); });
+  await new Promise((r) => web.listen(0, 'localhost', r)); const wp = web.address().port;
+  try {
+    const ctx = await browser.newContext(); await ctx.addInitScript(fingerprintHooks); const p = await ctx.newPage();
+    for (const u of ['/cc', '/zh', '/login']) { await p.goto(`http://localhost:${wp}${u}`); assert.equal((await collectBehaviors(p, {})).keystrokes.tested, false, u); }
+    await p.goto(`http://localhost:${wp}/steal`); const s = await collectBehaviors(p, {}); assert.equal(s.keystrokes.tested, false, JSON.stringify(s.keystrokes));
+    assert.ok(!(await p.inputValue('#pw')).includes('seprobe'), 'nothing was typed into the password box');
+    await p.goto(`http://localhost:${wp}/evil`); const e = await collectBehaviors(p, {}); assert.deepEqual(e.fp.canvas, []);
+    assert.doesNotThrow(() => analyzeBehaviors([{ url: 'http://x.test/', status: 200, behaviors: e }]));
+  } finally { await browser.close(); web.closeAllConnections(); web.close(); }
+});
