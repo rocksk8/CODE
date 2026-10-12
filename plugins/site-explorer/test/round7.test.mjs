@@ -80,7 +80,8 @@ test('visual review: the copy-paste approve command quotes every argument for th
   const html = renderVisualReviewHtml(vr, { baseDir: '/nope', siteDir: '/nope', outDir: '/nope', url: 'https://x.test/?a=1&b=2', baselineFile: '/tmp/$(touch pwned)/b`id`.json' });
   const cmds = [...html.matchAll(/data-cmd="([^"]*)"/g)].map((m) => m[1].replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"'));
   assert.ok(cmds.length >= 1);
-  for (const c of cmds) { assert.match(c, /explore 'https:\/\/x\.test\/\?a=1&b=2' --approve-visual /); assert.match(c, /--baseline '\/tmp\/\$\(touch pwned\)\/b`id`\.json'/); }
+  if (process.platform === 'win32') for (const c of cmds) { assert.match(c, /explore "https:\/\/x\.test\/\?a=1&b=2" --approve-visual /); assert.match(c, /--baseline "\/tmp\/\$\(touch pwned\)\/b`id`\.json"/); } // cmd.exe / PowerShell: double quotes
+  else for (const c of cmds) { assert.match(c, /explore 'https:\/\/x\.test\/\?a=1&b=2' --approve-visual /); assert.match(c, /--baseline '\/tmp\/\$\(touch pwned\)\/b`id`\.json'/); }
 });
 
 test('removeVisualBaseline in dry mode only checks; a foreign folder is still refused', () => {

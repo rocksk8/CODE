@@ -10,6 +10,8 @@ Generated 2026-10-12 for version 0.4.0 (main after pull requests #32–#35, whic
 | Tests (Node 22, local, with a real Chromium) | 297 tests: 294 pass, 0 fail, 3 skipped (the framework build test, which runs only on CI, and the Firefox/WebKit tests, which need those browsers) |
 | Tests on CI, Node 20 | the same suite on the CI Node 20 job (no `node:sqlite`, so the history-database tests are skipped there by design) |
 | Tests on CI (GitHub Actions) | Node 20 and Node 22 matrix plus a Docker image build on every pull request; since pull request #34 also the full suite on **Windows** and **macOS** (workflow `platforms`), and Firefox/WebKit smoke tests (workflow `engines`) |
+| Windows (GitHub runner, Node 22, last full run) | 291 tests: 287 pass, 4 fail, 6 skipped. Two of the four were test-only problems (moving a file across drives, quoting rules on Windows) and are fixed in the test code; the other two are the full pipeline test (`explore` with 3D capture, killed after 15 minutes without finishing) and the history-database test that depends on it. Why the full pipeline does not finish on Windows is **not understood**; a 3D capture of one small page does work there (about 75 seconds) |
+| macOS (GitHub runner, Node 22) | the full suite passes |
 | Node 20 specifics | no `node:sqlite`: history database and `changes.md` are skipped there by design; everything else runs |
 | Browser | Chromium via Playwright 1.64.0 (pinned); axe-core 4.14.0 (pinned). Firefox and WebKit (`--browser`) are experimental and only smoke-tested on CI |
 
