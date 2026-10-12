@@ -30,7 +30,7 @@ export function computeVerdicts(siteDir, outDir = null) {
   const sec = rd(path.join(siteDir, 'security.json'));
   if (sec) {
     const hs = gradeStatus(sec.headers?.grade), ts = sec.tls ? gradeStatus(sec.tls.grade) : 'info';
-    const fixes = (sec.headers?.tests || []).filter((t) => t.points < 0).sort((a, b) => a.points - b.points).slice(0, 3).map((t) => clean(String(t.name), 40));
+    const fixes = (sec.headers?.tests || []).filter((t) => t.points <= -10).sort((a, b) => a.points - b.points).slice(0, 3).map((t) => clean(String(t.name), 40));
     push({ id: 'security', title: _t('安全設定（標頭與加密連線）'), status: sec.headers ? worst(hs, ts === 'info' ? 'ok' : ts, fixes.length ? 'warn' : 'ok') : ts, headline: _t`標頭 ${sec.headers?.grade ?? '—'}${sec.tls ? _t`・加密連線 ${sec.tls.grade ?? '—'}` : _t('・加密連線未檢查')}`, next: fixes.length ? _t`先補：${fixes.join(_t('、'))}` : _t('標頭設定沒有明顯缺口。'), tab: 'security', file: 'security.md' });
   }
   const perf = rd(path.join(siteDir, 'performance.json'));

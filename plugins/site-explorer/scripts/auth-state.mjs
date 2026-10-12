@@ -96,15 +96,23 @@ export async function applyCredentialRoutes(ctx, startUrl, env = process.env) {
   if (!env[CRED_ENV.headers]) return false;
   let headers; try { headers = parseHeaders(Object.entries(JSON.parse(env[CRED_ENV.headers]))); } catch { return false; }
   const origin = new URL(startUrl).origin;
-  // Chromium keeps a header override across a redirect, even to another origin. So every request is fetched here WITHOUT following redirects and handed back to the page as it is:
-  // the browser then follows a redirect as a NEW request, which gets the headers only if it is still on the start origin. (Requests that are not fetched here but continued cannot be mixed with fetched
-  // ones: Chromium stalls them, so third-party requests are fetched too, just without the headers.)
+  // Chromium keeps a header override across a redirect, and does not offer a hook for the redirected hop. So requests are fetched here WITHOUT following redirects and handed back to
+  // the page as they are: the browser follows a redirect as a NEW request, which gets the headers only if it is still on the start origin. Requests that are only continued cannot be mixed
+  // with fetched ones (Chromium stalls them), so other origins are fetched too - without the headers and without the cookie jar (a real browser would withhold most of those cookies).
+  // Cost, only with --header: responses are buffered (no live streams / very large downloads), so event streams and media are left alone.
   let basic = null; try { if (env[CRED_ENV.basic]) { const b = parseBasicAuth(env[CRED_ENV.basic]); basic = 'Basic ' + Buffer.from(`${b.username}:${b.password}`).toString('base64'); } } catch {}
-  const extra = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
+  const extra = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v])); let jarless = null; // a request context with its own empty cookie jar, for other origins
   await ctx.route('**/*', async (route) => {
     const rq = route.request(); let same = false; try { same = new URL(rq.url()).origin === origin; } catch {}
-    try { const resp = await route.fetch({ headers: same ? { ...rq.headers(), ...(basic ? { authorization: basic } : {}), ...extra } : rq.headers(), maxRedirects: 0, timeout: 30000 }); return await route.fulfill({ response: resp }); }
-    catch { return route.abort('failed').catch(() => {}); }
+    if (['eventsource', 'websocket', 'media'].includes(rq.resourceType())) return route.fallback();
+    const own = rq.headers();
+    try {
+      if (same) { const resp = await route.fetch({ headers: { ...own, ...(basic && !own.authorization ? { authorization: basic } : {}), ...extra }, maxRedirects: 0, timeout: 60000 }); return await route.fulfill({ response: resp }); }
+      jarless = jarless || (async () => { const pw = await (await import('./launch.mjs')).loadPlaywright({ quiet: true }); const c = await (pw.request || pw.default.request).newContext(); ctx.on('close', () => c.dispose().catch(() => {})); return c; })();
+      const resp = await (await jarless).fetch(rq.url(), { method: rq.method(), headers: own, data: rq.postDataBuffer() || undefined, maxRedirects: 0, timeout: 60000 });
+      const hd = {}; for (const { name, value } of resp.headersArray()) { const k = name.toLowerCase(); if (k === 'content-encoding' || k === 'content-length' || k === 'transfer-encoding') continue; hd[k] = k in hd ? hd[k] + (k === 'set-cookie' ? '\n' : ', ') + value : value; }
+      return await route.fulfill({ status: resp.status(), headers: hd, body: await resp.body() });
+    } catch { return route.abort('failed').catch(() => {}); }
   });
   return true;
 }

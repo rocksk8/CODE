@@ -19,17 +19,21 @@ export function gradeHeaders(headers, { https = true, cookies = [], scripts = []
   const add = (id, name, points, result, fix) => { tests.push({ id, name, points, result, fix: fix || null }); score += points; };
   // Content-Security-Policy
   const csp = H['content-security-policy'];
-  if (!csp) add('csp', 'Content-Security-Policy', -25, _t('沒有設定'), _t('逐步導入 CSP，先以 Content-Security-Policy-Report-Only 觀察。'));
-  else {
-    const dirs = {}; for (const d of csp.split(';').map((x) => x.trim()).filter(Boolean)) { const [n, ...v] = d.split(/\s+/); const k = n.toLowerCase(); if (!(k in dirs)) dirs[k] = v.map((x) => x.toLowerCase()); } // browsers use the first of a repeated directive
+  const evalPolicy = (policy) => {
+    const dirs = {}; for (const d of policy.split(';').map((x) => x.trim()).filter(Boolean)) { const [n, ...v] = d.split(/\s+/); const k = n.toLowerCase(); if (!(k in dirs)) dirs[k] = v.map((x) => x.toLowerCase()); } // browsers use the first of a repeated directive
     const scriptSrc = dirs['script-src'] || dirs['default-src'];
     const script = scriptSrc || [];
     const unsafeInline = script.includes("'unsafe-inline'") && !script.some((x) => /^'(nonce-|sha(256|384|512)-)/.test(x) || x === "'strict-dynamic'");
-    if (!scriptSrc) add('csp', 'Content-Security-Policy', -10, _t('有設定，但沒有限制 script 來源（沒有 script-src 也沒有 default-src）'), _t("加入 `default-src 'self'` 或 `script-src`。"));
-    else if (unsafeInline) add('csp', 'Content-Security-Policy', -20, _t("script 來源允許 'unsafe-inline'（等於擋不住注入的內嵌腳本）"), _t("改用 nonce 或 hash，移除 'unsafe-inline'。"));
-    else if (script.includes("'unsafe-eval'")) add('csp', 'Content-Security-Policy', -10, _t("script 來源允許 'unsafe-eval'"), _t("移除 'unsafe-eval'。"));
-    else if (script.some((x) => x === '*' || x === 'http:' || x === 'https:' || x === 'data:')) add('csp', 'Content-Security-Policy', -10, _t('script 來源太寬鬆（* / http: / https: / data:）'), _t('只列出實際需要的網域。'));
-    else add('csp', 'Content-Security-Policy', (dirs['object-src'] || []).includes("'none'") && dirs['base-uri'] ? 10 : 5, _t('有設定，且沒有放行內嵌腳本'), null);
+    if (!scriptSrc) return [-10, _t('有設定，但沒有限制 script 來源（沒有 script-src 也沒有 default-src）'), _t("加入 `default-src 'self'` 或 `script-src`。")];
+    if (unsafeInline) return [-20, _t("script 來源允許 'unsafe-inline'（等於擋不住注入的內嵌腳本）"), _t("改用 nonce 或 hash，移除 'unsafe-inline'。")];
+    if (script.includes("'unsafe-eval'")) return [-10, _t("script 來源允許 'unsafe-eval'"), _t("移除 'unsafe-eval'。")];
+    if (script.some((x) => x === '*' || x === 'http:' || x === 'https:' || x === 'data:')) return [-10, _t('script 來源太寬鬆（* / http: / https: / data:）'), _t('只列出實際需要的網域。')];
+    return [(dirs['object-src'] || []).includes("'none'") && dirs['base-uri'] ? 10 : 5, _t('有設定，且沒有放行內嵌腳本'), null];
+  };
+  if (!csp) add('csp', 'Content-Security-Policy', -25, _t('沒有設定'), _t('逐步導入 CSP，先以 Content-Security-Policy-Report-Only 觀察。'));
+  else { // several policies (separate headers joined with ", ") all apply together, so the effective policy is at least as strict as the best one: grade that one
+    const best = String(csp).split(',').map((x) => x.trim()).filter(Boolean).map(evalPolicy).sort((x, y) => y[0] - x[0])[0] || evalPolicy(csp);
+    add('csp', 'Content-Security-Policy', best[0], best[1], best[2]);
   }
   // HSTS
   if (https) {
@@ -43,7 +47,7 @@ export function gradeHeaders(headers, { https = true, cookies = [], scripts = []
   if (!/nosniff/i.test(H['x-content-type-options'] || '')) add('nosniff', 'X-Content-Type-Options', -5, _t('缺少 nosniff'), _t('加入 `X-Content-Type-Options: nosniff`。'));
   else add('nosniff', 'X-Content-Type-Options', 0, 'nosniff', null);
   const xfo = /^(deny|sameorigin)$/i.test((H['x-frame-options'] || '').trim()), faList = (() => { for (const d of String(csp || '').split(';')) { const [n, ...v] = d.trim().split(/\s+/); if (n && n.toLowerCase() === 'frame-ancestors') return v.map((x) => x.toLowerCase()); } return null; })(),
-    fa = !!faList && !faList.some((x) => x === '*' || x === 'http:' || x === 'https:'); // frame-ancestors * lets every site frame the page
+    fa = !!faList && !faList.some((x) => x === '*' || x === 'http:' || x === 'https:' || x === 'http://*' || x === 'https://*'); // frame-ancestors * lets every site frame the page
   if (!xfo && !fa) add('framing', 'X-Frame-Options / frame-ancestors', -20, _t('沒有防止被嵌進別人的 iframe（點擊劫持）'), _t("加入 `X-Frame-Options: DENY`，或 CSP 的 `frame-ancestors 'self'`。"));
   else add('framing', 'X-Frame-Options / frame-ancestors', 0, xfo ? H['x-frame-options'] : 'frame-ancestors', null);
   const rp = (H['referrer-policy'] || '').toLowerCase().split(',').pop().trim();

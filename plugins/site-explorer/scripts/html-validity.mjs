@@ -55,7 +55,7 @@ export function checkHtml(html, { maxTags = 80000 } = {}) {
       { const v = a[2] ?? a[3] ?? a[4] ?? '';
         if (an === 'for' && name === 'label' && v) refs.push(['label for', v.trim()]);
         else if ((an === 'aria-labelledby' || an === 'aria-describedby' || an === 'aria-controls') && v) for (const x of v.trim().split(/\s+/).slice(0, 8)) refs.push([an, x]);
-        else if (an === 'href' && name === 'a' && v.startsWith('#') && v.length > 1 && !/^#(top|!|\/|\?|:~:)/i.test(v)) refs.push(['link #', v.slice(1)]);
+        else if (an === 'href' && name === 'a' && v.startsWith('#') && v.length > 1 && !/^#(top|!|\/|\?)/i.test(v) && v.replace(/:~:.*$/s, '').length > 1) refs.push(['link #', v.slice(1).replace(/:~:.*$/s, '')]);
         else if (an === 'name' && name === 'a' && v) names.add(v); } // <a name="x"> is still a valid #x target in browsers
       if (an === 'id') { const v = a[2] ?? a[3] ?? a[4] ?? ''; if (v) ids.set(v, (ids.get(v) || 0) + 1); }
       if (name === 'meta' && (an === 'charset' || (an === 'http-equiv' && /content-type/i.test(a[2] ?? a[3] ?? a[4] ?? '')))) charsetAt = lt;

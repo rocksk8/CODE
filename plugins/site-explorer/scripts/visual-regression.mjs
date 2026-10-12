@@ -151,7 +151,7 @@ export function renderVisualReviewHtml(vr, { baseDir, siteDir, outDir, url, base
   let budget = 14 * 1024 * 1024;
   const img = (file) => { try { if (!file || !fs.existsSync(file)) return null; const b = fs.readFileSync(file); const enc = Math.ceil(b.length / 3) * 4; if (enc > budget) return null; budget -= enc; return 'data:image/png;base64,' + b.toString('base64'); } catch { return null; } };
   const VPN = { desktop: _t('桌機'), tablet: _t('平板'), mobile: _t('手機'), scenario: _t('情境') };
-  const sq = (v) => (/^[\w:/.@%+=,-]+$/.test(String(v)) ? String(v) : `'${String(v).replace(/'/g, `'\\''`)}'`); // POSIX single-quote quoting: nothing in a URL or path can run as a command
+  const sq = (v) => (/^[\w:/.@%+=,-]+$/.test(String(v)) ? String(v) : process.platform === 'win32' ? JSON.stringify(String(v)) : `'${String(v).replace(/'/g, `'\\''`)}'`); // POSIX single-quote quoting: nothing in a URL or path can run as a command
   const cmd = (items) => `site-explorer explore ${sq(url)} --approve-visual ${sq(items)}${baselineFile ? ` --baseline ${sq(baselineFile)}` : ''}`;
   const keyOf = (r) => (r.viewport === 'scenario' ? `scenario:${r.slug}` : `${r.slug}:${r.viewport}`);
   const changed = vr.rows.filter((r) => r.status !== 'same'), same = vr.rows.length - changed.length;

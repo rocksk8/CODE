@@ -185,7 +185,7 @@ if (checks.some((c) => c.level === 'fail')) {
   rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'techstack.json')); rm(path.join(siteDir, 'tracking-behaviors.json')); rm(path.join(siteDir, 'security.json')); rm(path.join(siteDir, 'figma')); rm(path.join(siteDir, 'scenarios')); rm(path.join(siteDir, 'extractions.json')); rm(path.join(siteDir, 'extractions.csv')); rm(path.join(siteDir, 'security.md')); rm(path.join(siteDir, 'tracking-behaviors.md')); rm(path.join(siteDir, 'performance.json')); rm(path.join(siteDir, 'performance.md')); rm(path.join(siteDir, 'techstack.md')); // a failed re-run must not report the previous run's pages
   if (args.includes('--no-health')) { rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); }
   if (!args.includes('--a11y')) rm(path.join(siteDir, 'a11y.json'));
-  if (!compareFlag) for (const f of ['visual.json', 'visual.md', 'visual-review.html', 'visual-diff', 'drift.md']) rm(path.join(out, f)); // a comparison from an earlier run must not be shown as this run's result
+  if (!compareFlag && !opt('approve-visual', null)) for (const f of ['visual.json', 'visual.md', 'visual-review.html', 'visual-diff', 'drift.md']) rm(path.join(out, f)); // a comparison from an earlier run must not be shown as this run's result
   if (!args.includes('--verify')) rm(path.join(out, 'handoff', 'verify'));
 }
 const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--archive') ? ['--archive'] : []), ...(args.includes('--warc') ? ['--warc'] : []), ...(args.includes('--har') ? ['--har'] : []), ...(opt('scenarios', null) ? ['--scenarios', path.resolve(opt('scenarios'))] : []), ...args.flatMap((a, i) => (a === '--hide' && args[i + 1] ? ['--hide', args[i + 1]] : [])), ...(opt('perf-runs', null) ? ['--perf-runs', opt('perf-runs')] : []), ...(opt('throttle', null) ? ['--throttle', opt('throttle')] : []), ...(opt('extract', null) ? ['--extract', path.resolve(opt('extract', null))] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
@@ -322,10 +322,10 @@ if (approveFlag || compareFlag) {
     const siteJ = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8'));
     const cur = makeBaseline({ tokens, health, url, pages: (siteJ.pages || []).length });
     if (approveFlag) {
-      if (!args.includes('--no-visual')) { // check the visual folder BEFORE touching baseline.json, so a refusal leaves the old baseline whole
+      { // check the visual folder BEFORE touching baseline.json, so a refusal leaves the old baseline whole
         const { removeVisualBaseline, visualDirFor, countVisualShots } = await import('./visual-regression.mjs'); const vd = visualDirFor(bf);
         removeVisualBaseline(vd, true);
-        if (!countVisualShots(siteDir) && fs.existsSync(vd) && fs.readdirSync(vd).length) throw new Error(_t('這次沒有任何整頁截圖，不會用空的內容覆蓋原有的視覺基準（不需要視覺基準的話可加 --no-visual）。'));
+        if (!args.includes('--no-visual') && !countVisualShots(siteDir) && fs.existsSync(vd) && fs.readdirSync(vd).length) throw new Error(_t('這次沒有任何整頁截圖，不會用空的內容覆蓋原有的視覺基準（不需要視覺基準的話可加 --no-visual）。'));
       }
       fs.mkdirSync(path.dirname(bf), { recursive: true }); fs.writeFileSync(bf, JSON.stringify(cur, null, 2) + '\n'); console.log(_t`✔ 已把這次的結果存成基準：${bf}`);
       if (args.includes('--no-visual')) { const { removeVisualBaseline, visualDirFor } = await import('./visual-regression.mjs'); removeVisualBaseline(visualDirFor(bf)); } // a stale visual baseline must not outlive the approval it belonged to

@@ -176,7 +176,7 @@ export function parseTechRules(text) {
 }
 const VM_CTX = vm.createContext({ p: '', inputs: [] }); // one sandbox for every rule and page (creating a context per call was the slow part)
 const VM_SCRIPT = new vm.Script('(() => { const re = new RegExp(p, "i"); for (const x of inputs) { const m = re.exec(x); if (m) return [x, m[1] || null]; } return null; })()');
-const vmFirst = (pattern, inputs) => { try { VM_CTX.p = pattern; VM_CTX.inputs = inputs.slice(0, 400).map((x) => String(x).slice(0, 400)); const r = VM_SCRIPT.runInContext(VM_CTX, { timeout: 300 }); return r ? [String(r[0]), r[1] == null ? null : String(r[1])] : null; } catch { return null; } };
+const vmFirst = (pattern, inputs) => { try { VM_CTX.p = pattern; VM_CTX.inputs = inputs.slice(0, 3000).map((x) => String(x).slice(0, 400)); const r = VM_SCRIPT.runInContext(VM_CTX, { timeout: 300 }); return r ? [String(r[0]), r[1] == null ? null : String(r[1])] : null; } catch { return null; } };
 
 /** pages = page.json objects. `tech` = result of extractTechInPage per page may be stored as page.tech. Pure and offline. */
 export function detectTech(pages, { extraRules = [] } = {}) {

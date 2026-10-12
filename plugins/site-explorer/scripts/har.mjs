@@ -6,20 +6,28 @@ import { CRED_ENV } from './auth-state.mjs';
 
 const MAX_ENTRIES = 3000;
 const SECRET_HEADER = /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|x-auth-token|x-csrf-token|x-xsrf-token)$|token|secret|api-?key|password|session/i;
-const SECRET_PARAM = /token|secret|key|auth|sig(nature)?|password|passwd|session|code|jwt|bearer/i;
+const SECRET_PARAM = /token|secret|key|auth|sig|password|passwd|pwd|pass|sess|sid|code|jwt|bearer|credential|otp|ticket|state|nonce|x-amz|csrf|xsrf/i;
+const URL_HEADER = /^(referer|location|content-location|origin|link|refresh)$/i;
 const STATUS_TEXT = { 200: 'OK', 201: 'Created', 204: 'No Content', 301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified', 307: 'Temporary Redirect', 308: 'Permanent Redirect', 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 410: 'Gone', 429: 'Too Many Requests', 500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable' };
 
 function customHeaderNames(env = process.env) { try { return new Set(Object.keys(JSON.parse(env[CRED_ENV.headers] || '{}')).map((k) => k.toLowerCase())); } catch { return new Set(); } }
 
 /** A URL with the values of secret-looking query parameters replaced. */
-export function redactUrl(u) {
-  try { const x = new URL(u); let hit = false; for (const k of [...x.searchParams.keys()]) if (SECRET_PARAM.test(k)) { x.searchParams.set(k, '[redacted]'); hit = true; } x.username = ''; x.password = ''; x.hash = ''; return hit ? x.href.replace(/%5Bredacted%5D/g, '[redacted]') : x.href; } catch { return clean(String(u), 300); }
+export function redactUrl(u, depth = 0) {
+  try {
+    const x = new URL(u); let hit = false;
+    for (const [k, v] of [...x.searchParams]) { if (SECRET_PARAM.test(k)) { x.searchParams.set(k, '[redacted]'); hit = true; } else if (depth < 2 && /^https?:\/\//i.test(v)) { const r = redactUrl(v, depth + 1); if (r !== v) { x.searchParams.set(k, r); hit = true; } } } // ?next=https://x/?token=...
+    x.username = ''; x.password = ''; x.hash = ''; return hit ? x.href.replace(/%5Bredacted%5D/g, '[redacted]') : x.href;
+  } catch { return clean(String(u), 300).replace(/([?&][^=&]*(token|secret|key|auth|sig|pass|sess|code)[^=&]*=)[^&\s]*/gi, '$1[redacted]'); }
 }
-export function redactHeaders(h, extra = new Set()) { return Object.entries(h || {}).slice(0, 80).map(([name, value]) => ({ name: clean(name, 60), value: SECRET_HEADER.test(name) || extra.has(name.toLowerCase()) ? '[redacted]' : clean(String(value), 500) })); }
+const relUrl = (m) => { try { const x = new URL(redactUrl(new URL(m, 'http://r.invalid').href)); return x.pathname + x.search; } catch { return m; } };
+const redactValue = (name, value) => (URL_HEADER.test(name) ? String(value).split(/\s+/).map((tok) => (/^https?:\/\//i.test(tok) ? redactUrl(tok) : /^\//.test(tok) ? relUrl(tok) : tok)).join(' ').replace(/<([^>]+)>/g, (m, u) => '<' + (/^https?:/i.test(u) ? redactUrl(u) : relUrl(u)) + '>') : String(value));
+export function redactHeaders(h, extra = new Set()) { return Object.entries(h || {}).slice(0, 80).map(([name, value]) => ({ name: clean(name, 60), value: SECRET_HEADER.test(name) || extra.has(name.toLowerCase()) ? '[redacted]' : clean(redactValue(name, value), 500) })); }
 
 export class HarRecorder {
   constructor() { this.byPage = new Map(); this.secret = customHeaderNames(); }
   attach(ctx) {
+    ctx.on('page', (pg) => pg.on('close', () => this.byPage.delete(pg))); // pages nobody takes (extra performance-run pages, popups) are forgotten when they close
     const add = async (req, failed) => {
       try {
         const page = req.frame()?.page(); if (!page) return;

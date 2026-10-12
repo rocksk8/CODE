@@ -137,3 +137,58 @@ test('explore --har writes pages/<slug>/network.har with real entries and no sec
     for (const f of ['visual.json', 'visual.md', 'visual-review.html', 'visual-diff']) assert.ok(!fs.existsSync(path.join(dir, f)), 'stale ' + f + ' was left');
   } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ---- round 8
+test('credential route: no cookie jar for other origins, the page keeps its own Authorization, other origins never get the basic-auth header', async (t) => {
+  if (!(await hasBrowser())) return t.skip('no browser');
+  const seenB = [], seenA = [];
+  const b = http.createServer((q, r) => { seenB.push({ cookie: q.headers.cookie, auth: q.headers.authorization, key: q.headers['x-api-key'] }); r.setHeader('access-control-allow-origin', '*'); r.setHeader('access-control-allow-headers', '*'); r.end('b'); }); await new Promise((r) => b.listen(0, '127.0.0.1', r));
+  const a = http.createServer((q, r) => { seenA.push({ url: q.url, auth: q.headers.authorization }); if (q.url === '/auth') return r.end('x'); r.setHeader('content-type', 'text/html'); r.end(`<html><body><script>Promise.all([fetch('http://localhost:${b.address().port}/x',{credentials:'omit'}),fetch('/auth',{headers:{Authorization:'Bearer mine'}})]).then(()=>document.title='done')</script></body></html>`); }); await new Promise((r) => a.listen(0, '127.0.0.1', r));
+  const { launchBrowser } = await import('../scripts/launch.mjs'); const br = await launchBrowser(); const url = `http://127.0.0.1:${a.address().port}/`;
+  try {
+    const env = { [CRED_ENV.headers]: JSON.stringify({ 'X-Api-Key': 'SECRETKEY' }), [CRED_ENV.basic]: 'u:p' };
+    const ctx = await br.newContext(); await ctx.addCookies([{ name: 'bsess', value: 'BSECRET', domain: 'localhost', path: '/' }]);
+    await applyCredentialRoutes(ctx, url, env); const pg = await ctx.newPage(); await pg.goto(url); await pg.waitForFunction(() => document.title === 'done', null, { timeout: 8000 });
+    for (const h of seenB) { assert.ok(!/BSECRET/.test(h.cookie || ''), 'cookie jar went to another origin'); assert.ok(!h.auth && !h.key, 'a secret went to another origin: ' + JSON.stringify(h)); }
+    assert.equal(seenA.find((x) => x.url === '/auth').auth, 'Bearer mine', "the page's own Authorization header was replaced");
+    assert.match(seenA.find((x) => x.url === '/').auth || '', /^Basic /, 'the start page still gets basic auth');
+  } finally { await br.close(); a.close(); b.close(); }
+});
+
+test('HAR: Referer / Location / nested URLs and more secret parameter names are redacted', () => {
+  assert.match(redactUrl('https://x.test/a?next=https%3A%2F%2Fy.test%2F%3Ftoken%3DNESTED&q=1'), /\[redacted\]/); assert.ok(!/NESTED/.test(redactUrl('https://x.test/a?next=https%3A%2F%2Fy.test%2F%3Ftoken%3DNESTED&q=1')));
+  for (const k of ['sid', 'phpsessid', 'X-Amz-Credential', 'pwd', 'otp', 'ticket', 'state', 'access_token', 'signature']) assert.match(redactUrl(`https://x.test/?${k}=VAL123`), /redacted/, k);
+  const hs = Object.fromEntries(redactHeaders({ Referer: 'http://a.test/?token=REF&q=1#f', Location: '/img?code=LOC&x=1', Accept: 'x' }).map((h) => [h.name, h.value]));
+  assert.ok(!/REF|#f/.test(hs.Referer) && /redacted/.test(hs.Referer)); assert.equal(hs.Accept, 'x');
+  assert.ok(!/LOC/.test(hs.Location));
+});
+
+test('html validity: a text fragment after an id is not a broken link', () => {
+  const page = (b) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>t</title></head><body>${b}</body></html>`;
+  assert.equal(checkHtml(page('<h2 id="intro">x</h2><a href="#intro:~:text=hi">x</a>')).filter((x) => x.id === 'broken-fragment').length, 0);
+});
+
+test('security grade: several CSP policies grade the best; frame-ancestors https://* is not protection; a small gap alone does not turn the card yellow', () => {
+  const base = { 'strict-transport-security': 'max-age=63072000; includeSubDomains; preload', 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer' };
+  const two = gradeHeaders({ ...base, 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; object-src 'none'; base-uri 'self', script-src 'unsafe-inline' https://a.test" }, { https: true });
+  assert.ok(two.tests.find((x) => x.id === 'csp').points > 0, 'the strict policy decides');
+  const fa = gradeHeaders({ 'content-security-policy': "default-src 'self'; frame-ancestors https://*", 'strict-transport-security': 'max-age=63072000' }, { https: true });
+  assert.ok(fa.tests.find((x) => x.id === 'framing').points < 0);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'se-v8-'));
+  try { fs.writeFileSync(path.join(dir, 'security.json'), JSON.stringify({ headers: { grade: 'A', tests: [{ name: 'nosniff', points: -5 }] }, tls: null })); assert.equal(computeVerdicts(dir).find((v) => v.id === 'security').status, 'ok'); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('--approve-visual keeps the review files so the other changes can still be approved; custom tech rules see late URLs', async (t) => {
+  const urls = Array.from({ length: 450 }, (_, i) => `https://cdn.test/${i}.js`).concat(['https://late.test/target.js']);
+  assert.ok(detectTech([{ status: 200, url: 'https://s.test/', editing: { scripts: urls } }], { extraRules: [{ id: 'late', name: 'Late', category: 'cms', url: 'late\\.test/target' }] }).items.some((x) => x.id === 'late'));
+  if (!(await hasBrowser())) return t.skip('no browser');
+  const site = http.createServer((q, r) => { if (q.url === '/robots.txt') { r.statusCode = 404; return r.end(); } r.setHeader('content-type', 'text/html; charset=utf-8'); r.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>T</title><meta name="description" content="A page for the approve test."></head><body><h1>Hello</h1><p>${'Some words. '.repeat(20)}</p></body></html>`); });
+  await new Promise((r) => site.listen(0, '127.0.0.1', r)); const url = `http://127.0.0.1:${site.address().port}/`; const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'se-av-'));
+  const go = (extra) => new Promise((resolve) => { const p = spawn(process.execPath, [bin, 'explore', url, ...extra, '--no-open', '--no-motion', '--no-handoff', '--no-link-check', '--no-db', '--max-pages', '1', '--lang', 'en', '--out', dir], { env: process.env }); let out = ''; p.stdout.on('data', (d) => (out += d)); p.stderr.on('data', (d) => (out += d)); p.on('close', (status) => resolve({ status, out })); });
+  try {
+    assert.equal((await go(['--approve'])).status, 0);
+    for (const f of ['visual.json', 'visual.md', 'visual-review.html']) fs.writeFileSync(path.join(dir, f), 'keep'); fs.mkdirSync(path.join(dir, 'visual-diff'), { recursive: true });
+    await go(['--approve-visual', 'nonexistent:mobile']);
+    for (const f of ['visual.json', 'visual.md', 'visual-review.html', 'visual-diff']) assert.ok(fs.existsSync(path.join(dir, f)), f + ' was deleted by --approve-visual');
+  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});

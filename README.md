@@ -265,11 +265,11 @@ AI 只能讀文字和圖片。所以：
 
 **畫面情境與審核**：`--scenarios 情境.json` 定義「先點、懸停、捲動、打字…再截圖」的畫面（例如選單展開、下拉選單），`--hide '.clock'` 隱藏一直在變的區塊；它們和整頁截圖一起存進基準、一起比對。比對有差異時產生 `visual-review.html`——逐張拖曳滑桿比較改版前後，並附上「核准這張」的指令；`--approve-visual home:mobile,scenario:menu-open`（或 `all`）只把指定的截圖更新為新基準。情境只在網站自己的來源上執行、所有非 GET 請求都會被擋下、不能按 Enter。
 
-**HAR 網路紀錄**：`--har` 每頁另存 `network.har`（HAR 1.2：每個請求的網址、狀態、大小與時間，可用瀏覽器開發者工具的 Network 面板或任何 HAR 檢視器開啟）。不含回應內容與 Cookie；Authorization、Cookie、API 金鑰、`--header` 給的標頭，以及網址裡 token／key／session 之類的參數值都會換成 `[redacted]`；登入狀態的探索不錄。
+**HAR 網路紀錄**：`--har` 每頁另存 `network.har`（HAR 1.2：每個請求的網址、狀態、大小與時間，可用瀏覽器開發者工具的 Network 面板或任何 HAR 檢視器開啟）。不含回應內容與 Cookie；Authorization、Cookie、API 金鑰、`--header` 給的標頭，以及網址裡名稱看起來像密鑰的參數值（token、key、session、sig、code 等；也包含 Referer 與 Location 標頭裡的網址）都會換成 `[redacted]`；登入狀態的探索不錄。
 
 **WARC 與 Figma**：`--warc` 每頁另存 `archive.warc.gz`（WARC 1.1，不含 Cookie 與驗證標頭，登入狀態不錄；已用獨立的 warcio 讀取驗證，尚未用 ReplayWeb.page 實際重播過）。Figma 資料夾除了 SVG，還有 `*.figma.json` 與 `plugin/`（一個小型 Figma 外掛）：在 Figma 桌面版匯入 `plugin/manifest.json`，選 `*.figma.json`，每頁會變成帶 auto layout 的巢狀 Frame、完整文字與圖片。這個外掛只在模擬的 Figma 介面上測過，還沒有在真正的 Figma 裡驗證。
 
-**登入的其他方式**：`--cookie-file`（Playwright 登入狀態檔、cookie 陣列 JSON、cookies.txt，或「a=1; b=2」一行）、`--header-file 檔.json`（例如 Authorization；只會送給起始網站，不會送給第三方）、`--basic-auth-file`（第一行寫 `使用者:密碼`，或設環境變數 `SITE_EXPLORER_BASIC_AUTH`）。機密不要直接寫在指令列（會留在 shell 歷史）；這些值不會寫進任何輸出檔案，cookie 只存在一個權限 600 的暫存檔，結束就刪除。
+**登入的其他方式**：`--cookie-file`（Playwright 登入狀態檔、cookie 陣列 JSON、cookies.txt，或「a=1; b=2」一行）、`--header-file 檔.json`（例如 Authorization；只會送給起始網站，不會送給第三方）、`--basic-auth-file`（第一行寫 `使用者:密碼`，或設環境變數 `SITE_EXPLORER_BASIC_AUTH`）。機密不要直接寫在指令列（會留在 shell 歷史）；這些值不會寫進任何輸出檔案，cookie 只存在一個權限 600 的暫存檔，結束就刪除。使用 `--header` 時，每個請求會先由工具取回再交給頁面（為了讓轉址後的請求不帶密鑰），所以即時串流（EventSource）與媒體不經過這一層，大型下載會先整個載入記憶體；其他網站的請求不帶你的 cookie。
 
 **Firefox／WebKit（實驗性）**：先執行 `site-explorer setup --browser firefox`（或 `webkit`），再用 `--browser firefox` 探索。核心功能（頁面、設計 token、健檢、截圖、儀表板）由 CI 的 `engines` 工作流程在 Firefox 與 WebKit 上實際跑測試；3D／動畫擷取與行動網路模擬仍只支援 Chromium。Windows 與 macOS 由 CI 的 `platforms` 工作流程實際執行同一套測試。
 
