@@ -45,7 +45,7 @@ const env = () => ({ ...process.env, SITE_EXPLORER_DB: path.join(tmp, 'test.db')
 const node = (script_, args) => new Promise((resolve) => {
   const p = spawn(process.execPath, [script(script_), ...args], { env: env() });
   let stdout = '', stderr = '';
-  const timer = setTimeout(() => p.kill(), 240000);
+  const timer = setTimeout(() => p.kill(), process.platform === "win32" ? 900000 : 240000);
   p.stdout.on('data', (d) => (stdout += d)); p.stderr.on('data', (d) => (stderr += d));
   p.on('close', (status) => { clearTimeout(timer); resolve({ status, stdout, stderr }); });
 });
