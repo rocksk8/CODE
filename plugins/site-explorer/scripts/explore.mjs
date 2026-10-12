@@ -236,13 +236,15 @@ if (!args.includes('--no-motion') && crawlOk) {
   let pg = []; try { pg = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []; } catch {}
   const extra = pg.filter((p, i) => i > 0 && p.status === 200).slice(0, nPages - 1); // pages[0] is the start page after redirects (naked host -> www)
   if (pg[0] && entries[0]) entries[0].url = pg[0].url;
-  const PAGE_LIMIT_MS = 240000, workers = Math.max(1, Math.min(2, (os.cpus() || []).length >> 1)); let done = 0;
+  const PAGE_LIMIT_MS = 240000, workers = process.platform === 'win32' ? 1 : Math.max(1, Math.min(2, (os.cpus() || []).length >> 1)); let done = 0; // (Windows: one at a time; two software-rendered browsers there starve each other)
   const captureOne = async (p) => {
     const dest = path.join(motionRoot, '_pages', p.slug), t0 = Date.now();
     console.log(_t`   3D／動畫 [${++done}/${extra.length}]：${p.url}`);
-    const ok = await new Promise((resolve) => { const c = spawn(process.execPath, [path.join(here, 'capture-3d.mjs'), p.url, '--out', dest, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])], { env: process.env, stdio: 'ignore' }); const stopW = watchChild(c, { limitMs: PAGE_LIMIT_MS, lang: LANG, quietMs: 1e9, notify: (k, t) => { console.log('     ' + t); if (k === 'timeout' || k === 'memory') notices.push(t); } }); c.on('close', (code) => { stopW(); resolve(code === 0); }); c.on('error', () => { stopW(); resolve(false); }); });
+    fs.mkdirSync(dest, { recursive: true }); const logFile = path.join(dest, 'capture.log'), logFd = fs.openSync(logFile, 'a'); // what the capture says is kept: a page that fails shows its last lines
+    const ok = await new Promise((resolve) => { const c = spawn(process.execPath, [path.join(here, 'capture-3d.mjs'), p.url, '--out', dest, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])], { env: process.env, stdio: ['ignore', logFd, logFd], windowsHide: true }); const stopW = watchChild(c, { limitMs: PAGE_LIMIT_MS, lang: LANG, quietMs: 1e9, notify: (k, t) => { console.log('     ' + t); if (k === 'timeout' || k === 'memory') notices.push(t); } }); c.on('close', (code) => { stopW(); resolve(code === 0); }); c.on('error', () => { stopW(); resolve(false); }); });
+    try { fs.closeSync(logFd); } catch {}
     const hostDir = path.join(dest, new URL(p.url).host.replace(/[^a-z0-9.-]/gi, '_'));
-    if (ok) { addEntry(p.url, p.slug, p.title, hostDir); console.log(`     ✔ ${p.slug} ${((Date.now() - t0) / 1000).toFixed(1)}s`); } else console.log(_t`     ✖ 略過 ${p.slug}（失敗、逾時或被 robots.txt 擋住）`);
+    if (ok) { addEntry(p.url, p.slug, p.title, hostDir); console.log(`     ✔ ${p.slug} ${((Date.now() - t0) / 1000).toFixed(1)}s`); } else { console.log(_t`     ✖ 略過 ${p.slug}（失敗、逾時或被 robots.txt 擋住）`); try { const tail = fs.readFileSync(logFile, 'utf8').split('\n').map(stripControl).filter((l) => l.trim()).slice(-4); if (tail.length) console.log(tail.map((l) => '        | ' + l.slice(0, 160)).join('\n')); } catch {} }
   };
   { const queue = [...extra]; await Promise.all(Array.from({ length: workers }, async () => { while (queue.length) await captureOne(queue.shift()); })); }
   entries.sort((a, b) => (a.slug === '(start)' ? -1 : b.slug === '(start)' ? 1 : pg.findIndex((x) => x.slug === a.slug) - pg.findIndex((x) => x.slug === b.slug))); // crawl order, whatever finished first
