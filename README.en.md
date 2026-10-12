@@ -252,6 +252,10 @@ The report opens with a **verdict** (pass / conditional / fail). For automation:
 
 **Whole-page visual regression.** `--approve` also stores the desktop / tablet / mobile full-page screenshots in `<baseline name>-visual/` next to the baseline file; `--compare` compares them pixel by pixel (a pixel differs when a colour channel is off by more than 16/255), allows `--visual-threshold` (default 0.5%) of pixels to differ per screenshot, and otherwise exits with code 4, writing `visual.md` and `visual-diff/*.png` (changes in red). `--no-visual` skips it. This compares whole screens, so dynamic content (carousels, ads, clocks) causes differences — tune the threshold.
 
+**Page archive.** `--archive` saves `pages/<page>/archive.html` for every page — a single HTML file that opens offline (CSS and images embedded up to a size cap; scripts, iframes and event attributes removed and a Content-Security-Policy added), a simplified SingleFile. Off by default because the files are large; resources over the cap stay as URLs (they will not load offline).
+
+**Security header and TLS grade.** Every exploration writes `security.md/json` — a Mozilla-Observatory / SSL-Labs-style configuration check: CSP strength, HSTS, nosniff, framing protection, Referrer-Policy, login-cookie flags, subresource integrity of external scripts, plus which TLS versions the server accepts and the certificate's validity / domain / trust / key size, each with its score effect and how to fix it, graded A+ to F. It is a configuration check on public information, not a vulnerability scan; the grade is for comparing runs, not a certification.
+
 **Verify masks.** `verify` accepts `--ignore <selector>` (repeatable) to exclude dynamic regions (ads, clocks, carousels); elements marked `data-verify-ignore` are excluded too; `--min-section <0-100>` fails the run when any single section scores below the threshold.
 
 **Per-page Markdown.** The readable text of every page is written in document order to `content/<page>.md` (plus `INDEX.md`); links are written as `text (url)`, so the files never contain a clickable or tracking element.

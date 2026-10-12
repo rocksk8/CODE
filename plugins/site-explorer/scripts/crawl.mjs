@@ -6,6 +6,7 @@ import { findUrl, findUrls, intOpt, sameSite, loadRobots, CRAWLER_UA_TOKEN, norm
 import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
+import { archiveInPage } from './page-archive.mjs';
 import { extractMarkdownInPage, renderPageMarkdown } from './page-markdown.mjs';
 import { extractTechInPage } from './techstack.mjs';
 import { fingerprintHooks, collectBehaviors } from './tracking-behaviors.mjs';
@@ -486,6 +487,9 @@ while (pages.length < maxPages) {
     }
     const dir = path.join(outDir, 'pages', slugOf(url)); fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'page.html'), await page.content());
+    if (args.includes('--archive')) { // opt-in single-file offline copy (rendered DOM, CSS and images inlined, scripts removed)
+      try { const a = await page.evaluate(archiveInPage, { maxBytes: 12e6, maxOne: 2e6, pageUrl: page.url(), when: new Date().toISOString().slice(0, 10) }); fs.writeFileSync(path.join(dir, 'archive.html'), a.html); data.archive = { file: 'archive.html', bytes: a.bytes, embedded: a.embedded, linked: a.linked }; } catch (e) { data.archive = { error: String(e.message).split('\n')[0].slice(0, 100) }; }
+    }
     data.responsive = {};
     const homeUrl = page.url(); // some sites redirect when the window is resized (e.g. to an m. site): measurements taken there are not this page's
     const jumped = async (name) => { if (page.url() === homeUrl) return false; data.responsiveSkipped = _t`頁面在視窗縮到「${name}」寬度時自己跳轉到別的網址，手機／平板的量測與截圖略過`; delete data.responsive[name]; await page.setViewportSize({ width: 1440, height: 900 }).catch(() => {}); await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {}); return true; };

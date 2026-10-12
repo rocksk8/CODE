@@ -41,6 +41,7 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
   --headed             顯示瀏覽器視窗（可親手點「進入」；對防機器人／整頁 3D 網站較有效）
   --open | --no-open   完成後是否自動開啟儀表板  --no-standalone  儀表板不內嵌圖片
   --approve            把這次的設計 token 與健檢結果存成基準（baseline.json；可用 --baseline <檔案> 指定位置）
+  --archive            每頁另存一個離線可開的單一 HTML（archive.html：CSS 與圖片內嵌、移除腳本；檔案較大）
   --visual-threshold P 整頁畫面比對：每張截圖容許 P% 的像素不同（預設 0.5）；--no-visual 不存也不比整頁畫面
   --compare            與基準比較，偏移超過容許範圍就以結束代碼 4 結束（--max-drop 5 容許掉幾分；--fail-on-new high 出現這個等級以上的新問題就失敗）
   --budget f.json      效能預算（例如 {"totalKB":1500,"lcpMs":{"max":2500,"level":"warn"}}）；超標的項目等級是 fail 時以結束代碼 4 結束
@@ -48,7 +49,7 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
 結束代碼：0 成功；1 失敗或參數錯誤；4 健檢未達 --fail-on 門檻`;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 { // a misspelled flag must fail loudly: "--fial-on high" silently turning a CI gate off is worse than an error
-  const KNOWN = new Set(['--a11y', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
+  const KNOWN = new Set(['--a11y', '--archive', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
   const unknown = args.filter((a) => a.startsWith('--') && !KNOWN.has(a) && !/^--lang=/.test(a));
   if (unknown.length) { const near = (u) => [...KNOWN].find((k) => k.length > 3 && (k.startsWith(u) || u.startsWith(k) || [...u].filter((c) => k.includes(c)).length >= k.length - 2 && Math.abs(k.length - u.length) <= 2)); console.error(_t`不認得的選項：${unknown.join(' ')}${near(unknown[0]) ? _t`（是不是 ${near(unknown[0])}？）` : ''}\n執行 site-explorer explore --help 看全部選項。`); process.exit(1); }
   if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
@@ -89,7 +90,7 @@ const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
 const siteDir = path.join(siteRoot, host), motionDir = path.join(motionRoot, host);
 const steps = [];
-const total = 10 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
+const total = 11 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
 let n = 0;
 
 let current = null; // the stage that is running: Ctrl-C / SIGTERM (CI timeout, MCP kill) must stop it too, not leave a browser crawling
@@ -118,18 +119,19 @@ if (checks.some((c) => c.level === 'fail')) {
 
 { // results of stages that do not run this time must not be shown as if they were fresh (an old health score, a11y report, verify result or changes.md)
   const rm = (f) => { try { fs.rmSync(f, { recursive: true, force: true }); } catch {} };
-  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'techstack.json')); rm(path.join(siteDir, 'tracking-behaviors.json')); rm(path.join(siteDir, 'tracking-behaviors.md')); rm(path.join(siteDir, 'performance.json')); rm(path.join(siteDir, 'performance.md')); rm(path.join(siteDir, 'techstack.md')); // a failed re-run must not report the previous run's pages
+  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'techstack.json')); rm(path.join(siteDir, 'tracking-behaviors.json')); rm(path.join(siteDir, 'security.json')); rm(path.join(siteDir, 'security.md')); rm(path.join(siteDir, 'tracking-behaviors.md')); rm(path.join(siteDir, 'performance.json')); rm(path.join(siteDir, 'performance.md')); rm(path.join(siteDir, 'techstack.md')); // a failed re-run must not report the previous run's pages
   if (args.includes('--no-health')) { rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); }
   if (!args.includes('--a11y')) rm(path.join(siteDir, 'a11y.json'));
   if (!args.includes('--verify')) rm(path.join(out, 'handoff', 'verify'));
 }
-const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
+const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--archive') ? ['--archive'] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
 const crawlOk = crawlRan && (() => { try { return (JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []).length > 0; } catch { return false; } })(); // a crawl that exits 0 but saved no page is a failure
 if (crawlOk) await run(_t('整理設計包（tokens、Tailwind、W3C）'), 'export-design.mjs', [siteDir]);
 let healthOk = false;
 if (crawlOk && args.includes('--a11y')) await run(_t('無障礙檢查（axe-core）'), 'a11y.mjs', ['--site', siteDir, ...authArgs, ...(args.includes('--max-pages') ? ['--max-pages', String(maxPages)] : [])]);
 if (crawlOk && !args.includes('--no-health')) healthOk = await run(_t('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）'), 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
 if (crawlOk) await run(_t('技術堆疊（CMS、框架、函式庫、主機／CDN）'), 'techstack.mjs', ['--site', siteDir]);
+if (crawlOk) await run(_t('安全標頭與 TLS 評等'), 'security-grade.mjs', ['--site', siteDir]);
 if (crawlOk) await run(_t('追蹤行為（錄製、指紋、輸入外流）'), 'tracking-behaviors.mjs', ['--site', siteDir]);
 if (crawlOk) await run(_t('效能預算與歷次紀錄'), 'perf-budget.mjs', ['--site', siteDir, ...(budgetFile ? ['--budget', path.resolve(budgetFile)] : [])]);
 let motionOk = false;

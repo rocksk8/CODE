@@ -175,7 +175,7 @@ if (motionDir && has(path.join(motionDir, 'pages.json'))) { // other pages' 3D/m
     }
   } catch {}
 }
-copy(path.join(siteDir, 'techstack.md'), path.join(out, 'techstack.md')); copy(path.join(siteDir, 'performance.md'), path.join(out, 'performance.md')); copy(path.join(siteDir, 'tracking-behaviors.md'), path.join(out, 'tracking-behaviors.md'));
+copy(path.join(siteDir, 'techstack.md'), path.join(out, 'techstack.md')); copy(path.join(siteDir, 'performance.md'), path.join(out, 'performance.md')); copy(path.join(siteDir, 'tracking-behaviors.md'), path.join(out, 'tracking-behaviors.md')); copy(path.join(siteDir, 'security.md'), path.join(out, 'security.md'));
 if (health) { copy(path.join(siteDir, 'health.md'), path.join(out, 'health.md')); copy(path.join(siteDir, 'health.json'), path.join(out, 'health.json')); }
 
 // ------------------------------------------------------------------ unknowns: be explicit about what this capture cannot tell you

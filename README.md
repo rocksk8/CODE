@@ -247,6 +247,10 @@ AI 只能讀文字和圖片。所以：
 
 **整頁視覺回歸**：`--approve` 同時把桌機／平板／手機的整頁截圖存到基準檔旁的 `<基準檔名>-visual/`；`--compare` 逐張逐像素比對（任一色版差超過 16/255 算不同），每張容許 `--visual-threshold`（預設 0.5%）的像素不同，超過就以結束代碼 4 結束，寫出 `visual.md` 與 `visual-diff/*.png`（變動處標紅）。`--no-visual` 可略過。這比的是整頁畫面，動態內容（輪播、廣告、時間）會造成差異，請以門檻調整。
 
+**頁面封存**：`--archive` 為每頁另存 `pages/<頁面>/archive.html`——一個離線也打得開的單一 HTML（CSS 與圖片內嵌到大小上限，腳本、iframe、事件屬性全部移除並加上 Content-Security-Policy），像 SingleFile 的簡化版。預設不開，因為檔案較大；超過大小上限的資源會保留為網址（離線時載不出來）。
+
+**安全標頭與 TLS 評等**：每次探索寫出 `security.md/json`——類似 Mozilla Observatory／SSL Labs 的設定檢查：CSP 強度、HSTS、nosniff、防嵌入、Referrer-Policy、登入類 Cookie 旗標、外部腳本的 integrity，以及伺服器接受哪些 TLS 版本、憑證效期／網域／信任／金鑰長度，各項附分數影響與修正方式，給 A+～F 評等。這是公開資訊的設定檢查，不是漏洞掃描；評等用來比較不同次的結果，不是認證。
+
 **驗證遮罩**：`verify` 可用 `--ignore <選擇器>`（可重複）排除動態區域（廣告、時間、輪播），元素加上 `data-verify-ignore` 也會被排除；`--min-section <0-100>` 讓任何單一區塊低於門檻就判定未通過。
 
 **逐頁 Markdown**：每頁的可讀文字依網頁順序輸出成 `content/<頁面>.md`（含 `INDEX.md`）；連結寫成「文字 (網址)」，不會出現可點擊或追蹤用的元素。

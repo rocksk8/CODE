@@ -20,6 +20,7 @@ export function buildSummary({ out, host, steps = [], url = null, fresh = true }
   const tech = rd(path.join(siteDir, 'techstack.json'));
   const perf = rd(path.join(siteDir, 'performance.json'));
   const beh = rd(path.join(siteDir, 'tracking-behaviors.json'));
+  const sec = rd(path.join(siteDir, 'security.json'));
   const has = (f) => fresh && fs.existsSync(f); // after a failed crawl, files from an earlier run are not this run's results
   const raw = {
     schemaVersion: 1, url, host, authenticated: !!site?.authenticated,
@@ -34,6 +35,7 @@ export function buildSummary({ out, host, steps = [], url = null, fresh = true }
     } : null,
     tech: tech ? (tech.items || []).map((x) => ({ id: x.id, name: x.name, category: x.category, version: x.version, confidence: x.confidence })) : null,
     performance: perf ? { medians: perf.medians, budget: perf.budget ? { failed: !!perf.result?.failed, violations: (perf.result?.violations || []).slice(0, 20).map((v) => ({ metric: v.metric, value: v.value, max: v.max, level: v.level })) } : null } : null,
+    security: sec ? { headerGrade: sec.headers?.grade ?? null, headerScore: sec.headers?.score ?? null, tlsGrade: sec.tls?.grade ?? null } : null,
     trackingBehaviors: beh ? { sessionReplay: (beh.replay || []).map((x) => x.name), fingerprinting: (beh.fingerprint || []).map((x) => ({ kind: x.kind, party: x.party })), keystrokeLeaks: (beh.keystroke?.leaks || []).map((x) => x.host) } : null,
     a11y: a11y ? { pagesChecked: a11y.pagesChecked, ruleViolations: a11y.rules.length, byImpact: Object.fromEntries(['critical', 'serious', 'moderate', 'minor'].map((k) => [k, a11y.rules.filter((r) => r.impact === k).length])), top: a11y.rules.slice(0, 5).map((r) => ({ id: r.id, impact: r.impact, help: r.help, pages: r.pages, nodes: r.nodes })) } : null,
     motion: motionPages ? { pages: (motionPages.pages || []).length, elements: (motionPages.pages || []).reduce((n, p) => n + (p.targets || 0), 0) } : null,
