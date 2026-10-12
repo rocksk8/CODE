@@ -35,7 +35,7 @@ const ref = (file, allowEmbed = true) => {
 const readJSON = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const exists = fs.existsSync;
 
-const data = { standalone, embed, generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, health: null, files: [], motionPages: null, exportKit: null, verify: null, verdicts: [], checks: {} };
+const data = { standalone, embed, generatedAt: new Date().toISOString(), site: null, tokens: null, pages: [], motion: null, history: null, health: null, crawlerView: null, files: [], motionPages: null, exportKit: null, verify: null, verdicts: [], checks: {} };
 
 if (siteDir && exists(path.join(siteDir, 'site.json'))) {
   data.site = readJSON(path.join(siteDir, 'site.json'));
@@ -63,6 +63,7 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
     if (exists(fp)) data.files.push({ name: f, href: ref(fp) });
   }
   try { const tc = JSON.parse(fs.readFileSync(path.join(siteDir, 'token-check.json'), 'utf8')); const part = (k) => (tc.checked || []).includes(k) ? { on: tc[k].on, total: tc[k].total, off: (tc[k].off || []).slice(0, 8).map((o) => ({ value: String(o.value), uses: o.uses, nearest: o.nearest ? { name: String(o.nearest.name), delta: o.nearest.delta } : null })) } : null; data.tokenCheck = { failed: !!tc.failed, maxOff: tc.maxOff ?? null, offPct: tc.offPct, colors: part('colors'), radii: part('radii'), fontSizes: part('fontSizes') }; } catch {}
+  try { const cv = JSON.parse(fs.readFileSync(path.join(siteDir, 'crawler-view.json'), 'utf8')); data.crawlerView = { checked: cv.checked, issues: (cv.issues || []).map((i) => ({ id: String(i.id), severity: String(i.severity), title: String(i.title), why: String(i.why || ''), fix: String(i.fix || ''), examples: (i.examples || []).slice(0, 4).map(String) })), pages: (cv.pages || []).map((p) => ({ url: String(p.url), profiles: p.profiles, js: p.js ? { share: p.js.share } : null })) }; } catch {}
   // the newer checks: raw results for their own tabs, plus one plain-language verdict each for the overview
   data.verdicts = computeVerdicts(siteDir, outDir);
   data.topFixes = (() => { try { return readJSON(path.join(siteDir, 'top-fixes.json')); } catch { return []; } })();
@@ -155,7 +156,7 @@ ${read('report.css')}
 <main>
 <div class="pagehead" id="pagehead"><div class="crumb" id="pcrumb"></div><h2 id="ptitle"></h2><p id="pdesc"></p></div>
 <section id="s-overview"></section><section id="s-design"></section><section id="s-layout"></section>
-<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-health"></section><section id="s-security"></section><section id="s-perf"></section><section id="s-privacy"></section><section id="s-tech"></section><section id="s-visual"></section><section id="s-extract"></section><section id="s-history"></section><section id="s-export"></section><section id="s-data"></section><section id="s-about"></section>
+<section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-health"></section><section id="s-crawler"></section><section id="s-security"></section><section id="s-perf"></section><section id="s-privacy"></section><section id="s-tech"></section><section id="s-visual"></section><section id="s-extract"></section><section id="s-history"></section><section id="s-export"></section><section id="s-data"></section><section id="s-about"></section>
 </main><footer class="foot"><img src="${MARK}" alt=""><span>${_t('網站探索報告由 Site Explorer 產生；結果是依公開資訊與實測做的檢查，請由專人複核後再採用。')}</span><span class="sp"></span><span id="foot-date"></span></footer><div class="toast" id="toast"></div>
 <script id="data" type="application/json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>
 <script>window.__EN=${JSON.stringify(enDict).replace(/</g, '\\u003c')}</script>

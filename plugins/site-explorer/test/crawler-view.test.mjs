@@ -69,6 +69,10 @@ test('explore runs the crawler view by default (and --no-crawler-view skips it);
     const siteDir = path.join(dir, 'a', 'site', fs.readdirSync(path.join(dir, 'a', 'site'))[0]);
     const j = JSON.parse(fs.readFileSync(path.join(siteDir, 'crawler-view.json'), 'utf8')); assert.ok(j.issues.some((i) => i.id === 'crawler-js-only'), JSON.stringify(j.issues.map((i) => i.id)));
     assert.match(fs.readFileSync(path.join(dir, 'a', 'dashboard.html'), 'utf8'), /What crawlers see/, 'the overview has a card for it');
+    const { launchBrowser } = await import('../scripts/launch.mjs'); const br = await launchBrowser();
+    try { const pg = await (await br.newContext()).newPage(); const errs = []; pg.on('pageerror', (e) => errs.push(e.message)); await pg.goto('file://' + path.join(dir, 'a', 'dashboard.html'));
+      await pg.locator('#tabs button', { hasText: 'Crawler view' }).click(); assert.ok(await pg.locator('#s-crawler table').isVisible(), 'the tab shows the per-page table'); assert.match(await pg.locator('#s-crawler').textContent(), /JavaScript/); assert.deepEqual(errs, []);
+    } finally { await br.close(); }
     const b = await go(['--no-crawler-view'], 'b'); assert.equal(b.status, 0, b.o);
     const sb = path.join(dir, 'b', 'site', fs.readdirSync(path.join(dir, 'b', 'site'))[0]); assert.ok(!fs.existsSync(path.join(sb, 'crawler-view.json')));
   } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }

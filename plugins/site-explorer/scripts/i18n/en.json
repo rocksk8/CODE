@@ -1474,7 +1474,7 @@
 "<h3 style=\"margin-top:18px\">完整色盤</h3><div class=\"sw\">": "<h3 style=\"margin-top:18px\">Full palette</h3><div class=\"sw\">",
 "中性": "neutral",
 "彩色": "colour",
-"次": "times",
+"次": " times",
 "<div class=\"grid g2\" style=\"margin-top:14px\"><div class=\"card\"><h3>字型階層（實際渲染）</h3>": "<div class=\"grid g2\" style=\"margin-top:14px\"><div class=\"card\"><h3>Type hierarchy (as rendered)</h3>",
 "<p class=\"hint\">標題：": "<p class=\"hint\">Headings: ",
 "・內文：": " · Body: ",
@@ -2649,5 +2649,10 @@
 "步驟": "Step",
 "沒有發現需要立刻處理的問題。": "Nothing that needs immediate attention was found.",
 "結果資料夾": "Results folder",
-"和上次相比": "since last time"
+"和上次相比": "since last time",
+"爬蟲視角": "Crawler view",
+"搜尋引擎與 AI 爬蟲拿到的內容，和訪客在瀏覽器裡看到的有沒有差別。": "Whether search-engine and AI crawlers get the same content as visitors in a browser.",
+"結論": "Conclusion",
+"發現的差異": "Differences found",
+"身分只是名稱，不是這些爬蟲的真實來源位址；會驗證來源的防火牆可能因此給不同回應。": "The identities are only names, not the crawlers' real network addresses; a firewall that verifies the source may answer differently."
 }
