@@ -84,9 +84,9 @@ export async function guardInternal(ctx, startUrl) {
   let startInternal = false; try { startInternal = await resolvesInternal(new URL(startUrl).hostname); } catch {} // a staging name that resolves to a private address is the user's own choice
   if (startInternal) return;
   await ctx.route('**/*', async (route) => {
-    const u = route.request().url(); if (/^(data|blob|about):/.test(u)) return route.continue();
+    const u = route.request().url(); if (/^(data|blob|about):/.test(u)) return route.fallback();
     let host = ''; try { host = new URL(u).hostname; } catch {}
-    return (await resolvesInternal(host)) ? route.abort('blockedbyclient') : route.continue();
+    return (await resolvesInternal(host)) ? route.abort('blockedbyclient') : route.fallback();
   });
   // WebSocket handshakes are not seen by route(): refuse the ones aimed at the user's own machine or LAN
   if (typeof ctx.routeWebSocket === 'function') await ctx.routeWebSocket('**/*', async (ws) => { let host = ''; try { host = new URL(ws.url()).hostname; } catch {} if (await resolvesInternal(host)) await ws.close({ code: 1008 }); else ws.connectToServer(); }).catch(() => {});

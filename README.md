@@ -239,7 +239,7 @@ AI 只能讀文字和圖片。所以：
 
 **本機偏移基準**：`site-explorer explore <網址> --approve` 把這次的設計 token（色彩、字型、間距…）和健檢結果存成基準（預設 `<輸出資料夾>/baseline.json`，可用 `--baseline <檔案>` 指定，方便放進版本控制）；之後 `site-explorer explore <網址> --compare` 會和基準比較，設計 token 有任何變動、健檢分數掉超過 `--max-drop`（預設 5 分），或出現 `--fail-on-new`（預設 high）以上的新問題，就以結束代碼 4 結束，並寫出 `drift.md`。設計 token 是逐項精確比對；想接受新的樣子，確認後再跑一次 `--approve`。
 
-**技術堆疊**：每次探索會寫出 `techstack.md/json`——依據腳本網址、回應標頭、Cookie、generator 標籤與全域變數辨識約 55 種技術（CMS、框架、函式庫、主機／CDN、分析），附證據與信心；不靠外觀猜測。
+**技術堆疊**：每次探索會寫出 `techstack.md/json`——依據腳本網址、回應標頭、Cookie、generator 標籤與全域變數辨識約 120 種技術（可用 `--tech-rules` 加上自己的規則）（CMS、框架、函式庫、主機／CDN、分析），附證據與信心；不靠外觀猜測。
 
 **效能預算與歷次紀錄**：`--budget <檔案.json>`（例：`{"lcpMs": 2500, "totalKB": {"max": 1500, "level": "warn"}}`）。指標有 ttfbMs、fcpMs、lcpMs、loadMs、cls、totalKB、requests、thirdPartyRequests、renderBlockingScripts、domNodes。超標的 `fail` 項目以結束代碼 4 結束；每次結果存進 `<輸出資料夾>/perf-history.json`（最近 60 筆），報告為各站資料夾的 `performance.md/json`。
 
@@ -253,7 +253,7 @@ AI 只能讀文字和圖片。所以：
 
 **CI 輸出（SARIF／JUnit）**：`--sarif <檔案>`、`--junit <檔案>` 把健檢問題、效能預算超標、安全評等扣分、TLS 問題與（有做比對時的）視覺差異輸出成 SARIF 2.1.0（GitHub code scanning 等）與 JUnit XML（Jenkins、GitLab、CircleCI、Azure DevOps）。GitHub Action 每次都會產生 `results.sarif`／`results.xml`，路徑在輸出 `sarif-file`／`junit-file`，可用 `github/codeql-action/upload-sarif` 上傳。
 
-**Figma 匯入檔**：每次探索在 `figma/` 寫出每頁一個圖層化 SVG（真實位置、大小、填色、圓角與文字），拖進 Figma 即可編輯；設計變數用 Tokens Studio 匯入 `design-bundle/tokens.studio.json`。這是依實測元素（最多 240 個）生成的版面草稿，不是逐像素複製：文字只取前 50 字、圖片為灰色佔位。
+**Figma 匯入檔**：每次探索在 `figma/` 寫出每頁一個圖層化 SVG（真實位置、大小、填色、圓角與文字），拖進 Figma 即可編輯；設計變數用 Tokens Studio 匯入 `design-bundle/tokens.studio.json`。這是依實測元素（最多 240 個）生成的版面草稿，不是逐像素複製：文字每段最多取前 200 字、圖片為灰色佔位。
 
 **HTML 有效性**：健檢會檢查伺服器送出的原始 HTML——標籤沒關或順序錯、多餘結束標籤、id／屬性重複、連結或按鈕巢狀、`<p>` 內放區塊元素、清單／表格父元素錯誤、已廢棄元素、缺 doctype、charset 太晚。這是保守的檢查（只報確定有問題的），不是完整的 W3C 驗證器。
 
@@ -265,9 +265,11 @@ AI 只能讀文字和圖片。所以：
 
 **畫面情境與審核**：`--scenarios 情境.json` 定義「先點、懸停、捲動、打字…再截圖」的畫面（例如選單展開、下拉選單），`--hide '.clock'` 隱藏一直在變的區塊；它們和整頁截圖一起存進基準、一起比對。比對有差異時產生 `visual-review.html`——逐張拖曳滑桿比較改版前後，並附上「核准這張」的指令；`--approve-visual home:mobile,scenario:menu-open`（或 `all`）只把指定的截圖更新為新基準。情境只在網站自己的來源上執行、所有非 GET 請求都會被擋下、不能按 Enter。
 
+**HAR 網路紀錄**：`--har` 每頁另存 `network.har`（HAR 1.2：每個請求的網址、狀態、大小與時間，可用瀏覽器開發者工具的 Network 面板或任何 HAR 檢視器開啟）。不含回應內容與 Cookie；Authorization、Cookie、API 金鑰、`--header` 給的標頭，以及網址裡名稱看起來像密鑰的參數值（token、key、session、sig、code 等；也包含 Referer 與 Location 標頭裡的網址）都會換成 `[redacted]`；登入狀態的探索不錄。
+
 **WARC 與 Figma**：`--warc` 每頁另存 `archive.warc.gz`（WARC 1.1，不含 Cookie 與驗證標頭，登入狀態不錄；已用獨立的 warcio 讀取驗證，尚未用 ReplayWeb.page 實際重播過）。Figma 資料夾除了 SVG，還有 `*.figma.json` 與 `plugin/`（一個小型 Figma 外掛）：在 Figma 桌面版匯入 `plugin/manifest.json`，選 `*.figma.json`，每頁會變成帶 auto layout 的巢狀 Frame、完整文字與圖片。這個外掛只在模擬的 Figma 介面上測過，還沒有在真正的 Figma 裡驗證。
 
-**登入的其他方式**：`--cookie-file`（Playwright 登入狀態檔、cookie 陣列 JSON、cookies.txt，或「a=1; b=2」一行）、`--header-file 檔.json`（例如 Authorization；只會送給起始網站，不會送給第三方）、`--basic-auth-file`（第一行寫 `使用者:密碼`，或設環境變數 `SITE_EXPLORER_BASIC_AUTH`）。機密不要直接寫在指令列（會留在 shell 歷史）；這些值不會寫進任何輸出檔案，cookie 只存在一個權限 600 的暫存檔，結束就刪除。
+**登入的其他方式**：`--cookie-file`（Playwright 登入狀態檔、cookie 陣列 JSON、cookies.txt，或「a=1; b=2」一行）、`--header-file 檔.json`（例如 Authorization；只會送給起始網站，不會送給第三方）、`--basic-auth-file`（第一行寫 `使用者:密碼`，或設環境變數 `SITE_EXPLORER_BASIC_AUTH`）。機密不要直接寫在指令列（會留在 shell 歷史）；這些值不會寫進任何輸出檔案，cookie 只存在一個權限 600 的暫存檔，結束就刪除。使用 `--header` 時，每個請求會先由工具取回再交給頁面（為了讓轉址後的請求不帶密鑰），所以即時串流（EventSource）與媒體不經過這一層，大型下載會先整個載入記憶體；其他網站的請求不帶你的 cookie。
 
 **Firefox／WebKit（實驗性）**：先執行 `site-explorer setup --browser firefox`（或 `webkit`），再用 `--browser firefox` 探索。核心功能（頁面、設計 token、健檢、截圖、儀表板）由 CI 的 `engines` 工作流程在 Firefox 與 WebKit 上實際跑測試；3D／動畫擷取與行動網路模擬仍只支援 Chromium。Windows 與 macOS 由 CI 的 `platforms` 工作流程實際執行同一套測試。
 

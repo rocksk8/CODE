@@ -10,6 +10,7 @@ import { parseRules, extractCssInPage, extractRegex, toCsv } from './custom-extr
 import { parseScenarios, runScenarios } from './scenarios.mjs';
 import { checkHtml } from './html-validity.mjs';
 import { WarcRecorder, buildWarc } from './warc.mjs';
+import { HarRecorder, buildHar } from './har.mjs';
 import { archiveInPage } from './page-archive.mjs';
 import { extractMarkdownInPage, renderPageMarkdown } from './page-markdown.mjs';
 import { extractTechInPage } from './techstack.mjs';
@@ -45,7 +46,7 @@ const contentWaitMs = intOpt(args, 'wait', 12000, { min: 0, max: 120000 }); // h
 const shots = !args.includes('--no-screenshots');
 const hideSel = []; for (let k = 0; k < args.length; k++) if (args[k] === '--hide' && args[k + 1]) { if (/^[^{};<>@\\]{1,200}$/.test(args[k + 1])) hideSel.push(args[k + 1]); k++; } // elements that always change (clocks, ads) are hidden in the screenshots
 let scenarioList = null; if (opt('scenarios', null)) { try { scenarioList = parseScenarios(fs.readFileSync(opt('scenarios', null), 'utf8')); } catch (e) { console.error(String(e.message).split('\n')[0]); process.exit(1); } }
-const warcOn = args.includes('--warc');
+const warcOn = args.includes('--warc'), harOn = args.includes('--har');
 const perfRuns = intOpt(args, 'perf-runs', 1, { min: 1, max: 7 }); const throttle = opt('throttle', null) === 'mobile';
 let extractRules = null; if (opt('extract', null)) { try { extractRules = parseRules(fs.readFileSync(opt('extract', null), 'utf8')); } catch (e) { console.error(String(e.message).split('\n')[0]); process.exit(1); } }
 let origin = new URL(startUrl).origin; // follows the first redirect (example.com -> www.example.com)
@@ -385,7 +386,8 @@ let auth = null;
 if (authFile) { try { auth = loadAuthState(authFile); } catch (e) { console.error(e.message); await browser.close(); process.exit(1); } for (const w of auth.warnings) console.error('⚠️  ' + w); console.error(_t('🔐 以登入狀態探索：輸出（截圖、文字、儀表板）可能含個人資料，請勿公開分享。已略過登出、刪除、取消等會改變資料的連結。')); }
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA, ...(auth ? { storageState: auth.file } : {}), ...credContextOptions(startUrl) });
 await applyCredentialRoutes(ctx, startUrl);
-const warc = warcOn && !authFile ? new WarcRecorder() : null; if (warc) warc.attach(ctx); if (warcOn && authFile) console.error(_t('⚠️  --warc 不會錄製登入狀態的探索（回應內容會含個人資料）。'));
+const warc = warcOn && !authFile ? new WarcRecorder() : null; if (warc) warc.attach(ctx);
+const har = harOn && !authFile ? new HarRecorder() : null; if (har) har.attach(ctx); if (harOn && authFile) console.error(_t('⚠️  --har 不會錄製登入狀態的探索（網址與標頭可能含個人資料）。')); if (warcOn && authFile) console.error(_t('⚠️  --warc 不會錄製登入狀態的探索（回應內容會含個人資料）。'));
 await guardInternal(ctx, startUrl);
 await ctx.addInitScript(fingerprintHooks).catch(() => {}); // passive recorders for tracking-behaviors.mjs (canvas / WebGL / audio / font probing) // a public site (or a redirect from it) cannot make the browser read localhost / the LAN
 const stripHash = (u) => { const x = new URL(u); x.hash = ''; return x.href; };
@@ -477,17 +479,17 @@ while (pages.length < maxPages) {
     // --- SEO / indexability signals ---
     data.seo = await page.evaluate(extractSeoInPage).catch((e) => { console.log('   (seo data skipped:', e.message.split('\n')[0] + ')'); return null; });
     if (data.seo?.perf && !auth && (perfRuns > 1 || throttle)) { // repeated (and optionally throttled) cold loads on throwaway pages; the page's numbers become the median of the runs
-      const runs = throttle ? [] : [data.seo.perf];
+      const runs = throttle ? [] : [data.seo.perf]; let throttleApplied = false;
       for (let k = 0; k < Math.max(perfRuns, throttle ? 1 : 2) - (throttle ? 0 : 1); k++) {
         const p2 = await ctx.newPage();
         try {
           if (browser.browserType().name() === 'chromium') { const cdp = await ctx.newCDPSession(p2); await cdp.send('Network.enable'); await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
-          if (throttle) { await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: (1.6 * 1024 * 1024) / 8, uploadThroughput: (750 * 1024) / 8 }); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 }); } }
+          if (throttle) { await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: (1.6 * 1024 * 1024) / 8, uploadThroughput: (750 * 1024) / 8 }); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 }); throttleApplied = true; } }
           await p2.goto(url, { waitUntil: 'load', timeout: throttle ? 60000 : 30000 }); await p2.waitForTimeout(600);
-          const s2 = await p2.evaluate(extractSeoInPage); if (s2?.perf) runs.push(s2.perf);
+          const s2 = await p2.evaluate(extractSeoInPage); if (s2?.perf && (!throttle || throttleApplied)) runs.push(s2.perf);
         } catch {} finally { await p2.close().catch(() => {}); }
       }
-      if (runs.length) { const med = (a) => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; }; const base = runs[0]; const merged = { ...base }; for (const key of ['ttfbMs', 'domContentLoadedMs', 'loadMs', 'fcpMs', 'lcpMs', 'cls', 'tbtMs', 'totalBytes', 'requests']) { const m = med(runs.map((r) => r[key])); if (m != null) merged[key] = m; } data.seo.perf = merged; data.seo.perfRuns = runs.length; data.seo.perfThrottled = throttle; }
+      if (runs.length) { const med = (a) => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[Math.floor((v.length - 1) / 2)] : null; }; const base = runs[0]; const merged = { ...base }; for (const key of ['ttfbMs', 'domContentLoadedMs', 'loadMs', 'fcpMs', 'lcpMs', 'cls', 'tbtMs', 'totalBytes', 'requests']) { const m = med(runs.map((r) => r[key])); if (m != null) merged[key] = m; } data.seo.perf = merged; data.seo.perfRuns = runs.length; data.seo.perfThrottled = throttle; } else if (throttle) data.seo.perfThrottleFailed = true; // the throttled runs all failed: the numbers kept are the unthrottled first load, and the report says so
     }
     if (data.seo) {
       const hops = await redirectHops(resp);
@@ -578,6 +580,7 @@ while (pages.length < maxPages) {
     if (data._markdown) { try { fs.writeFileSync(path.join(dir, 'content.md'), sanitizeDoc(renderPageMarkdown(data, data._markdown, BANNER)) + '\n'); data.contentWords = data._markdown.words; } catch {} }
     delete data._markdown;
     if (warc) { const w = warc.take(page); if (w.records.length) { try { fs.writeFileSync(path.join(dir, 'archive.warc.gz'), buildWarc(w.records, { startUrl: page.url() })); data.warc = { file: 'archive.warc.gz', records: w.records.length, bytes: w.bytes, skipped: w.skipped }; } catch {} } }
+    if (har) { const e = har.take(page); if (e.length) { try { fs.writeFileSync(path.join(dir, 'network.har'), JSON.stringify(buildHar(e, { url: page.url(), title: data.title, loadMs: data.seo?.perf?.loadMs, dclMs: data.seo?.perf?.domContentLoadedMs }), null, 2)); data.har = { file: 'network.har', entries: e.length }; } catch {} } }
     fs.writeFileSync(path.join(dir, 'page.json'), JSON.stringify(data, null, 2));
     data.slug = slugOf(url);
     pages.push(data);
@@ -603,7 +606,7 @@ while (pages.length < maxPages) {
   await page.close().catch(() => {});
 }
 let scenarioResults = null;
-if (scenarioList) { try { scenarioResults = await runScenarios(ctx, startUrl, scenarioList, outDir, { log: (r) => console.log(r.error ? `   ⚠ ${r.name}: ${r.error}` : `   ✔ ${r.name}`) }); } catch (e) { console.log('   (scenarios skipped:', String(e.message).split('\n')[0] + ')'); } }
+if (scenarioList) { try { scenarioResults = await runScenarios(ctx, startUrl, scenarioList, outDir, { log: (r) => { console.log(r.error ? `   ⚠ ${r.name}: ${r.error}` : `   ✔ ${r.name}`); if (r.blockedWrites) console.log(_t`   （情境「${r.name}」拒絕了 ${r.blockedWrites} 個會改資料的請求（POST／PUT／DELETE））`); } }); } catch (e) { console.log('   (scenarios skipped:', String(e.message).split('\n')[0] + ')'); } }
 await browser.close();
 
 

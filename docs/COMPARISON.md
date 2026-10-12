@@ -1,6 +1,6 @@
 # 與同類軟體的差異
 
-查證日期：2026-10-11。對手的資料只取自各專案自己的 GitHub README（連結在文末），沒讀到的就寫「未提及」，不推測；「未提及」只代表那份說明頁沒寫，不代表一定沒有。site-explorer 這一欄只列已實作並有測試的功能。
+查證日期：2026-10-11。對手的資料只取自各專案自己的 GitHub README（連結在文末），沒讀到的就寫「未提及」，不推測；「未提及」只代表那份說明頁沒寫，不代表一定沒有。site-explorer 這一欄只列已實作並有測試的功能；只在模擬環境測過的，欄位裡會註明。
 
 ## 一句話定位
 
@@ -20,7 +20,7 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 | 前後對照與歷史 | `changes.md`、歷史資料庫、Action 的 `max-drop`／`fail-on-new` | 本機 `--compare`／`--approve` 偏移檢查（失敗時結束碼 1）、GitHub Action | 未提及 | 未提及 |
 | GitHub Action | 有（PR 留言、`fail-on`、`min-health`、`max-drop`、`fail-on-new`） | 有（Marketplace，標註 PR） | 未提及 | 未提及 |
 | MCP | 4 個工具（探索、健檢、驗證、讀交接包） | 多個工具（token、偏移、DTCG、DESIGN.md 等） | 有（3 個工具） | 沒有（README 說明不維護 MCP） |
-| 登入後頁面 | `login` 手動登入一次，之後用 storage state；輸出不含 Cookie 值，也不寫入共用資料庫 | `--cookie`、`--cookie-file`、`--basic-auth`、`--header`、互動式 `--login` | 否（公開網站） | 未提及 |
+| 登入後頁面 | `login` 手動登入一次用 storage state，或 `--cookie-file`、`--header`／`--header-file`、`--basic-auth-file`（只送到起始網站、轉址到別站時不帶、不寫入任何輸出；只用本機測試站驗證過，沒有在真實網站試過）；輸出不含 Cookie 值，也不寫入共用資料庫 | `--cookie`、`--cookie-file`、`--basic-auth`、`--header`、互動式 `--login` | 否（公開網站） | 未提及 |
 | 給 AI 的交接包與可執行 starter | 有（START-HERE、可直接貼的提示、starter 頁面骨架、規格） | 未提及 | 未提及 | 「rebuild evidence pack」（證據包），未提及可執行 starter |
 | 重建驗證（重建結果對照原站逐區塊評分，附差異圖） | 有（`verify`，衡量版面：高度、明暗結構、顏色） | 未提及 | 未提及 | 未提及 |
 | React／Vue／Astro 專案與 shadcn 主題 | 有（從 starter 轉出） | 只有 shadcn 主題 | 否 | 否 |
@@ -32,16 +32,16 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 
 | 能力 | site-explorer | 相鄰工具（README 自述） |
 |---|---|---|
-| 技術堆疊偵測 | `techstack.md/json`：約 55 種技術，依腳本網址、回應標頭、Cookie、generator、全域變數，附證據與信心 | Wappalyzer（HTTPArchive 分支）：以 HTML、JS 變數、標頭、Cookie、DNS、meta、腳本網址比對指紋資料庫；我們的規則表小得多，沒有 DNS 比對 |
-| 效能預算與歷次紀錄 | `--budget`（ttfb、fcp、lcp、load、cls、總 KB、請求數、第三方請求、阻擋渲染腳本、DOM 節點）＋ `perf-history.json`（最近 60 筆） | Lighthouse CI：斷言、預算、伺服器儀表板與差異介面、多次執行降低變異；我們是 Playwright 實測的實驗室數據，沒有 Lighthouse 分數、也沒有儀表板伺服器 |
+| 技術堆疊偵測 | `techstack.md/json`：約 120 種技術（另可用 `--tech-rules` 加自己的規則），依腳本網址、回應標頭、Cookie、generator、全域變數，附證據與信心 | Wappalyzer（HTTPArchive 分支）：以 HTML、JS 變數、標頭、Cookie、DNS、meta、腳本網址比對指紋資料庫；我們的規則表仍小得多，沒有 DNS 比對 |
+| 效能預算與歷次紀錄 | `--budget`（ttfb、fcp、lcp、tbt、load、cls、總 KB、請求數、第三方請求、阻擋渲染腳本、DOM 節點）＋ `perf-history.json`（最近 60 筆）；`--perf-runs` 多次取中位數、`--throttle mobile` 模擬行動網路與 4 倍慢的 CPU（只在 Chromium） | Lighthouse CI：斷言、預算、伺服器儀表板與差異介面、多次執行降低變異；我們是 Playwright 實測的實驗室數據，沒有 Lighthouse 分數、也沒有儀表板伺服器；節流是 Chromium 的 CDP 設定，不等於 Lighthouse 的模擬節流 |
 | `verify` 區域遮罩與門檻 | `--ignore <選擇器>`、`data-verify-ignore`、`--min-section` | BackstopJS、Lost Pixel 有遮罩與敏感度門檻；我們的遮罩只用在 `verify` 的逐區塊比對 |
 | 指紋、錄製與輸入外流偵測 | `tracking-behaviors.md/json`：canvas／WebGL／音訊指紋、字型探測、11 種錄製／熱點圖服務、輸入文字是否送往其他網站（探針不送出表單） | Blacklight collector（GPL-3.0）：canvas／字型指紋、key logging、session recorder 等，另有事件與 HAR；我們是獨立實作，偵測面較少，也沒有 HAR |
-| 整頁視覺回歸 | `--approve`／`--compare` 連同桌機、平板、手機整頁截圖逐像素比對，門檻與差異圖，結束碼 4 | BackstopJS：情境腳本（點擊、懸停、Cookie）、等待條件、Docker 渲染、HTML 報告與核准流程；我們沒有情境腳本，也沒有互動式核准介面 |
-| 頁面封存 | `--archive`：每頁一個離線單一 HTML（CSS、圖片內嵌，移除腳本） | SingleFile：完整單檔與註解、使用者腳本；ArchiveBox／Browsertrix：WARC／WACZ。我們沒有 WARC，也不處理需要腳本才能顯示的內容 |
-| 安全標頭與 TLS 評等 | `security.md/json`：標頭 A+～F、TLS 協定版本與憑證評等，每項附修正方式 | MDN HTTP Observatory：10 項標頭測試加分數與字母等級；SSL Labs：協定、金鑰交換、加密強度加權評分。我們的評分規則是自訂的，沒有逐字對照它們的公開評分表，也不測密碼套件強度 |
+| 整頁視覺回歸 | `--approve`／`--compare` 連同桌機、平板、手機整頁截圖逐像素比對，門檻與差異圖，結束碼 4；`--scenarios`（點擊、懸停、捲動、輸入、按鍵、遮蔽 `--hide`）；`visual-review.html` 逐張拖曳比較並附核准指令，`--approve-visual` 只核准指定項目 | BackstopJS：情境腳本、等待條件、Docker 渲染、HTML 報告與核准流程；我們沒有 Docker 渲染，核准是「複製指令再執行」而不是按鈕 |
+| 頁面封存 | `--archive`：每頁一個離線單一 HTML（CSS、圖片內嵌，移除腳本）；`--warc`：每頁 `archive.warc.gz`（WARC 1.1，用獨立的 warcio 讀取驗證，沒有用 ReplayWeb.page 重播過）；`--har`：每頁 `network.har`（HAR 1.2，密鑰已遮蔽，通過 har-validator 驗證） | SingleFile：完整單檔與註解、使用者腳本；ArchiveBox／Browsertrix：WARC／WACZ。我們的 WARC 只存 GET 回應、沒有 WACZ，也不處理需要腳本才能顯示的內容 |
+| 安全標頭與 TLS 評等 | `security.md/json`：標頭 A+～F、TLS 協定版本與憑證評等，每項附修正方式 | MDN HTTP Observatory：10 項標頭測試加分數與字母等級；SSL Labs：協定、金鑰交換、加密強度加權評分。我們的評分規則是自訂的，沒有逐字對照它們的公開評分表；TLS 只檢查實際協商到的金鑰交換與加密套件，不會列舉伺服器支援的所有套件 |
 | SARIF／JUnit | `--sarif`、`--junit`，Action 輸出檔案路徑 | BackstopJS 輸出 JUnit；Nuclei 輸出 SARIF |
-| Figma | `figma/*.svg` 圖層化版面草稿 ＋ Tokens Studio 設計變數 | html.to.design、Builder.io figma-html：直接由網址或瀏覽器擴充功能轉成可編輯設計稿（含 auto layout）；我們的 SVG 沒有 auto layout，文字只取前 50 字，圖片是佔位 |
-| HTML 有效性 | 健檢納入保守的原始 HTML 檢查 | Nu Html Checker：完整的 HTML／CSS／SVG 驗證；我們只報確定有問題的，沒有內容模型驗證 |
+| Figma | `figma/*.svg` 圖層化版面草稿 ＋ Tokens Studio 設計變數 ＋ `figma/plugin/`（Figma 外掛，匯入 `.figma.json` 產生含 auto layout 的畫面；只用模擬的 Figma 介面測過，沒有在真實 Figma 裡跑過） | html.to.design、Builder.io figma-html：直接由網址或瀏覽器擴充功能轉成可編輯設計稿（含 auto layout）；我們需要先執行再手動匯入，每段文字最多取 200 字，圖片是佔位 |
+| HTML 有效性 | 健檢納入保守的原始 HTML 檢查（含 id／for／aria 參照與 #錨點是否存在） | Nu Html Checker：完整的 HTML／CSS／SVG 驗證；我們只報確定有問題的，沒有內容模型驗證 |
 | 自訂擷取 | `--extract` CSS 選擇器與 regex，輸出 CSV／JSON | Screaming Frog 有 XPath／CSS／regex 擷取（只看到搜尋摘要，官網在本環境無法連線，未能查證其細節） |
 | 逐頁 Markdown 匯出 | 每頁 `content.md` | Crawl4AI、Firecrawl 以此為核心；我們是附帶輸出，沒有託管或 SDK |
 | 本機偏移基準 | `--approve`／`--compare`（設計 token、健檢分數、新問題、整頁畫面） | dembrandt 有互動式管理與選用 app；我們只有指令列 |
@@ -59,12 +59,13 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 
 ## 對手有、我們沒有（或我們比較弱）
 
-- dembrandt：stealth 模式、brand guide 輸出、互動式偏移基準管理與選用 app、cookie／basic auth／自訂標頭等多種登入方式（我們只支援 storage state）。
-- Crawl4AI：Firefox 與 WebKit、代理與輪替、通用的 LLM 抽取。
-- Lighthouse 系列：完整的 Lighthouse 稽核分數與伺服器儀表板（我們只有 Playwright 實測的指標與預算）。
+- dembrandt：stealth 模式、brand guide 輸出、互動式偏移基準管理與選用 app、互動式登入（我們的互動式登入只有 `login` 存狀態檔）。
+- Crawl4AI：代理與輪替、通用的 LLM 抽取。
+- Lighthouse 系列：完整的 Lighthouse 稽核分數與伺服器儀表板（我們只有 Playwright 實測的指標、預算與歷次紀錄）。
 - Firecrawl、Crawl4AI：託管服務與多語言 SDK。
-- BackstopJS：情境腳本與核准介面；Wappalyzer：大型指紋資料庫；Blacklight：HAR 與更多偵測項目；html.to.design：auto layout 與直接由網址轉換。
-- 我們只用 Chromium，也只在 Linux 實測。
+- BackstopJS：Docker 渲染與按鈕式核准介面（我們有情境腳本與審核頁，但核准是複製指令）；Wappalyzer：大型指紋資料庫（我們約 120 條規則）；Blacklight：更多偵測項目；html.to.design：直接由網址轉換（我們需要外掛匯入，且沒有在真實 Figma 驗證過）。
+- Firefox 與 WebKit：我們有實驗性的 `--browser`，只做過 CI 的冒煙測試，節流、`--header` 登入層只在 Chromium 驗證。
+- 作業系統：Windows、macOS 有 CI 跑完整測試；但沒有真人在這兩種桌面上實際操作過。
 - 刻意不做：判斷網站是否由 AI 生成（準確度證據不足，容易誤判）、弱點掃描（需要授權）。
 
 ## 我們自己標明的限制
@@ -72,7 +73,8 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 - 純 canvas／WebGL 頁面抓不到 DOM 文字結構，只能報告能量測的部分，並會明說。
 - `verify` 的分數衡量版面，不比對文字與照片。
 - DNS 重新綁定、Docker 映像內瀏覽器無沙箱、第三方 Action 以標籤而非 commit 固定，都已記錄為已知限制（見 `docs/TEST-REPORT.md`）。
-- 無法在本環境實測：Docker 容器執行、真實 GitHub runner 上的 Action、真實登入流程、Windows／macOS。
+- 無法在本環境實測：Docker 容器執行、真實 GitHub runner 上的 Action、真實網站上的登入（cookie／標頭／basic auth 都只用本機測試站驗證）、真實 Figma 外掛、ReplayWeb.page 重播、網際網路上的網站。
+- 使用 `--header` 時，即時串流與媒體不經過密鑰保護層，大型下載會先整個載入記憶體。
 
 ## 資料來源（2026-10-11 開啟）
 

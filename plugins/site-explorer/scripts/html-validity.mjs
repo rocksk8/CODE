@@ -27,7 +27,7 @@ export function checkHtml(html, { maxTags = 80000 } = {}) {
   const src = String(html || '').slice(0, 2_000_000), lower = src.toLowerCase();
   const hasDoctype = (() => { let k = 0; for (let n = 0; n < 50; n++) { while (k < src.length && /\s/.test(src[k])) k++; if (src.startsWith('<!--', k)) { const e = src.indexOf('-->', k + 4); if (e < 0) return false; k = e + 3; continue; } break; } return /^<!doctype\s+html/i.test(src.slice(k, k + 30)); })();
   if (!hasDoctype) report('no-doctype', 'low', 'missing <!doctype html> (browsers fall back to quirks mode)');
-  const stack = []; const ids = new Map(); let i = 0, tags = 0, charsetAt = -1, headEnd = -1;
+  const stack = []; const ids = new Map(), names = new Set(); let i = 0, tags = 0, charsetAt = -1, headEnd = -1;
   const refs = []; let pendingP = false; const cnt = new Map(); const open = (n) => (cnt.get(n) || 0) > 0;
   const push = (n) => { stack.push({ name: n }); cnt.set(n, (cnt.get(n) || 0) + 1); };
   const pop = () => { const s = stack.pop(); if (s) cnt.set(s.name, cnt.get(s.name) - 1); return s; };
@@ -55,7 +55,8 @@ export function checkHtml(html, { maxTags = 80000 } = {}) {
       { const v = a[2] ?? a[3] ?? a[4] ?? '';
         if (an === 'for' && name === 'label' && v) refs.push(['label for', v.trim()]);
         else if ((an === 'aria-labelledby' || an === 'aria-describedby' || an === 'aria-controls') && v) for (const x of v.trim().split(/\s+/).slice(0, 8)) refs.push([an, x]);
-        else if (an === 'href' && name === 'a' && v.startsWith('#') && v.length > 1 && !/^#(top|!|\/|\?)/i.test(v)) refs.push(['link #', v.slice(1)]); }
+        else if (an === 'href' && name === 'a' && v.startsWith('#') && v.length > 1 && !/^#(top|!|\/|\?)/i.test(v) && v.replace(/:~:.*$/s, '').length > 1) refs.push(['link #', v.slice(1).replace(/:~:.*$/s, '')]);
+        else if (an === 'name' && name === 'a' && v) names.add(v); } // <a name="x"> is still a valid #x target in browsers
       if (an === 'id') { const v = a[2] ?? a[3] ?? a[4] ?? ''; if (v) ids.set(v, (ids.get(v) || 0) + 1); }
       if (name === 'meta' && (an === 'charset' || (an === 'http-equiv' && /content-type/i.test(a[2] ?? a[3] ?? a[4] ?? '')))) charsetAt = lt;
     }
@@ -80,7 +81,7 @@ export function checkHtml(html, { maxTags = 80000 } = {}) {
   }
   for (const s of stack) if (!OPTIONAL_END.has(s.name)) report('unclosed', 'medium', 'elements that are opened but never closed (or closed in the wrong order)', `<${s.name}>`);
   for (const [id, n] of ids) if (n > 1) report('duplicate-id', 'medium', 'ids used more than once (anchors, labels and scripts then hit the wrong element)', `#${id.slice(0, 40)} ×${n}`);
-  { const seenRef = new Set(); for (const [kind, id] of refs.slice(0, 5000)) { let dec = id; try { dec = decodeURIComponent(id); } catch {} if (ids.has(id) || ids.has(dec) || seenRef.has(kind + id)) continue; seenRef.add(kind + id); report(kind === 'link #' ? 'broken-fragment' : 'missing-id-ref', 'low', kind === 'link #' ? 'links to a #fragment that no element has as an id (the link scrolls nowhere)' : 'attributes that point to an id that does not exist (label for, aria-labelledby, aria-describedby, aria-controls)', `${kind} ${id.slice(0, 30)}`); } }
+  { const seenRef = new Set(); for (const [kind, id] of refs.slice(0, 5000)) { let dec = id; try { dec = decodeURIComponent(id); } catch {} if (ids.has(id) || ids.has(dec) || (kind === 'link #' && (names.has(id) || names.has(dec))) || seenRef.has(kind + id)) continue; seenRef.add(kind + id); report(kind === 'link #' ? 'broken-fragment' : 'missing-id-ref', 'low', kind === 'link #' ? 'links to a #fragment that no element has as an id (the link scrolls nowhere)' : 'attributes that point to an id that does not exist (label for, aria-labelledby, aria-describedby, aria-controls)', `${kind} ${id.slice(0, 30)}`); } }
   if (charsetAt > 1024) report('late-charset', 'low', 'the character set declaration is after the first 1024 bytes (browsers may guess wrongly)');
   return [...found.values()].map((f) => ({ ...f, examples: f.examples.map((e) => e.slice(0, 60)) })).sort((a, b) => b.count - a.count);
 }

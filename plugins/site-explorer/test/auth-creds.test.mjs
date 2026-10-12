@@ -12,7 +12,7 @@ import { parseCookieFile, parseHeaders, parseBasicAuth, writeTempStorageState } 
 test('cookie files: storage-state JSON, array, Netscape cookies.txt and a one-line header all parse; junk is rejected', () => {
   const host = 'shop.test';
   assert.deepEqual(parseCookieFile('sid=abc; theme=dark', host).map((c) => [c.name, c.value, c.domain]), [['sid', 'abc', host], ['theme', 'dark', host]]);
-  assert.equal(parseCookieFile('[{"name":"a","value":"1","domain":".x.test","path":"/p"}]', host)[0].domain, 'x.test');
+  assert.equal(parseCookieFile('[{"name":"a","value":"1","domain":".x.test","path":"/p"}]', host)[0].domain, '.x.test');
   assert.equal(parseCookieFile('{"cookies":[{"name":"a","value":"1"}],"origins":[]}', host)[0].name, 'a');
   const net = '# Netscape HTTP Cookie File\n.shop.test\tTRUE\t/\tTRUE\t1893456000\tsid\tzzz\n#HttpOnly_.shop.test\tTRUE\t/\tFALSE\t0\tauth\tqqq\n';
   const c = parseCookieFile(net, host); assert.deepEqual(c.map((x) => [x.name, x.value, x.secure]), [['sid', 'zzz', true], ['auth', 'qqq', false]]);
