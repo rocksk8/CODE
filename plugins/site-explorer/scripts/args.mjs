@@ -24,7 +24,7 @@ export function normalizeUrl(input) {
 
 /** First CLI argument that looks like a URL (with or without scheme). */
 // options that take a value (so the value is never mistaken for a URL); boolean flags such as --open must not swallow the URL after them
-export const VALUE_FLAGS = new Set(['--max-pages', '--depth', '--out', '--wait', '--motion-pages', '--frames', '--interval', '--max-targets', '--max-links', '--site', '--motion', '--embed-mb', '--a', '--b', '--lib', '--platform', '--font', '--color', '--health-below', '--fail-on', '--handoff', '--storage-state', '--framework']);
+export const VALUE_FLAGS = new Set(['--max-pages', '--depth', '--out', '--wait', '--motion-pages', '--frames', '--interval', '--max-targets', '--max-links', '--site', '--motion', '--embed-mb', '--a', '--b', '--lib', '--platform', '--font', '--color', '--health-below', '--fail-on', '--handoff', '--storage-state', '--framework', '--baseline', '--max-drop', '--fail-on-new']);
 /**
  * `--flag=value` becomes `--flag value`; a value flag with no value (end of line, or followed by another flag) is an ERROR — never a silent default
  * (a CI gate such as `--fail-on=high` must not quietly turn into "no gate").

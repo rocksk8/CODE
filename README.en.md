@@ -218,6 +218,8 @@ Everything goes into `motion.md`, each item marked "an AI cannot watch this dire
 | `DECISIONS.md` | **Living** decision log, open questions, assumptions, provenance (who read which pages, when, as whom) |
 | `CLAUDE.md` | For an AI working in this folder: how to read it, what not to do, log every decision |
 | `inventory.csv` | Every page (opens in Excel): URL inventory for redirect planning |
+| `content/` | The readable text of every page as Markdown, in document order (`content/INDEX.md` lists them). Links are written as `text (url)` and images as `[image: alt]`, so the files can never render a clickable or tracking element |
+| `ai-signs.md` | Does the site show signs of being made with an AI site builder? Evidence only (strong: tool fingerprints; weak: common habits) and never a verdict — nobody can tell for sure from the outside |
 | `tokens/`, `media/` | css / W3C / Tokens Studio / Tailwind (v3 config and v4 `@theme`, OKLCH colours) / `DESIGN.md` (design rules for AI coding tools) / palette SVG; section crops, filmstrips, brand assets |
 
 The whole package is relocatable: every file referenced in a document is inside it (tests guarantee that). Regenerating never deletes your work: an edited `starter/` is kept as `starter.backup-<time>`, and `DECISIONS.md` is only appended to.
@@ -240,6 +242,12 @@ The whole package is relocatable: every file referenced in a document is inside 
 Indexing & crawling 25% · on-page SEO 20% · links 10% · performance 15% · mobile 10% · security & transport 10% · structured data & social 5% · AI-crawler friendliness 5% (with `--a11y` an accessibility category of weight 10 is added and the others shrink proportionally). Scoring has diminishing returns, and any *critical* problem (site blocked, whole site noindex, no HTTPS, expired certificate) caps the total at 55. **The score is a relative indicator, not Google's score**; it only covers the crawled pages (a sample); performance is lab data.
 
 The report opens with a **verdict** (pass / conditional / fail). For automation: `site-explorer explore <url> --fail-on high` exits with code 4 when there are issues of that severity or worse. Run the same site again and the report lists new and fixed issues.
+
+**Local drift baseline.** `site-explorer explore <url> --approve` stores this run's design tokens (colours, fonts, spacing…) and health result as a baseline (default `<out>/baseline.json`; choose a path with `--baseline <file>` to keep it in version control). Later, `site-explorer explore <url> --compare` compares with it and exits with code 4 — writing `drift.md` — when any design token changed, the health score dropped by more than `--max-drop` (default 5), or a new issue at `--fail-on-new` (default high) or worse appeared. Tokens are compared exactly; to accept a new look, review it and run `--approve` again.
+
+**Signs of AI involvement.** Every run writes `ai-signs.md` — evidence only, never a verdict. Strong signs are traces left by AI site-building tools (specific scripts or generator tags); weak signs are habits common in AI output that are also common in human work (shadcn default variables, template placeholder text, stock marketing phrases…). Nobody can tell from the outside whether a site was made with AI, and text-based AI detection is unreliable — do not use it to accuse anyone.
+
+**Per-page Markdown.** The readable text of every page is written in document order to `content/<page>.md` (plus `INDEX.md`); links are written as `text (url)`, so the files never contain a clickable or tracking element.
 
 ### Trackers, cookies, structured data, tablet/phone, before/after
 

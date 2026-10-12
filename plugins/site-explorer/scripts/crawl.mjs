@@ -6,6 +6,7 @@ import { findUrl, findUrls, intOpt, sameSite, loadRobots, CRAWLER_UA_TOKEN, norm
 import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
+import { extractMarkdownInPage, renderPageMarkdown } from './page-markdown.mjs';
 import { BANNER, sanitizeDoc } from './untrusted.mjs';
 import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch, isInternalHost, resolvesInternal, stripMarkup, tagList, attrValue } from './util.mjs';
 import { parseSitemap } from './health-check.mjs';
@@ -434,6 +435,7 @@ while (pages.length < maxPages) {
     const aria = await ariaTree(page);
     data.aria = aria ? { lines: aria.lines, headings: aria.headings, links: aria.links, buttons: aria.buttons, images: aria.images, landmarks: aria.landmarks, head: aria.text.split('\n').slice(0, 40).join('\n').slice(0, 3500) } : null;
     data._ariaText = aria?.text || null; // written to aria.yml below, not kept in page.json
+    data._markdown = await page.evaluate(extractMarkdownInPage).catch(() => null); // written to content.md below (document order, one file per page)
     data.emptyPage = !contentReady;
     if (data.emptyPage) { // say WHY, from what the page actually contains
       data.emptyDiag = await page.evaluate(() => {
@@ -528,6 +530,8 @@ while (pages.length < maxPages) {
       } }
     if (data._ariaText) fs.writeFileSync(path.join(dir, 'aria.yml'), sanitizeDoc(data._ariaText));
     delete data._ariaText;
+    if (data._markdown) { try { fs.writeFileSync(path.join(dir, 'content.md'), sanitizeDoc(renderPageMarkdown(data, data._markdown, BANNER)) + '\n'); data.contentWords = data._markdown.words; } catch {} }
+    delete data._markdown;
     fs.writeFileSync(path.join(dir, 'page.json'), JSON.stringify(data, null, 2));
     data.slug = slugOf(url);
     pages.push(data);
