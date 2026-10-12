@@ -22,4 +22,9 @@ jobs:
       - run: npm ci
       - run: npm install --no-save three@0.170.0   # only the 3D tests need it
       - run: npx playwright-core install chromium
-      - run: npm test
+      - run: |
+          set -o pipefail
+          npm test 2>&1 | tee test.log
+      - name: Which tests failed (the log is long; this prints only the failures)
+        if: failure()
+        run: grep -n -E "^\s*not ok" -A14 test.log | head -150
