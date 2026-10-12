@@ -41,16 +41,17 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
   --headed             顯示瀏覽器視窗（可親手點「進入」；對防機器人／整頁 3D 網站較有效）
   --open | --no-open   完成後是否自動開啟儀表板  --no-standalone  儀表板不內嵌圖片
   --approve            把這次的設計 token 與健檢結果存成基準（baseline.json；可用 --baseline <檔案> 指定位置）
+  --visual-threshold P 整頁畫面比對：每張截圖容許 P% 的像素不同（預設 0.5）；--no-visual 不存也不比整頁畫面
   --compare            與基準比較，偏移超過容許範圍就以結束代碼 4 結束（--max-drop 5 容許掉幾分；--fail-on-new high 出現這個等級以上的新問題就失敗）
   --budget f.json      效能預算（例如 {"totalKB":1500,"lcpMs":{"max":2500,"level":"warn"}}）；超標的項目等級是 fail 時以結束代碼 4 結束
   --fail-on high       健檢有「高」以上問題時，以結束代碼 4 結束（可填 critical／high／medium／low；給自動化／CI 用）
 結束代碼：0 成功；1 失敗或參數錯誤；4 健檢未達 --fail-on 門檻`;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 { // a misspelled flag must fail loudly: "--fial-on high" silently turning a CI gate off is worse than an error
-  const KNOWN = new Set(['--a11y', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
+  const KNOWN = new Set(['--a11y', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
   const unknown = args.filter((a) => a.startsWith('--') && !KNOWN.has(a) && !/^--lang=/.test(a));
   if (unknown.length) { const near = (u) => [...KNOWN].find((k) => k.length > 3 && (k.startsWith(u) || u.startsWith(k) || [...u].filter((c) => k.includes(c)).length >= k.length - 2 && Math.abs(k.length - u.length) <= 2)); console.error(_t`不認得的選項：${unknown.join(' ')}${near(unknown[0]) ? _t`（是不是 ${near(unknown[0])}？）` : ''}\n執行 site-explorer explore --help 看全部選項。`); process.exit(1); }
-  if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
+  if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
 }
 if (!url) {
   const flagsWithValue = new Set(['--max-pages', '--out', '--wait', '--motion-pages', '--fail-on', '--storage-state', '--framework']);
@@ -71,6 +72,7 @@ if (failOn && !['critical', 'high', 'medium', 'low'].includes(failOn)) { console
 const approveFlag = args.includes('--approve'), compareFlag = args.includes('--compare');
 if (approveFlag && compareFlag) { console.error(_t('--approve 和 --compare 不能一起用：先 --compare 確認沒問題，再另外 --approve。')); process.exit(1); }
 if ((approveFlag || compareFlag) && args.includes('--no-health')) { console.error(_t('--approve／--compare 需要健檢，不能和 --no-health 一起用。')); process.exit(1); }
+const visualThresholdOpt = Number(opt('visual-threshold', '0.5')); if (!(visualThresholdOpt >= 0 && visualThresholdOpt <= 100)) { console.error(_t('--visual-threshold 必須是 0–100 的數字（百分比）')); process.exit(1); }
 const maxDropOpt = Number(opt('max-drop', '5')); if (!(maxDropOpt >= 0 && maxDropOpt <= 100)) { console.error(_t('--max-drop 必須是 0–100 的數字')); process.exit(1); }
 const failOnNewOpt = opt('fail-on-new', 'high'); if (!['critical', 'high', 'medium', 'low'].includes(failOnNewOpt)) { console.error(_t('--fail-on-new 需要 critical／high／medium／low 其中之一')); process.exit(1); }
 const budgetFile = opt('budget', null); let budgetCfg = null;
@@ -237,7 +239,10 @@ if (approveFlag || compareFlag) {
     const health = JSON.parse(fs.readFileSync(path.join(siteDir, 'health.json'), 'utf8'));
     const siteJ = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8'));
     const cur = makeBaseline({ tokens, health, url, pages: (siteJ.pages || []).length });
-    if (approveFlag) { fs.mkdirSync(path.dirname(bf), { recursive: true }); fs.writeFileSync(bf, JSON.stringify(cur, null, 2) + '\n'); console.log(_t`✔ 已把這次的結果存成基準：${bf}`); }
+    if (approveFlag) {
+      fs.mkdirSync(path.dirname(bf), { recursive: true }); fs.writeFileSync(bf, JSON.stringify(cur, null, 2) + '\n'); console.log(_t`✔ 已把這次的結果存成基準：${bf}`);
+      if (!args.includes('--no-visual')) { const { saveVisualBaseline, visualDirFor } = await import('./visual-regression.mjs'); const n = saveVisualBaseline(siteDir, visualDirFor(bf)); console.log(_t`✔ 已存下 ${n} 張整頁截圖作為視覺基準：${visualDirFor(bf)}`); }
+    }
     else {
       if (!fs.existsSync(bf)) throw new Error(_t`找不到基準檔 ${bf}。請先用 --approve 建立。`);
       const base = parseBaseline(fs.readFileSync(bf, 'utf8'));
@@ -245,6 +250,17 @@ if (approveFlag || compareFlag) {
       fs.writeFileSync(path.join(out, 'drift.md'), BANNER_DRIFT() + renderDriftMd(base, cur, drift) + '\n');
       console.log(drift.failed ? _t`✖ 與基準相比偏移過大：\n  - ${drift.reasons.join('\n  - ')}` : _t('✔ 與基準相比在容許範圍內'));
       console.log(_t`   詳情：${path.join(out, 'drift.md')}`);
+      const vdir = (await import('./visual-regression.mjs')).visualDirFor(bf);
+      if (!args.includes('--no-visual') && fs.existsSync(path.join(vdir, 'index.json'))) {
+        const { compareVisual, renderVisualMd } = await import('./visual-regression.mjs'); const { launchBrowser } = await import('./launch.mjs');
+        const br = await launchBrowser();
+        try {
+          const pg = await br.newPage(); const vr = await compareVisual(pg, { siteDir, baseDir: vdir, outDir: out, threshold: visualThresholdOpt });
+          fs.writeFileSync(path.join(out, 'visual.md'), renderVisualMd(vr)); drift.visual = vr;
+          console.log(vr.failed ? _t`✖ 整頁畫面和基準不同：\n  - ${vr.reasons.join('\n  - ')}` : _t('✔ 整頁畫面都在容許範圍內')); console.log(_t`   詳情：${path.join(out, 'visual.md')}`);
+          if (vr.failed) { drift.failed = true; drift.reasons.push(...vr.reasons); }
+        } finally { await br.close(); }
+      } else if (!args.includes('--no-visual')) console.log(_t('（這份基準沒有視覺基準；用 --approve 重新建立即可啟用整頁畫面比對。）'));
       if (drift.failed) { failCode = 4; console.error(_t('偏移超過容許範圍，以結束代碼 4 結束。')); }
     }
   } catch (e) { failCode = 1; console.error('✖ ' + String(e.message).split('\n')[0]); }

@@ -250,6 +250,8 @@ The report opens with a **verdict** (pass / conditional / fail). For automation:
 
 **Tracking behaviour check.** `tracking-behaviors.md/json` goes beyond listing trackers: does the page use a session-recording service (Hotjar, Clarity, FullStory…), read canvas / WebGL / audio fingerprints or probe fonts heavily, and is typed text sent to another site? (The probe types a random string into one ordinary text box and clears it — it never submits; forms with a password field, payment-looking fields and logged-in sessions are never probed.) A hit is a reason to look, not proof of misuse.
 
+**Whole-page visual regression.** `--approve` also stores the desktop / tablet / mobile full-page screenshots in `<baseline name>-visual/` next to the baseline file; `--compare` compares them pixel by pixel (a pixel differs when a colour channel is off by more than 16/255), allows `--visual-threshold` (default 0.5%) of pixels to differ per screenshot, and otherwise exits with code 4, writing `visual.md` and `visual-diff/*.png` (changes in red). `--no-visual` skips it. This compares whole screens, so dynamic content (carousels, ads, clocks) causes differences — tune the threshold.
+
 **Verify masks.** `verify` accepts `--ignore <selector>` (repeatable) to exclude dynamic regions (ads, clocks, carousels); elements marked `data-verify-ignore` are excluded too; `--min-section <0-100>` fails the run when any single section scores below the threshold.
 
 **Per-page Markdown.** The readable text of every page is written in document order to `content/<page>.md` (plus `INDEX.md`); links are written as `text (url)`, so the files never contain a clickable or tracking element.
