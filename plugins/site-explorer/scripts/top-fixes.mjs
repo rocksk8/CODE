@@ -30,6 +30,12 @@ export function computeTopFixes(siteDir, n = 10) {
     const scope = i.total ? _t`${i.affected || 1}／${i.total} 頁` : '';
     const effort = effortOf(String(i.id)); items.push({ id: 'health:' + clean(String(i.id), 60), source: 'health', severity: i.severity, effort, score: w * (0.6 + 0.4 * share) * EFFORT_FACTOR[effort], title: clean(String(i.title), 160), why: clean(String(i.impact || ''), 300), fix: clean(String(i.fix || ''), 300), scope });
   }
+  const cv = rd(path.join(siteDir, 'crawler-view.json'));
+  for (const i of cv?.issues || []) {
+    const w = SEV[i.severity] ?? 0; if (!w) continue;
+    const share = cv.checked ? Math.min(1, (i.affected || 1) / cv.checked) : 1; const effort = /js-only|js-partial/.test(i.id) ? 3 : 2;
+    items.push({ id: 'crawler:' + clean(String(i.id), 60), source: 'crawler', severity: i.severity, effort, score: w * (0.6 + 0.4 * share) * EFFORT_FACTOR[effort], title: clean(String(i.title), 160), why: clean(String(i.why || ''), 300), fix: clean(String(i.fix || ''), 300), scope: cv.checked ? _t`${i.affected || 1}／${cv.checked} 頁` : '' });
+  }
   const sec = rd(path.join(siteDir, 'security.json'));
   for (const t of sec?.headers?.tests || []) {
     if (!(t.points <= -10)) continue;
