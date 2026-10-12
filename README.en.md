@@ -16,6 +16,8 @@ One command turns any public website into a handoff package that AI and engineer
 
 </div>
 
+**Not comfortable with the command line?** On the GitHub page press Code → Download ZIP, unzip, and double-click `Start-site-explorer.cmd` (Windows) or `Start-site-explorer.command` (Mac). The first start installs what it needs automatically (install [Node.js](https://nodejs.org) 22 first), then opens the graphical interface: type an address and go; if there is no browser yet, the page has a "Download a browser" button.
+
 ```bash
 npm i -g git+https://github.com/rocksk8/CODE.git
 site-explorer setup
