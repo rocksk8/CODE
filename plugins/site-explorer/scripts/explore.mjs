@@ -37,6 +37,7 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
   --max-pages 6        最多爬幾頁
   --out ./explore-out  輸出資料夾（預設：目前資料夾下的 explore-out；也可設環境變數 SITE_EXPLORER_OUT 一次指定）
   --open | --no-open   完成後是否自動開啟儀表板  --no-standalone  儀表板不內嵌圖片
+  --browser firefox    （實驗性）改用 Firefox 或 WebKit 探索；要先執行 site-explorer setup --browser firefox。3D／動畫與行動網路模擬仍只支援 Chromium
   --headed             顯示瀏覽器視窗（可親手點「進入」；對防機器人／整頁 3D 網站較有效）
   --wait 4000          3D 擷取前等待毫秒
 
@@ -81,13 +82,13 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
 `;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 { // a misspelled flag must fail loudly: "--fial-on high" silently turning a CI gate off is worse than an error
-  const KNOWN = new Set(['--a11y', '--archive', '--warc', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
+  const KNOWN = new Set(['--a11y', '--archive', '--warc', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
   const unknown = args.filter((a) => a.startsWith('--') && !KNOWN.has(a) && !/^--lang=/.test(a));
   if (unknown.length) { const near = (u) => [...KNOWN].find((k) => k.length > 3 && (k.startsWith(u) || u.startsWith(k) || [...u].filter((c) => k.includes(c)).length >= k.length - 2 && Math.abs(k.length - u.length) <= 2)); console.error(_t`不認得的選項：${unknown.join(' ')}${near(unknown[0]) ? _t`（是不是 ${near(unknown[0])}？）` : ''}\n執行 site-explorer explore --help 看全部選項。`); process.exit(1); }
-  if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--cookie-file', '--header', '--header-file', '--basic-auth-file'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
+  if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--browser'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
 }
 if (!url) {
-  const flagsWithValue = new Set(['--max-pages', '--out', '--wait', '--motion-pages', '--fail-on', '--storage-state', '--framework', '--cookie-file', '--header', '--header-file', '--basic-auth-file']);
+  const flagsWithValue = new Set(['--max-pages', '--out', '--wait', '--motion-pages', '--fail-on', '--storage-state', '--framework', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser']);
   const bad = args.find((a, i) => !a.startsWith('-') && !flagsWithValue.has(args[i - 1]));
   if (bad) console.error(_t`「${bad}」不是有效的網址。請給完整網站位址，例如：site-explorer explore https://example.com\n`);
   console.error(USAGE); process.exit(1);
@@ -130,6 +131,11 @@ for (let k = 0; k < args.length; k++) if (args[k] === '--hide') { if (!args[k + 
 if (opt('extract', null)) { try { const rf = path.resolve(opt('extract', null)); (await import('./custom-extract.mjs')).parseRules(fs.readFileSync(rf, 'utf8')); } catch (e) { console.error(_t`--extract 規則檔有問題：` + String(e.code === 'ENOENT' ? _t('找不到檔案') : e.message).split('\n')[0]); process.exit(1); } }
 if (opt('throttle', null) && opt('throttle') !== 'mobile') { console.error(_t('--throttle 目前只支援 mobile。')); process.exit(1); }
 if (opt('perf-runs', null) && !(Number.isInteger(Number(opt('perf-runs'))) && Number(opt('perf-runs')) >= 1 && Number(opt('perf-runs')) <= 7)) { console.error(_t('--perf-runs 必須是 1 到 7 的整數。')); process.exit(1); }
+if (opt('browser', null)) {
+  const b = opt('browser'); if (!['chromium', 'firefox', 'webkit'].includes(b)) { console.error(_t('--browser 只能是 chromium、firefox 或 webkit。')); process.exit(1); }
+  process.env.SITE_EXPLORER_BROWSER = b; // child scripts read it
+  if (b !== 'chromium') { if (opt('throttle', null)) { console.error(_t('--throttle 只支援 Chromium。')); process.exit(1); } if (!args.includes('--no-motion')) { args.push('--no-motion'); console.log(_t('（實驗性的 Firefox／WebKit：略過 3D／動畫擷取，那部分只支援 Chromium。）')); } }
+}
 const maxDropOpt = Number(opt('max-drop', '5')); if (!(maxDropOpt >= 0 && maxDropOpt <= 100)) { console.error(_t('--max-drop 必須是 0–100 的數字')); process.exit(1); }
 const failOnNewOpt = opt('fail-on-new', 'high'); if (!['critical', 'high', 'medium', 'low'].includes(failOnNewOpt)) { console.error(_t('--fail-on-new 需要 critical／high／medium／low 其中之一')); process.exit(1); }
 const budgetFile = opt('budget', null); let budgetCfg = null;

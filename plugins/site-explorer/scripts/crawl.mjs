@@ -481,8 +481,8 @@ while (pages.length < maxPages) {
       for (let k = 0; k < Math.max(perfRuns, throttle ? 1 : 2) - (throttle ? 0 : 1); k++) {
         const p2 = await ctx.newPage();
         try {
-          const cdp = await ctx.newCDPSession(p2); await cdp.send('Network.enable'); await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
-          if (throttle) { await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: (1.6 * 1024 * 1024) / 8, uploadThroughput: (750 * 1024) / 8 }); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 }); }
+          if (browser.browserType().name() === 'chromium') { const cdp = await ctx.newCDPSession(p2); await cdp.send('Network.enable'); await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
+          if (throttle) { await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: (1.6 * 1024 * 1024) / 8, uploadThroughput: (750 * 1024) / 8 }); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 }); } }
           await p2.goto(url, { waitUntil: 'load', timeout: throttle ? 60000 : 30000 }); await p2.waitForTimeout(600);
           const s2 = await p2.evaluate(extractSeoInPage); if (s2?.perf) runs.push(s2.perf);
         } catch {} finally { await p2.close().catch(() => {}); }

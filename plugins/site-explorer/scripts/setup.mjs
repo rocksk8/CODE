@@ -57,6 +57,12 @@ const ask = (q) => new Promise((resolve) => {
 const playwrightCli = () => { for (const base of [() => path.dirname(createRequire(import.meta.url).resolve('playwright-core/package.json')), () => path.join(DEPS_DIR, 'node_modules', 'playwright-core')]) { try { const d = base(); if (fs.existsSync(path.join(d, 'cli.js'))) return path.join(d, 'cli.js'); } catch {} } return null; };
 const pwInstall = (what) => { const cli = playwrightCli(); if (!cli) fail(_t('❌ 找不到 playwright-core 的安裝工具，請重新執行 setup')); return spawnSync(process.execPath, [cli, 'install', what], { stdio: quiet ? 'ignore' : 'inherit' }).status === 0; };
 
+const extra = (() => { const i = process.argv.indexOf('--browser'); return i > 0 ? process.argv[i + 1] : null; })();
+if (extra) { // experimental extra engines
+  if (!['firefox', 'webkit'].includes(extra)) fail(_t('--browser 只能是 firefox 或 webkit（Chromium 是預設，不需要指定）。'), 2);
+  if (!pwInstall(extra)) fail(_t`❌ 下載 ${extra} 失敗（網路或代理問題？）。`);
+  say(_t`✅ 已下載 ${extra}。用法：site-explorer explore <網址> --browser ${extra}（實驗性功能；3D／動畫擷取與行動網路模擬仍只支援 Chromium）`); process.exit(0);
+}
 let browser = null;
 try { browser = await launchBrowser(); } catch {}
 if (!browser) {

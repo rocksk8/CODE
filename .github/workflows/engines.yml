@@ -1,0 +1,22 @@
+name: engines
+# Experimental --browser firefox|webkit: the core exploration has to work on them. Reported separately from the main tests.
+on: [push, pull_request]
+permissions: { contents: read }
+jobs:
+  engines:
+    name: engines (${{ matrix.engine }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: { engine: [firefox, webkit] }
+    defaults:
+      run:
+        working-directory: plugins/site-explorer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: plugins/site-explorer/package-lock.json }
+      - run: npm ci
+      - run: npx playwright-core install --with-deps ${{ matrix.engine }}
+      - run: node --test test/engines.test.mjs
