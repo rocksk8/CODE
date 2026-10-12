@@ -259,6 +259,18 @@ AI 只能讀文字和圖片。所以：
 
 **自訂擷取規則**：`--extract rules.json`，例：`{"price": {"css": ".price"}, "sku": {"css": "[itemprop=sku]", "attr": "content"}, "order": {"regex": "order-(\\d+)"}}`。css 規則在渲染後的頁面執行（最多 50 筆），regex 規則對可見文字（或加 `"in": "html"` 對 HTML）執行；結果輸出 `extractions.csv/json`，每頁一列。規則檔會先嚴格檢查（規則名稱、數量、可能造成當機的 regex 會被拒絕）。
 
+**儀表板怎麼看**：打開 `dashboard.html`，總覽最上面是「結果一覽」——每項檢查一張卡片，用顏色告訴你要不要處理（綠＝沒事、黃＝值得看、紅＝要處理、藍＝資訊），一句白話結論加一句下一步，點卡片進到詳細分頁。分頁分四區：看網站（設計、排版、內容、3D、編輯方式）、檢查（健檢、安全、速度、隱私、技術）、比較（畫面比對、歷史、自訂擷取）、交付（匯出給 AI、詳細資料、關於）。終端機結束時也會印同樣的結果一覽，輸出資料夾裡的 `ABOUT-THIS-FOLDER.md` 說明每個檔案是做什麼的。`site-explorer explore --help` 依用途分組，最上面有三個最常用的指令。
+
+**更深的檢查**：`--tech-rules 規則.json` 加入你自己的技術辨識規則（內建約 120 條，含付款、客服、驗證碼、台灣電商平台）；`--perf-runs 3` 重複量測取中位數、`--throttle mobile` 模擬行動網路與 4 倍慢的 CPU（只支援 Chromium），速度頁新增總阻塞時間（TBT）；安全評等新增前向保密、DH 長度與認證式加密檢查（RC4／3DES 這類過時套件在這個環境無法主動試探，報告會明說「未測試」）；HTML 檢查新增 label for／aria-*／#錨點指向不存在 id；隱私檢查新增第三方腳本監聽整頁鍵盤事件。評分規則見 `docs/SCORING.md`。
+
+**畫面情境與審核**：`--scenarios 情境.json` 定義「先點、懸停、捲動、打字…再截圖」的畫面（例如選單展開、下拉選單），`--hide '.clock'` 隱藏一直在變的區塊；它們和整頁截圖一起存進基準、一起比對。比對有差異時產生 `visual-review.html`——逐張拖曳滑桿比較改版前後，並附上「核准這張」的指令；`--approve-visual home:mobile,scenario:menu-open`（或 `all`）只把指定的截圖更新為新基準。情境只在網站自己的來源上執行、所有非 GET 請求都會被擋下、不能按 Enter。
+
+**WARC 與 Figma**：`--warc` 每頁另存 `archive.warc.gz`（WARC 1.1，不含 Cookie 與驗證標頭，登入狀態不錄；已用獨立的 warcio 讀取驗證，尚未用 ReplayWeb.page 實際重播過）。Figma 資料夾除了 SVG，還有 `*.figma.json` 與 `plugin/`（一個小型 Figma 外掛）：在 Figma 桌面版匯入 `plugin/manifest.json`，選 `*.figma.json`，每頁會變成帶 auto layout 的巢狀 Frame、完整文字與圖片。這個外掛只在模擬的 Figma 介面上測過，還沒有在真正的 Figma 裡驗證。
+
+**登入的其他方式**：`--cookie-file`（Playwright 登入狀態檔、cookie 陣列 JSON、cookies.txt，或「a=1; b=2」一行）、`--header-file 檔.json`（例如 Authorization；只會送給起始網站，不會送給第三方）、`--basic-auth-file`（第一行寫 `使用者:密碼`，或設環境變數 `SITE_EXPLORER_BASIC_AUTH`）。機密不要直接寫在指令列（會留在 shell 歷史）；這些值不會寫進任何輸出檔案，cookie 只存在一個權限 600 的暫存檔，結束就刪除。
+
+**Firefox／WebKit（實驗性）**：先執行 `site-explorer setup --browser firefox`（或 `webkit`），再用 `--browser firefox` 探索。核心功能（頁面、設計 token、健檢、截圖、儀表板）由 CI 的 `engines` 工作流程在 Firefox 與 WebKit 上實際跑測試；3D／動畫擷取與行動網路模擬仍只支援 Chromium。Windows 與 macOS 由 CI 的 `platforms` 工作流程實際執行同一套測試。
+
 **驗證遮罩**：`verify` 可用 `--ignore <選擇器>`（可重複）排除動態區域（廣告、時間、輪播），元素加上 `data-verify-ignore` 也會被排除；`--min-section <0-100>` 讓任何單一區塊低於門檻就判定未通過。
 
 **逐頁 Markdown**：每頁的可讀文字依網頁順序輸出成 `content/<頁面>.md`（含 `INDEX.md`）；連結寫成「文字 (網址)」，不會出現可點擊或追蹤用的元素。
