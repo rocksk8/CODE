@@ -1937,5 +1937,7 @@
 "用法：site-explorer history compare <runA> <runB> [--md 對照.md]（run 編號見 site-explorer history list）": "Usage: site-explorer history compare <runA> <runB> [--md changes.md] (run numbers: site-explorer history list)",
 "起始頁（首頁）回應 {}": "The start page (home page) answers {}",
 "首頁是搜尋引擎與訪客的入口；它出錯時整個網站的可信度與收錄都會受影響。": "The home page is the entrance for search engines and visitors; when it errors, the whole site's credibility and indexing suffer.",
-"先修好首頁（或讓網址正確導向），再看其他問題。": "Fix the home page first (or make the address redirect correctly), then look at the other issues."
+"先修好首頁（或讓網址正確導向），再看其他問題。": "Fix the home page first (or make the address redirect correctly), then look at the other issues.",
+"--md 需要一個檔名（例如 --md 對照.md）": "--md needs a file name (for example --md changes.md)",
+"--out 需要一個檔名（例如 --out 備份.json）": "--out needs a file name (for example --out backup.json)"
 }

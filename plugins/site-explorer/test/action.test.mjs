@@ -86,13 +86,41 @@ test('gateResult: regression gates compare with the baseline (max-drop, fail-on-
   // new issues at or above a severity that the baseline does not have; old ones and lower severities do not count
   const cur = mk(88, [['nosniff', 'low'], ['noindex', 'critical'], ['og-missing', 'low']]);
   const g = gateResult(cur, { baseline: base, failOnNew: 'high' });
-  assert.equal(g.failed, true); assert.match(g.reasons[0], /1 new issue\(s\) at high or above.*noindex/);
+  assert.equal(g.failed, true); assert.match(g.reasons[0], /1 new or worsened issue\(s\) at high or above.*noindex/);
   assert.equal(gateResult(mk(88, [['nosniff', 'low'], ['og-missing', 'low']]), { baseline: base, failOnNew: 'high' }).failed, false);
-  // without a baseline the regression gates are inert (main() refuses the combination up front)
-  assert.equal(gateResult(cur, { baseline: null, maxDrop: 1, failOnNew: 'low' }).failed, false);
+  // a requested regression gate without a usable baseline is a failure (main() also refuses the combination up front)
+  assert.equal(gateResult(cur, { baseline: null, maxDrop: 1, failOnNew: 'low' }).failed, true);
 });
 
 test('main(): max-drop / fail-on-new need a baseline-url', async () => {
   await assert.rejects(() => main({ INPUT_URL: 'https://example.com', INPUT_MAX_DROP: '5', INPUT_OUT: '/tmp/se-ci-x' }), /baseline-url/);
   await assert.rejects(() => main({ INPUT_URL: 'https://example.com', INPUT_BASELINE_URL: 'https://example.org', INPUT_FAIL_ON_NEW: 'nope', INPUT_OUT: '/tmp/se-ci-x' }), /fail-on-new/);
+});
+
+test('gateResult: a requested regression gate that cannot be evaluated fails instead of passing silently', () => {
+  const cur = { health: { score: 80, issueCounts: { critical: 0, high: 0, medium: 0, low: 0 }, issueList: [] } };
+  for (const baseline of [null, { health: null }, { health: { score: NaN } }]) {
+    const g = gateResult(cur, { baseline, maxDrop: 5 }); assert.equal(g.failed, true); assert.match(g.reasons[0], /baseline run produced no health result/);
+  }
+  assert.equal(gateResult(cur, { baseline: null }).failed, false, 'no regression gate requested: nothing to evaluate');
+});
+
+test('gateResult: a worsened issue counts as new; singular wording; prototype names are not severities', async () => {
+  const mk = (score, l) => ({ health: { score, issueCounts: { critical: 0, high: 0, medium: 0, low: 0 }, issueList: l.map(([id, severity]) => ({ id, severity })) } });
+  const g = gateResult(mk(80, [['csp', 'high']]), { baseline: mk(80, [['csp', 'medium']]), failOnNew: 'high' });
+  assert.equal(g.failed, true); assert.match(g.reasons[0], /new or worsened issue\(s\).*csp/);
+  assert.match(gateResult(mk(89, []), { baseline: mk(90, []), maxDrop: 0 }).reasons[0], /dropped 1 point \(/);
+  await assert.rejects(() => main({ INPUT_URL: 'https://example.com', INPUT_FAIL_ON: 'constructor', INPUT_OUT: '/tmp/se-ci-y' }), /fail-on/);
+});
+
+test('PR comment: regression-gate reasons are shown even without fail-on / min-health', async () => {
+  const { renderPrComment } = await import('../scripts/pr-comment.mjs');
+  const md = renderPrComment({ result: { url: 'https://x.test', health: { score: 50, grade: 'F', verdict: 'fail', issueCounts: {}, topIssues: [] }, pages: { crawled: 1 } }, baseline: null, changesMd: null, minHealth: null, failOn: null, gate: { failed: true, reasons: ['health score dropped 34 points'] }, runUrl: null });
+  assert.match(md, /Gate\. \*\*Failed:\*\* health score dropped 34 points/);
+});
+
+test('ci-run: the process language follows the action input before any banner text is built', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', "await import('./scripts/ci-run.mjs'); const m = await import('./scripts/untrusted.mjs'); console.log(/[\\u3400-\\u9fff]/.test(m.BANNER) ? 'ZH' : 'EN')"], { cwd: new URL('..', import.meta.url).pathname, env: { ...process.env, INPUT_LANG: 'en', SITE_EXPLORER_LANG: '' }, encoding: 'utf8' });
+  assert.equal(r.stdout.trim(), 'EN', r.stderr);
 });

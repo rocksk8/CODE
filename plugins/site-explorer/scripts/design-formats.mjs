@@ -1,9 +1,10 @@
 // Extra design-token formats built from the extracted `tokens` object (see export-design.mjs):
-//   toOklch(hex)         "#1a73e8" -> "oklch(0.58 0.19 259.3)"  (CSS Color 4; what Tailwind v4's own palette uses)
+//   toOklch(hex)         "#1a73e8" -> "oklch(0.574 0.195 257.9)"  (CSS Color 4; what Tailwind v4's own palette uses)
 //   tailwindV4Theme(t)   a CSS file with `@import "tailwindcss"` + an `@theme { … }` block (Tailwind v4 is CSS-first, no JS config)
 //   designMd(t, meta)    DESIGN.md — one markdown file an AI coding tool can read first: front matter with the tokens, then rules in prose
 // Everything that came from the website goes through a strict whitelist before it is written next to code.
 
+import { looksInjected } from './untrusted.mjs';
 const HEX = /^#[0-9a-f]{6}$/i;
 const SAFE_FONT = /[^\w\s.,'()\-㐀-鿿]/g;
 const CSS_LEN = /^-?\d+(\.\d+)?(px|rem|em|%)?$/;
@@ -23,7 +24,10 @@ export function toOklch(hex) {
   return `oklch(${f(L, 3)} ${f(C, 3)} ${C < 0.002 ? 0 : f(H, 1)})`;
 }
 
-const fontName = (f) => String(f ?? '').split(',')[0].replace(/["']/g, '').replace(SAFE_FONT, '').trim().slice(0, 60);
+const fontName = (f) => { const raw = String(f ?? ''); if (looksInjected(raw)) return ''; return raw.split(',')[0].replace(/["']/g, '').replace(SAFE_FONT, '').trim().slice(0, 60); }; // instruction-like text is dropped here, not left to a later line filter that would break the YAML
+const GENERIC = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-sans-serif|ui-serif|ui-monospace|ui-rounded|math|emoji|fangsong)$/i;
+const SERIF_RE = /georgia|playfair|times|garamond|merriweather|lora|baskerville|tinos|gelasio|crimson|source serif|newsreader|fraunces|cormorant|libre bask|dm serif|canela|tiempos|serif(?!.*sans)/i;
+const fallback = (name, kind) => (kind === 'mono' || /mono|code|courier|menlo|consolas/i.test(name) ? 'ui-monospace, monospace' : SERIF_RE.test(name) && !/sans/i.test(name) ? 'ui-serif, Georgia, serif' : 'ui-sans-serif, system-ui, sans-serif');
 const lenOk = (v) => (CSS_LEN.test(String(v).trim()) ? String(v).trim() : null);
 
 /** Tailwind v4: `@theme` variables become utilities (bg-brand, font-heading, rounded-md …). */
@@ -35,7 +39,7 @@ export function tailwindV4Theme(t, { source = '', color = 'oklch' } = {}) {
   }
   const fs = t.typography?.fontStack || {};
   for (const [k, v] of Object.entries({ heading: fs.heading, body: fs.body, mono: fs.mono })) {
-    const n = fontName(v); if (n) L.push(`  --font-${k}: "${n}", ${k === 'mono' ? 'ui-monospace, monospace' : 'ui-sans-serif, system-ui, sans-serif'};`);
+    const n = fontName(v); if (n) L.push(GENERIC.test(n) ? `  --font-${k}: ${n.toLowerCase()};` : `  --font-${k}: "${n}", ${fallback(n, k)};`); // generic keywords are not quoted: "monospace" would be a family name
   }
   const scale = t.typography?.scale || {};
   for (const [tag, v] of Object.entries(scale)) {

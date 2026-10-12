@@ -2,6 +2,7 @@
 // Everything the GitHub Action does except talking to GitHub: explore (and optionally a baseline), apply the gate, write the PR comment.
 // Inputs come from environment variables (never interpolated into a shell): INPUT_URL, INPUT_BASELINE_URL, INPUT_MAX_PAGES, INPUT_FAIL_ON,
 // INPUT_MIN_HEALTH, INPUT_OUT, INPUT_RUN_URL.  Writes comment.md and result.json into the output folder; appends outputs to $GITHUB_OUTPUT.
+import './ci-lang.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -27,13 +28,15 @@ export function gateResult(result, { failOn, minHealth, baseline = null, maxDrop
   if (!h) return { failed: true, reasons: ['health check produced no result'] };
   if (failOn) { const bad = SEV_ORDER.filter((s) => RANK[s] <= RANK[failOn]).reduce((n, s) => n + (h.issueCounts?.[s] || 0), 0); if (bad) reasons.push(`${bad} issue(s) at ${failOn} or above`); }
   if (minHealth != null && h.score < minHealth) reasons.push(`health score ${h.score} is below ${minHealth}`);
-  // regression gates compare with the baseline run (the production site): they only apply when there is one
+  // regression gates compare with the baseline run (the production site): a gate that was asked for but cannot be evaluated is a failure, never a silent pass
   const b = baseline?.health;
-  if (maxDrop != null && b && Number.isFinite(b.score) && b.score - h.score > maxDrop) reasons.push(`health score dropped ${b.score - h.score} points (baseline ${b.score} → ${h.score}; allowed drop ${maxDrop})`);
+  if ((maxDrop != null || failOnNew) && !(b && Number.isFinite(b.score))) reasons.push('the baseline run produced no health result, so max-drop / fail-on-new cannot be evaluated');
+  if (maxDrop != null && b && Number.isFinite(b.score) && b.score - h.score > maxDrop) { const d = b.score - h.score; reasons.push(`health score dropped ${d} point${d === 1 ? '' : 's'} (baseline ${b.score} → ${h.score}; allowed drop ${maxDrop})`); }
   if (failOnNew && b && Array.isArray(h.issueList) && Array.isArray(b.issueList)) {
-    const known = new Set(b.issueList.map((i) => i.id));
-    const fresh = h.issueList.filter((i) => !known.has(i.id) && RANK[i.severity] <= RANK[failOnNew]).map((i) => i.id);
-    if (fresh.length) reasons.push(`${fresh.length} new issue(s) at ${failOnNew} or above that the baseline does not have: ${fresh.slice(0, 5).join(', ')}`);
+    const known = new Map(b.issueList.map((i) => [i.id, i.severity]));
+    // new = an id the baseline does not have, or one that got worse (e.g. medium -> high)
+    const fresh = h.issueList.filter((i) => RANK[i.severity] <= RANK[failOnNew] && (!known.has(i.id) || RANK[i.severity] < RANK[known.get(i.id)])).map((i) => i.id);
+    if (fresh.length) reasons.push(`${fresh.length} new or worsened issue(s) at ${failOnNew} or above compared with the baseline: ${fresh.slice(0, 5).join(', ')}`);
   }
   return { failed: reasons.length > 0, reasons };
 }
@@ -44,10 +47,10 @@ export async function main(env = process.env) {
   const url = normalizeUrl(env.INPUT_URL); if (!url) throw new Error('input "url" must be a website address such as https://preview.example.com');
   const baselineUrl = env.INPUT_BASELINE_URL ? normalizeUrl(env.INPUT_BASELINE_URL) : null; if (env.INPUT_BASELINE_URL && !baselineUrl) throw new Error('input "baseline-url" is not a valid website address');
   const maxPages = Number(env.INPUT_MAX_PAGES || 6); if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 50) throw new Error('input "max-pages" must be 1–50');
-  const failOn = env.INPUT_FAIL_ON || null; if (failOn && !(failOn in RANK)) throw new Error('input "fail-on" must be critical, high, medium or low');
+  const failOn = env.INPUT_FAIL_ON || null; if (failOn && !Object.hasOwn(RANK, failOn)) throw new Error('input "fail-on" must be critical, high, medium or low');
   const minHealth = env.INPUT_MIN_HEALTH ? Number(env.INPUT_MIN_HEALTH) : null; if (minHealth != null && !(minHealth >= 0 && minHealth <= 100)) throw new Error('input "min-health" must be 0–100');
-  const maxDrop = env.INPUT_MAX_DROP ? Number(env.INPUT_MAX_DROP) : null; if (maxDrop != null && !(maxDrop >= 0 && maxDrop <= 100)) throw new Error('input "max-drop" must be 0–100');
-  const failOnNew = env.INPUT_FAIL_ON_NEW || null; if (failOnNew && !(failOnNew in RANK)) throw new Error('input "fail-on-new" must be critical, high, medium or low');
+  const maxDrop = env.INPUT_MAX_DROP && env.INPUT_MAX_DROP.trim() ? Number(env.INPUT_MAX_DROP) : null; if (maxDrop != null && !(maxDrop >= 0 && maxDrop <= 100)) throw new Error('input "max-drop" must be 0–100');
+  const failOnNew = env.INPUT_FAIL_ON_NEW || null; if (failOnNew && !Object.hasOwn(RANK, failOnNew)) throw new Error('input "fail-on-new" must be critical, high, medium or low');
   if ((maxDrop != null || failOnNew) && !baselineUrl) throw new Error('inputs "max-drop" and "fail-on-new" compare with a baseline: set "baseline-url" too');
   const out = path.resolve(env.INPUT_OUT || 'site-explorer-out'); fs.mkdirSync(out, { recursive: true });
   const dbEnv = { SITE_EXPLORER_DB: path.join(out, 'history.db') }; // both runs share one database so the before/after report can compare them

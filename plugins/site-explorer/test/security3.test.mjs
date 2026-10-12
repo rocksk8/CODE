@@ -121,3 +121,14 @@ test('mcp: out_dir outside the server working directory is refused', async () =>
   const r = await callTool('explore_site', { url: 'https://example.com', out_dir: '/tmp/elsewhere-' + process.pid });
   assert.equal(r.isError, true); assert.match(r.content[0].text, /inside the server working directory/);
 });
+
+test('mcp: a symlink inside the working directory cannot lead out_dir outside it', async () => {
+  const fs = await import('node:fs'), os = await import('node:os'), path = await import('node:path');
+  const { callTool } = await import('../scripts/mcp-server.mjs');
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'se-mcp-')); const cwd = path.join(base, 'cwd'), outside = path.join(base, 'outside'); fs.mkdirSync(cwd); fs.mkdirSync(outside); fs.symlinkSync(outside, path.join(cwd, 'lnk'));
+  const old = process.cwd(); process.chdir(cwd);
+  try {
+    const r = await callTool('check_site_health', { url: 'https://example.com', out_dir: 'lnk/out' });
+    assert.equal(r.isError, true); assert.match(r.content[0].text, /inside the server working directory/); assert.equal(fs.existsSync(path.join(outside, 'out')), false);
+  } finally { process.chdir(old); }
+});

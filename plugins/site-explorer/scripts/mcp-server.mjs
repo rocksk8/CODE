@@ -43,6 +43,12 @@ function runCli(args, { timeoutMs = 15 * 60 * 1000 } = {}) {
     p.on('close', (status) => { clearTimeout(kill); resolve({ status, out, err }); });
   });
 }
+/** realpath of the deepest existing ancestor + the not-yet-existing rest: a symlink inside the working directory must not lead the output outside it */
+function realPathOf(p) {
+  let cur = path.resolve(p); const rest = [];
+  while (!fs.existsSync(cur)) { rest.unshift(path.basename(cur)); const up = path.dirname(cur); if (up === cur) break; cur = up; }
+  return path.join(fs.realpathSync(cur), ...rest);
+}
 const safeDir = (d) => typeof d === 'string' && d.length > 0 && d.length < 1000 && !d.startsWith('-') && !d.includes('\0');
 const intIn = (v, def, lo, hi) => (Number.isInteger(v) && v >= lo && v <= hi ? v : def);
 
@@ -50,7 +56,7 @@ export async function callTool(name, a = {}) {
   if (name === 'explore_site' || name === 'check_site_health') {
     const url = normalizeUrl(a.url); if (!url) return fail('url must be a website address such as https://example.com');
     if (a.out_dir !== undefined && !safeDir(a.out_dir)) return fail('out_dir is not a valid folder path');
-    if (a.out_dir !== undefined && !isInside(path.resolve(a.out_dir), process.cwd())) return fail('out_dir must be inside the server working directory (' + process.cwd() + ')'); // a prompt-injected agent must not be able to write the output tree anywhere on disk
+    if (a.out_dir !== undefined && !isInside(realPathOf(a.out_dir), fs.realpathSync(process.cwd()))) return fail('out_dir must be inside the server working directory (' + process.cwd() + ')'); // a prompt-injected agent must not be able to write the output tree anywhere on disk
     const args = [url, '--json', '--no-open', '--max-pages', String(intIn(a.max_pages, 6, 1, 50))];
     if (name === 'check_site_health') args.push('--no-motion', '--no-handoff', '--no-db'); else { if (!a.motion) args.push('--no-motion'); if (a.verify) args.push('--verify'); }
     if (a.out_dir) args.push('--out', path.resolve(a.out_dir));
