@@ -2666,5 +2666,14 @@
 "用程式碼分割（動態 import）和 tree-shaking，只在需要的頁面或互動時才載入。": "Use code splitting (dynamic import) and tree-shaking so code loads only on the page or interaction that needs it.",
 "移除沒用到的樣式（例如用 PurgeCSS／Tailwind 的 content 設定），或把非首屏樣式延後載入。": "Remove unused styles (for example PurgeCSS / Tailwind's content setting) or load non-critical styles later.",
 "首頁載入的 CSS 有 {}%（約 {} KB）在載入時沒用到": "{}% of the CSS the home page loads (about {} KB) is unused while it loads",
-"首頁載入的 JavaScript 有 {}%（約 {} KB）在載入時沒用到": "{}% of the JavaScript the home page loads (about {} KB) is unused while it loads"
+"首頁載入的 JavaScript 有 {}%（約 {} KB）在載入時沒用到": "{}% of the JavaScript the home page loads (about {} KB) is unused while it loads",
+"id 裡有空白": "An id contains a space",
+"lang 不是有效的語言代碼（例如 zh_TW 應寫成 zh-TW）": "lang is not a valid language tag (for example zh_TW should be zh-TW)",
+"input 的 type 不存在": "An input has a type that does not exist",
+"圖片的 width／height 帶了單位或 %": "An image width / height has a unit or %",
+"表單裡面又放了表單": "A form inside a form",
+"有多個 <title>": "More than one <title>",
+"終端機編碼": "Terminal encoding",
+"目前的字碼頁是 {}，中文可能顯示成亂碼": "The current code page is {}; Chinese text may show as garbage",
+"先執行 chcp 65001，或使用 Windows Terminal，或加 --lang en": "Run chcp 65001 first, or use Windows Terminal, or add --lang en"
 }

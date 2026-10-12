@@ -2,6 +2,7 @@
 // Environment check with a concrete fix for every problem.  doctor.mjs [url]
 import { _t } from './i18n.mjs';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,6 +17,10 @@ export async function runChecks(url) {
   const [maj, min] = process.versions.node.split('.').map(Number);
   maj >= 20 ? add('Node.js', 'ok', process.version) : add('Node.js', 'fail', _t`${process.version} 太舊（需要 20 以上）`, _t('請升級 Node（建議 22 LTS）：https://nodejs.org 或 brew install node'));
 
+  if (process.platform === 'win32' && !process.env.WT_SESSION) { // the old Windows console shows UTF-8 (every Chinese character here) as garbage unless its code page is 65001
+    let cp = null; try { cp = /(\d{3,5})\s*$/.exec(execFileSync('cmd', ['/c', 'chcp'], { encoding: 'utf8', timeout: 3000 }).trim())?.[1] || null; } catch {}
+    if (cp && cp !== '65001') add(_t('終端機編碼'), 'warn', _t`目前的字碼頁是 ${cp}，中文可能顯示成亂碼`, _t('先執行 chcp 65001，或使用 Windows Terminal，或加 --lang en'));
+  }
   let browser = null;
   try { browser = await launchBrowser(); add(_t('瀏覽器'), 'ok', browser.version()); }
   catch (e) { add(_t('瀏覽器'), 'fail', _t('找不到可用的 Chrome／Edge／Chromium'), _t('執行 site-explorer setup（經你同意才會下載 Chromium），或安裝 Google Chrome，或設定 CHROMIUM_PATH')); }

@@ -47,3 +47,10 @@ test('references to ids that do not exist: label for, aria-*, #fragment links (d
   const r = checkHtml(wrap('<label for="nope">x</label><div aria-describedby="gone"></div><a href="#missing">m</a><a href="#missing">again</a>'));
   assert.deepEqual(r.map((f) => f.id).sort(), ['broken-fragment', 'missing-id-ref']); assert.equal(r.find((f) => f.id === 'broken-fragment').count, 1, 'a repeated reference is reported once');
 });
+
+test('ids with spaces, bad lang tags, unknown input types, units on image sizes, nested forms and a second <title> are found; the valid forms are not', () => {
+  const bad = checkHtml('<!doctype html><html lang="zh_TW"><head><title>A</title><title>B</title></head><body><div id="a b"></div><input type="textt"><img src="x.png" width="100%" height="50px" alt=""><form><form></form></form></body></html>');
+  const ids = bad.map((f) => f.id); for (const want of ['bad-lang', 'multiple-title', 'id-whitespace', 'bad-input-type', 'img-size-unit', 'nested-form']) assert.ok(ids.includes(want), want + ' in ' + ids.join(','));
+  const good = checkHtml('<!doctype html><html lang="zh-TW"><head><title>A</title></head><body><div id="ab"></div><input type="email"><input type="datetime-local"><img src="x.png" width="100" height="50" alt=""><form><input></form><svg><title>icon</title></svg></body></html>');
+  assert.deepEqual(good.map((f) => f.id), []);
+});
