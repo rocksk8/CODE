@@ -13,7 +13,7 @@ test('limits: sensible defaults, overridable, memory rule', () => {
   assert.equal(stageLimitMs('crawl.mjs', {}), 30 * 60000); assert.equal(stageLimitMs('health-check.mjs', {}), 15 * 60000); assert.equal(stageLimitMs('export-design.mjs', {}), 10 * 60000);
   assert.equal(stageLimitMs('crawl.mjs', { SITE_EXPLORER_STAGE_LIMIT_MS: '1500' }), 1500); assert.equal(stageLimitMs('crawl.mjs', { SITE_EXPLORER_STAGE_MINUTES: '20' }), 60 * 60000);
   assert.equal(runLimitMs({}), 120 * 60000); assert.equal(runLimitMs({ SITE_EXPLORER_MAX_MINUTES: '5' }), 5 * 60000);
-  const GB = 1024 ** 3; assert.equal(isLowMemory(0.1 * GB, 16 * GB), true); assert.equal(isLowMemory(0.3 * GB, 16 * GB), true, '4 % of 16 GB is 655 MB'); assert.equal(isLowMemory(4 * GB, 16 * GB), false); assert.equal(isLowMemory(200 * 1048576, 1 * GB), true); assert.equal(isLowMemory(500 * 1048576, 8 * GB), false);
+  const GB = 1024 ** 3; assert.equal(isLowMemory(0.1 * GB, 16 * GB), true); assert.equal(isLowMemory(0.3 * GB, 16 * GB), true, '4 % of 16 GB is 655 MB'); assert.equal(isLowMemory(4 * GB, 16 * GB), false); assert.equal(isLowMemory(100 * 1048576, 1 * GB), true); assert.equal(isLowMemory(200 * 1048576, 1 * GB), false); assert.equal(isLowMemory(500 * 1048576, 8 * GB), false); assert.equal(isLowMemory(250 * 1048576, 16 * GB), true, '2 % of 16 GB is 327 MB');
 });
 
 test('memory readers: MemAvailable on Linux, free+inactive pages on macOS, never a false alarm when unknown', () => {
@@ -30,8 +30,10 @@ test('watchChild: a stage over its time limit is stopped and reported; one that 
   await closed(c1); stop1(); assert.equal(notes.at(-1)[0], 'timeout'); assert.match(notes.at(-1)[1], /超時通知/);
   const n2 = []; const c2 = sleeper(); const s2 = watchChild(c2, { limitMs: 60000, tickMs: 40, quietMs: 120, lang: 'en', notify: (k, t) => n2.push([k, t]), memoryReader: () => ({ avail: 8e9, total: 16e9 }), loadReader: () => 0 });
   await new Promise((r) => setTimeout(r, 450)); s2(); c2.kill(); assert.ok(n2.some(([k, t]) => k === 'quiet' && /Still running/.test(t)), JSON.stringify(n2));
-  const n3 = []; const c3 = sleeper(); const s3 = watchChild(c3, { limitMs: 60000, tickMs: 20, lang: 'en', notify: (k, t) => n3.push([k, t]), memoryReader: () => ({ avail: 50e6, total: 16e9 }), loadReader: () => 0 });
+  const n3 = []; const c3 = sleeper(); const s3 = watchChild(c3, { canKill: true, limitMs: 60000, tickMs: 20, lang: 'en', notify: (k, t) => n3.push([k, t]), memoryReader: () => ({ avail: 50e6, total: 16e9 }), loadReader: () => 0 });
   await closed(c3); s3(); assert.equal(n3.at(-1)[0], 'memory'); assert.match(n3.at(-1)[1], /Low-memory notice/);
+  const n5 = []; const c5 = sleeper(); const s5 = watchChild(c5, { canKill: false, limitMs: 60000, tickMs: 20, lang: 'en', notify: (k, t) => n5.push([k, t]), memoryReader: () => ({ avail: 50e6, total: 16e9 }), loadReader: () => 0 });
+  await new Promise((r) => setTimeout(r, 400)); s5(); assert.equal(c5.exitCode, null, 'where available memory is unreliable (macOS) nothing is stopped'); c5.kill(); assert.ok(n5.some(([k]) => k === 'memwarn'));
   const n4 = []; const c4 = sleeper(); const s4 = watchChild(c4, { limitMs: 60000, tickMs: 20, lang: 'en', notify: (k, t) => n4.push([k, t]), memoryReader: () => ({ avail: 8e9, total: 16e9 }), loadReader: () => 99, cores: 2 });
   await new Promise((r) => setTimeout(r, 400)); s4(); c4.kill(); assert.ok(n4.some(([k]) => k === 'cpu'), 'a saturated CPU is announced'); assert.ok(!n4.some(([k]) => k === 'timeout' || k === 'memory'), 'and does not stop anything');
 });

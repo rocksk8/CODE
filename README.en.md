@@ -24,6 +24,8 @@ site-explorer check https://example.com   # fastest: know what to fix first with
 site-explorer https://example.com         # full: design, 3D / animation, health check, handoff package
 ```
 
+**When a run takes too long or eats resources**: every stage has a time limit (crawl 30 min, 3D 25 min, others 10–20 min; 120 min for the whole run). Past it you get a "⏱ Timeout notice", that stage is stopped and the rest continue. If available memory stays under 128 MB (or 2 %) for 30 s a "🧠 Low-memory notice" appears and the stage is stopped so the computer does not freeze (on macOS it only warns, because its "available memory" figure is unreliable). Sustained full CPU prints a "🔥" notice, and 90 s without output prints "⏳ Still running". Tune with `SITE_EXPLORER_STAGE_MINUTES` and `SITE_EXPLORER_MAX_MINUTES`. **If Chinese text is garbled in a Windows terminal**, run `chcp 65001` first or add `--lang en`.
+
 You get a folder: double-click `dashboard.html` for the overview; give the whole `handoff/` folder to an AI and paste the prompt from `PROMPT.md` — it can start building pages and motion without you writing any briefing.
 
 > **Language note.** Output defaults to Traditional Chinese; add `--lang en` (or `SITE_EXPLORER_LANG=en`) and the console, reports, dashboard, handoff documents and the issue text in PR comments are all English. The handoff entry points (`START-HERE.md`, `PROMPT.md`, `AI-PACKAGE.md`, the starter code) are English either way, and everything is plain text / JSON that any LLM reads fine.

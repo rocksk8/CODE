@@ -14,8 +14,8 @@ export function stageLimitMs(script, env = process.env) {
 }
 /** Overall limit of one whole run (ms); stages that have not started when it is over are skipped. */
 export function runLimitMs(env = process.env) { const m = Number(env.SITE_EXPLORER_MAX_MINUTES); return (Number.isFinite(m) && m > 0 ? m : 120) * MIN; }
-/** Memory is "low" when what is still available is under 256 MB or under 4 % of the total. */
-export function isLowMemory(availableBytes, totalBytes) { return Number.isFinite(availableBytes) && Number.isFinite(totalBytes) && totalBytes > 0 && availableBytes < Math.max(256 * 1048576, totalBytes * 0.04); }
+/** Memory is "low" when what is still available is under 128 MB or under 2 % of the total (a computer that is about to start swapping heavily). */
+export function isLowMemory(availableBytes, totalBytes) { return Number.isFinite(availableBytes) && Number.isFinite(totalBytes) && totalBytes > 0 && availableBytes < Math.max(128 * 1048576, totalBytes * 0.02); }
 /** Linux: "MemAvailable" is what can be used without swapping (os.freemem() is MemFree, which ignores the page cache and is always small on a busy machine). */
 export function parseMeminfo(text) { const m = /^MemAvailable:\s+(\d+)\s*kB/m.exec(text || ''); return m ? Number(m[1]) * 1024 : null; }
 /** macOS: free + inactive + speculative + purgeable pages from `vm_stat` (os.freemem() counts only the truly free ones, so it looks nearly empty on a healthy Mac). */
@@ -47,15 +47,16 @@ export function killTree(child) {
  * Watch one child process. Calls notify(kind, text) for 'quiet' (no output for a while), 'cpu' (machine saturated) and, when it has to act,
  * 'timeout' / 'memory' (after killing the child). Returns stop().
  */
-export function watchChild(child, { limitMs, notify, quietMs = 90000, tickMs = 5000, lang = 'zh', getLastOutputAt = null, memoryReader = memorySnapshot, loadReader = () => os.loadavg()[0], cores = (os.cpus() || []).length || 1 } = {}) {
-  const t0 = Date.now(); let lowStreak = 0, quietSaid = 0, cpuStreak = 0, cpuSaid = false, stopped = false;
+export function watchChild(child, { limitMs, notify, quietMs = 90000, tickMs = 5000, lang = 'zh', getLastOutputAt = null, memoryReader = memorySnapshot, loadReader = () => os.loadavg()[0], canKill = process.platform !== 'darwin', cores = (os.cpus() || []).length || 1 } = {}) {
+  const t0 = Date.now(); let lowStreak = 0, quietSaid = 0, cpuStreak = 0, cpuSaid = false, memSaid = false, stopped = false;
   const L = (zh, en) => (lang === 'en' ? en : zh);
   const timer = setInterval(() => {
     if (stopped) return;
     const ran = Date.now() - t0;
     if (limitMs && ran > limitMs) { stopped = true; clearInterval(timer); killTree(child); notify('timeout', L(`⏱ 超時通知：這個階段已執行超過 ${Math.round(limitMs / MIN)} 分鐘，已停止它並繼續下一階段。`, `⏱ Timeout notice: this stage ran longer than ${Math.round(limitMs / MIN)} minutes; it was stopped and the next stage continues.`)); return; }
     const m = memoryReader(); lowStreak = isLowMemory(m.avail, m.total) ? lowStreak + 1 : 0;
-    if (lowStreak >= 6) { stopped = true; clearInterval(timer); killTree(child); notify('memory', L(`🧠 記憶體不足通知：可用記憶體只剩 ${Math.round(m.avail / 1048576)} MB，為了避免整台電腦卡死，已停止這個階段。請關閉其他程式，或減少頁數（--max-pages）後再試。`, `🧠 Low-memory notice: only ${Math.round(m.avail / 1048576)} MB is available; to keep the computer from freezing this stage was stopped. Close other programs or use fewer pages (--max-pages) and try again.`)); return; }
+    if (lowStreak >= 6 && !canKill) { if (!memSaid) { memSaid = true; notify('memwarn', L(`🧠 記憶體偏低通知：可用記憶體約 ${Math.round(m.avail / 1048576)} MB。這台電腦可能變慢；沒有停止任何東西，必要時請關閉其他程式。`, `🧠 Low-memory notice: about ${Math.round(m.avail / 1048576)} MB is available. The computer may slow down; nothing was stopped. Close other programs if needed.`)); } }
+    else if (lowStreak >= 6) { stopped = true; clearInterval(timer); killTree(child); notify('memory', L(`🧠 記憶體不足通知：可用記憶體只剩 ${Math.round(m.avail / 1048576)} MB，為了避免整台電腦卡死，已停止這個階段。請關閉其他程式，或減少頁數（--max-pages）後再試。`, `🧠 Low-memory notice: only ${Math.round(m.avail / 1048576)} MB is available; to keep the computer from freezing this stage was stopped. Close other programs or use fewer pages (--max-pages) and try again.`)); return; }
     const quiet = Date.now() - (getLastOutputAt ? getLastOutputAt() : t0);
     if (quiet > quietMs && Date.now() - quietSaid > quietMs) { quietSaid = Date.now(); notify('quiet', L(`⏳ 仍在執行：已 ${Math.round(quiet / 1000)} 秒沒有新訊息（已跑 ${Math.round(ran / MIN)} 分鐘，上限 ${Math.round((limitMs || 0) / MIN)} 分鐘）。網站很重時這是正常的。`, `⏳ Still running: no new output for ${Math.round(quiet / 1000)} s (${Math.round(ran / MIN)} min in, limit ${Math.round((limitMs || 0) / MIN)} min). Normal on a heavy site.`)); }
     let load = 0; try { load = loadReader(); } catch {}
