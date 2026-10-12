@@ -40,7 +40,7 @@ export function parseBudget(text) {
 }
 
 const live = (pages) => (pages || []).filter((p) => p && (!p.status || p.status < 400));
-const med = (a) => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
+const med = (a) => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[Math.floor((v.length - 1) / 2)] : null; };
 
 /** One row per live page with every metric (null when it was not measured). */
 export function collectPerf(pages) {
@@ -66,8 +66,8 @@ export function appendHistory(history, entry, cap = 60) {
 
 const fmt = (k, v) => (v == null ? '–' : `${v}${METRICS[k][1] ? ' ' + METRICS[k][1] : ''}`);
 
-export function renderPerfMd({ rows, budget, result, history }) {
-  const L = [BANNER, '', _t('# 效能預算與歷次紀錄'), '', _t('這些是實驗室數據（無頭瀏覽器、無節流、單次載入），拿來看趨勢與設門檻，不等於真實使用者體驗。'), ''];
+export function renderPerfMd({ rows, budget, result, history, mode = {} }) {
+  const L = [BANNER, '', _t('# 效能預算與歷次紀錄'), '', (mode.throttled ? _t`這些是實驗室數據（無頭瀏覽器、模擬行動網路與 4 倍慢的 CPU、每頁取 ${mode.runs} 次載入的中位數），拿來看趨勢與設門檻，不等於真實使用者體驗。` : mode.runs > 1 ? _t`這些是實驗室數據（無頭瀏覽器、無節流、每頁取 ${mode.runs} 次載入的中位數），拿來看趨勢與設門檻，不等於真實使用者體驗。` : _t('這些是實驗室數據（無頭瀏覽器、無節流、單次載入），拿來看趨勢與設門檻，不等於真實使用者體驗。')) + (mode.throttleFailed ? ' ' + _t('（要求了節流，但節流的載入全部失敗，以下是沒有節流的數值。）') : ''), ''];
   const m = medians(rows), prev = history.length > 1 ? history[history.length - 2].medians : null;
   L.push(_t('## 這次（各頁中位數）'), '', _t('| 指標 | 這次 | 上次 | 變化 |'), '|---|---|---|---|');
   for (const k of Object.keys(METRICS)) { const a = m[k], b = prev ? prev[k] : null; const d = a != null && b != null ? a - b : null; L.push(`| ${METRICS[k][0]} | ${fmt(k, a)} | ${fmt(k, b)} | ${d == null ? '–' : (d > 0 ? '+' : '') + (Math.round(d * 1000) / 1000)} |`); }
@@ -99,7 +99,7 @@ if (isMain(import.meta.url)) {
     const history = appendHistory(old, { at: new Date().toISOString(), url: clean(String(site.startUrl || ''), 200), pages: rows.length, medians: medians(rows) });
     fs.writeFileSync(hf, JSON.stringify(history, null, 2));
     fs.writeFileSync(path.join(dir, 'performance.json'), JSON.stringify({ rows, medians: medians(rows), budget, result, historyFile: hf }, null, 2));
-    fs.writeFileSync(path.join(dir, 'performance.md'), renderPerfMd({ rows, budget, result, history }) + '\n');
+    fs.writeFileSync(path.join(dir, 'performance.md'), renderPerfMd({ rows, budget, result, history, mode: { runs: Math.max(1, ...pages.map((p) => p.seo?.perfRuns || 1)), throttled: pages.some((p) => p.seo?.perfThrottled), throttleFailed: pages.some((p) => p.seo?.perfThrottleFailed) } }) + '\n');
     console.log(budget ? (result.failed ? _t`✖ 效能預算：${result.violations.filter((v) => v.level === 'fail').length} 項超標` : result.violations.length ? _t`⚠ 效能預算：${result.violations.length} 項警告，沒有失敗項` : _t('✔ 效能預算：全部在預算內')) : _t('效能紀錄已更新（沒有指定 --budget）'));
     console.log(_t`   詳情：${path.join(dir, 'performance.md')}`);
   } catch (e) { console.error('✖ ' + String(e.message).split('\n')[0]); process.exit(1); }

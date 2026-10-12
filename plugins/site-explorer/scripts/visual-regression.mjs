@@ -15,13 +15,22 @@ const MAX_ROWS = 6000; // pixel rows compared per screenshot (very long pages: t
 export function visualDirFor(baselineFile) { return baselineFile.replace(/\.json$/i, '') + '-visual'; }
 
 /** Remove a visual baseline folder, but only one this tool wrote (it has our index.json) or an empty one: never a folder that merely has the same name. */
-export function removeVisualBaseline(dest) {
+export function removeVisualBaseline(dest, dry = false) {
   if (!fs.existsSync(dest)) return;
   if (fs.lstatSync(dest).isSymbolicLink() || !fs.statSync(dest).isDirectory()) throw new Error(_t`${dest} 已存在但不是資料夾，不會覆蓋。`);
   const entries = fs.readdirSync(dest);
   let ours = false; try { ours = JSON.parse(fs.readFileSync(path.join(dest, 'index.json'), 'utf8')).schema === 1; } catch {}
   if (entries.length && !ours) throw new Error(_t`${dest} 已存在而且不是 site-explorer 建立的視覺基準資料夾，不會覆蓋（請改用 --baseline 指定別的位置，或自行移走它）。`);
-  fs.rmSync(dest, { recursive: true, force: true });
+  if (!dry) fs.rmSync(dest, { recursive: true, force: true });
+}
+
+/** How many screenshots this run has that a visual baseline would store. */
+export function countVisualShots(siteDir) {
+  let n = 0; try { const site = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8'));
+    for (const p of site.pages || []) { if (!SLUG.test(p.slug || '') || (p.status && p.status >= 400)) continue; for (const vp of VIEWPORTS) if (fs.existsSync(path.join(siteDir, 'pages', p.slug, `${vp}.png`))) n++; }
+    for (const sc of site.scenarios || []) if (sc?.file && NAME_OK.test(sc.name || '') && fs.existsSync(path.join(siteDir, 'scenarios', sc.name + '.png'))) n++;
+  } catch {}
+  return n;
 }
 
 /** Copy this run's full-page screenshots into dest/<slug>/<viewport>.png. Returns how many were stored. */
@@ -142,7 +151,8 @@ export function renderVisualReviewHtml(vr, { baseDir, siteDir, outDir, url, base
   let budget = 14 * 1024 * 1024;
   const img = (file) => { try { if (!file || !fs.existsSync(file)) return null; const b = fs.readFileSync(file); const enc = Math.ceil(b.length / 3) * 4; if (enc > budget) return null; budget -= enc; return 'data:image/png;base64,' + b.toString('base64'); } catch { return null; } };
   const VPN = { desktop: _t('桌機'), tablet: _t('平板'), mobile: _t('手機'), scenario: _t('情境') };
-  const cmd = (items) => `site-explorer explore ${/^[\w:/.@%+~?&=#,-]+$/.test(String(url)) ? url : JSON.stringify(String(url))} --approve-visual ${items}${baselineFile ? ` --baseline ${JSON.stringify(baselineFile)}` : ''}`;
+  const sq = (v) => (/^[\w:/.@%+=,-]+$/.test(String(v)) ? String(v) : `'${String(v).replace(/'/g, `'\\''`)}'`); // POSIX single-quote quoting: nothing in a URL or path can run as a command
+  const cmd = (items) => `site-explorer explore ${sq(url)} --approve-visual ${sq(items)}${baselineFile ? ` --baseline ${sq(baselineFile)}` : ''}`;
   const keyOf = (r) => (r.viewport === 'scenario' ? `scenario:${r.slug}` : `${r.slug}:${r.viewport}`);
   const changed = vr.rows.filter((r) => r.status !== 'same'), same = vr.rows.length - changed.length;
   const cards = changed.map((r, i) => {

@@ -100,11 +100,11 @@ export function renderBehaviorsMd(r) {
   L.push(_t('## 錄製訪客操作／熱點圖的服務'), '', ...(r.replay.length ? r.replay.map((x) => `- **${x.name}** — \`${x.evidence.replace(/`/g, '')}\``) : [_t('（沒有發現）')]), '');
   L.push(_t('## 瀏覽器指紋'), '');
   const K = { canvas: _t('讀取畫了文字的 canvas（canvas 指紋）'), webgl: _t('讀取顯示卡型號（WebGL 指紋）'), audio: _t('使用離線音訊運算（音訊指紋的常見手法）'), fonts: _t('大量量測文字寬度（字型探測）'), keys: _t('監聽整頁的鍵盤事件（鍵盤記錄手法）') };
-  L.push(...(r.fingerprint.length ? r.fingerprint.map((x) => `- ${K[x.kind]}：\`${(x.src || '?').replace(/`/g, '')}\`（${x.party === 'first-party' ? _t('同網站') : x.party === 'third-party' ? _t('第三方') : _t('來源不明')}）`) : [_t('（沒有發現）')]), '');
+  L.push(...(r.fingerprint.length ? r.fingerprint.map((x) => `- ${K[x.kind]}${_t('：')}\`${(x.src || '?').replace(/`/g, '')}\`${_t('（')}${x.party === 'first-party' ? _t('同網站') : x.party === 'third-party' ? _t('第三方') : _t('來源不明')}${_t('）')}`) : [_t('（沒有發現）')]), '');
   L.push(_t('## 輸入文字是否被送到別的網站'), '');
   if (!r.keystroke.pagesTested) L.push(_t('（沒有可測的文字輸入框，或這次是登入狀態所以略過。）'));
   else if (!r.keystroke.leaks.length) L.push(_t`在 ${r.keystroke.pagesTested} 頁各輸入一段隨機文字（不送出表單），沒有看到它被送往其他網站。`);
-  else L.push(_t`**輸入的隨機文字被送往：**`, ...r.keystroke.leaks.map((x) => `- \`${x.host}\`（${x.where === 'url' ? _t('網址') : _t('請求內容')}）`));
+  else L.push(_t`**輸入的隨機文字被送往：**`, ...r.keystroke.leaks.map((x) => `- \`${x.host}\`${_t('（')}${x.where === 'url' ? _t('網址') : _t('請求內容')}${_t('）')}`));
   L.push('', _t('> 測試只會在一個一般文字框輸入隨機字串並清掉，不會按送出；有密碼欄的表單與疑似付款／驗證欄位一律不測。'), '');
   return L.join('\n');
 }

@@ -42,7 +42,8 @@ export function gradeHeaders(headers, { https = true, cookies = [], scripts = []
   // MIME sniffing, framing, referrer
   if (!/nosniff/i.test(H['x-content-type-options'] || '')) add('nosniff', 'X-Content-Type-Options', -5, _t('缺少 nosniff'), _t('加入 `X-Content-Type-Options: nosniff`。'));
   else add('nosniff', 'X-Content-Type-Options', 0, 'nosniff', null);
-  const xfo = /^(deny|sameorigin)$/i.test((H['x-frame-options'] || '').trim()), fa = /frame-ancestors/i.test(csp || '');
+  const xfo = /^(deny|sameorigin)$/i.test((H['x-frame-options'] || '').trim()), faList = (() => { for (const d of String(csp || '').split(';')) { const [n, ...v] = d.trim().split(/\s+/); if (n && n.toLowerCase() === 'frame-ancestors') return v.map((x) => x.toLowerCase()); } return null; })(),
+    fa = !!faList && !faList.some((x) => x === '*' || x === 'http:' || x === 'https:'); // frame-ancestors * lets every site frame the page
   if (!xfo && !fa) add('framing', 'X-Frame-Options / frame-ancestors', -20, _t('沒有防止被嵌進別人的 iframe（點擊劫持）'), _t("加入 `X-Frame-Options: DENY`，或 CSP 的 `frame-ancestors 'self'`。"));
   else add('framing', 'X-Frame-Options / frame-ancestors', 0, xfo ? H['x-frame-options'] : 'frame-ancestors', null);
   const rp = (H['referrer-policy'] || '').toLowerCase().split(',').pop().trim();
@@ -63,7 +64,8 @@ export function gradeHeaders(headers, { https = true, cookies = [], scripts = []
   // version disclosure is informational only
   const disc = [H['server'], H['x-powered-by']].filter((x) => x && /\d/.test(x));
   if (disc.length) tests.push({ id: 'disclosure', name: 'Server / X-Powered-By', points: 0, result: _t`洩漏版本：${clean(disc.join(', '), 60)}`, fix: _t('隱藏版本號，避免被針對已知漏洞。') });
-  score = Math.min(score, 115); // like Observatory the extra credit cannot hide missing basics, but the scale allows A+ above 100
+  score = Math.min(score, 115); // the scale allows A+ above 100
+  if (!csp || (https && !H['strict-transport-security'])) score = Math.min(score, 79); // extra credit cannot hide a missing basic: no CSP, or no HSTS on https, is at best a B
   return { score, grade: gradeOf(score), tests };
 }
 

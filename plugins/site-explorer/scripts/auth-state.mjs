@@ -47,7 +47,7 @@ const FORBIDDEN_HEADERS = new Set(['host', 'content-length', 'transfer-encoding'
 
 /** Cookies from a file: Playwright storage-state JSON, a JSON array [{name,value,domain?,path?}], a Netscape cookies.txt, or one "a=1; b=2" line. */
 export function parseCookieFile(text, host, { secure = true } = {}) {
-  const base = (c) => ({ name: String(c.name), value: String(c.value ?? ''), domain: String(c.domain || host).replace(/^\./, '') || host, path: String(c.path || '/'), expires: Number.isFinite(c.expires) ? c.expires : -1, httpOnly: !!c.httpOnly, secure: c.secure ?? secure, sameSite: ['Strict', 'Lax', 'None'].includes(c.sameSite) ? c.sameSite : 'Lax' });
+  const base = (c) => ({ name: String(c.name), value: String(c.value ?? ''), domain: String(c.domain || host) || host, path: String(c.path || '/'), expires: Number.isFinite(c.expires) ? c.expires : -1, httpOnly: !!c.httpOnly, secure: c.secure ?? secure, sameSite: ['Strict', 'Lax', 'None'].includes(c.sameSite) ? c.sameSite : 'Lax' });
   const ok = (c) => /^[^\s=;,"\\\x00-\x1f]{1,100}$/.test(c.name) && c.value.length <= 4000 && !/[\r\n\x00]/.test(c.value);
   const t = String(text).trim(); let list = null;
   if (t.startsWith('{') || t.startsWith('[')) { let j; try { j = JSON.parse(t); } catch { throw new Error(_t('cookie 檔不是有效的 JSON。')); } const arr = Array.isArray(j) ? j : Array.isArray(j?.cookies) ? j.cookies : null; if (!arr) throw new Error(_t('cookie 檔必須是 cookie 陣列，或含 cookies 欄位的登入狀態檔。')); list = arr.filter((c) => c && typeof c.name === 'string').map(base); }
@@ -96,6 +96,15 @@ export async function applyCredentialRoutes(ctx, startUrl, env = process.env) {
   if (!env[CRED_ENV.headers]) return false;
   let headers; try { headers = parseHeaders(Object.entries(JSON.parse(env[CRED_ENV.headers]))); } catch { return false; }
   const origin = new URL(startUrl).origin;
-  await ctx.route('**/*', (route) => { let same = false; try { same = new URL(route.request().url()).origin === origin; } catch {} return same ? route.fallback({ headers: { ...route.request().headers(), ...Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v])) } }) : route.fallback(); });
+  // Chromium keeps a header override across a redirect, even to another origin. So every request is fetched here WITHOUT following redirects and handed back to the page as it is:
+  // the browser then follows a redirect as a NEW request, which gets the headers only if it is still on the start origin. (Requests that are not fetched here but continued cannot be mixed with fetched
+  // ones: Chromium stalls them, so third-party requests are fetched too, just without the headers.)
+  let basic = null; try { if (env[CRED_ENV.basic]) { const b = parseBasicAuth(env[CRED_ENV.basic]); basic = 'Basic ' + Buffer.from(`${b.username}:${b.password}`).toString('base64'); } } catch {}
+  const extra = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
+  await ctx.route('**/*', async (route) => {
+    const rq = route.request(); let same = false; try { same = new URL(rq.url()).origin === origin; } catch {}
+    try { const resp = await route.fetch({ headers: same ? { ...rq.headers(), ...(basic ? { authorization: basic } : {}), ...extra } : rq.headers(), maxRedirects: 0, timeout: 30000 }); return await route.fulfill({ response: resp }); }
+    catch { return route.abort('failed').catch(() => {}); }
+  });
   return true;
 }

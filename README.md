@@ -253,7 +253,7 @@ AI 只能讀文字和圖片。所以：
 
 **CI 輸出（SARIF／JUnit）**：`--sarif <檔案>`、`--junit <檔案>` 把健檢問題、效能預算超標、安全評等扣分、TLS 問題與（有做比對時的）視覺差異輸出成 SARIF 2.1.0（GitHub code scanning 等）與 JUnit XML（Jenkins、GitLab、CircleCI、Azure DevOps）。GitHub Action 每次都會產生 `results.sarif`／`results.xml`，路徑在輸出 `sarif-file`／`junit-file`，可用 `github/codeql-action/upload-sarif` 上傳。
 
-**Figma 匯入檔**：每次探索在 `figma/` 寫出每頁一個圖層化 SVG（真實位置、大小、填色、圓角與文字），拖進 Figma 即可編輯；設計變數用 Tokens Studio 匯入 `design-bundle/tokens.studio.json`。這是依實測元素（最多 240 個）生成的版面草稿，不是逐像素複製：文字只取前 50 字、圖片為灰色佔位。
+**Figma 匯入檔**：每次探索在 `figma/` 寫出每頁一個圖層化 SVG（真實位置、大小、填色、圓角與文字），拖進 Figma 即可編輯；設計變數用 Tokens Studio 匯入 `design-bundle/tokens.studio.json`。這是依實測元素（最多 240 個）生成的版面草稿，不是逐像素複製：文字每段最多取前 200 字、圖片為灰色佔位。
 
 **HTML 有效性**：健檢會檢查伺服器送出的原始 HTML——標籤沒關或順序錯、多餘結束標籤、id／屬性重複、連結或按鈕巢狀、`<p>` 內放區塊元素、清單／表格父元素錯誤、已廢棄元素、缺 doctype、charset 太晚。這是保守的檢查（只報確定有問題的），不是完整的 W3C 驗證器。
 
@@ -264,6 +264,8 @@ AI 只能讀文字和圖片。所以：
 **更深的檢查**：`--tech-rules 規則.json` 加入你自己的技術辨識規則（內建約 120 條，含付款、客服、驗證碼、台灣電商平台）；`--perf-runs 3` 重複量測取中位數、`--throttle mobile` 模擬行動網路與 4 倍慢的 CPU（只支援 Chromium），速度頁新增總阻塞時間（TBT）；安全評等新增前向保密、DH 長度與認證式加密檢查（RC4／3DES 這類過時套件在這個環境無法主動試探，報告會明說「未測試」）；HTML 檢查新增 label for／aria-*／#錨點指向不存在 id；隱私檢查新增第三方腳本監聽整頁鍵盤事件。評分規則見 `docs/SCORING.md`。
 
 **畫面情境與審核**：`--scenarios 情境.json` 定義「先點、懸停、捲動、打字…再截圖」的畫面（例如選單展開、下拉選單），`--hide '.clock'` 隱藏一直在變的區塊；它們和整頁截圖一起存進基準、一起比對。比對有差異時產生 `visual-review.html`——逐張拖曳滑桿比較改版前後，並附上「核准這張」的指令；`--approve-visual home:mobile,scenario:menu-open`（或 `all`）只把指定的截圖更新為新基準。情境只在網站自己的來源上執行、所有非 GET 請求都會被擋下、不能按 Enter。
+
+**HAR 網路紀錄**：`--har` 每頁另存 `network.har`（HAR 1.2：每個請求的網址、狀態、大小與時間，可用瀏覽器開發者工具的 Network 面板或任何 HAR 檢視器開啟）。不含回應內容與 Cookie；Authorization、Cookie、API 金鑰、`--header` 給的標頭，以及網址裡 token／key／session 之類的參數值都會換成 `[redacted]`；登入狀態的探索不錄。
 
 **WARC 與 Figma**：`--warc` 每頁另存 `archive.warc.gz`（WARC 1.1，不含 Cookie 與驗證標頭，登入狀態不錄；已用獨立的 warcio 讀取驗證，尚未用 ReplayWeb.page 實際重播過）。Figma 資料夾除了 SVG，還有 `*.figma.json` 與 `plugin/`（一個小型 Figma 外掛）：在 Figma 桌面版匯入 `plugin/manifest.json`，選 `*.figma.json`，每頁會變成帶 auto layout 的巢狀 Frame、完整文字與圖片。這個外掛只在模擬的 Figma 介面上測過，還沒有在真正的 Figma 裡驗證。
 

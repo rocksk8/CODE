@@ -56,6 +56,7 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
   --scenarios <情境.json> 畫面情境：先點、懸停、捲動…再截圖（例如選單展開），和整頁截圖一起存基準、一起比對
   --hide <選擇器>      截圖時隱藏一直在變的區塊（時鐘、廣告…，可重複）
   --archive            每頁另存一個離線可開的單一 HTML（archive.html：CSS 與圖片內嵌、移除腳本；檔案較大）
+  --har                每頁另存一份 HAR（所有網路請求與時間，可用瀏覽器開發者工具或 HAR 檢視器開啟；不含 Cookie 與密鑰；登入狀態不錄）
   --warc               每頁另存一份 WARC（標準網頁封存格式，可用 ReplayWeb.page 重播；不含 Cookie；登入狀態不錄）
   --extract <規則.json> 自訂擷取規則：用 CSS 選擇器或 regex 從每頁抽出你要的資料（價格、SKU…），輸出 extractions.csv/json
 
@@ -82,7 +83,7 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
 `;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 { // a misspelled flag must fail loudly: "--fial-on high" silently turning a CI gate off is worse than an error
-  const KNOWN = new Set(['--a11y', '--archive', '--warc', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
+  const KNOWN = new Set(['--a11y', '--archive', '--warc', '--har', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
   const unknown = args.filter((a) => a.startsWith('--') && !KNOWN.has(a) && !/^--lang=/.test(a));
   if (unknown.length) { const near = (u) => [...KNOWN].find((k) => k.length > 3 && (k.startsWith(u) || u.startsWith(k) || [...u].filter((c) => k.includes(c)).length >= k.length - 2 && Math.abs(k.length - u.length) <= 2)); console.error(_t`不認得的選項：${unknown.join(' ')}${near(unknown[0]) ? _t`（是不是 ${near(unknown[0])}？）` : ''}\n執行 site-explorer explore --help 看全部選項。`); process.exit(1); }
   if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--browser'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
@@ -184,9 +185,10 @@ if (checks.some((c) => c.level === 'fail')) {
   rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'techstack.json')); rm(path.join(siteDir, 'tracking-behaviors.json')); rm(path.join(siteDir, 'security.json')); rm(path.join(siteDir, 'figma')); rm(path.join(siteDir, 'scenarios')); rm(path.join(siteDir, 'extractions.json')); rm(path.join(siteDir, 'extractions.csv')); rm(path.join(siteDir, 'security.md')); rm(path.join(siteDir, 'tracking-behaviors.md')); rm(path.join(siteDir, 'performance.json')); rm(path.join(siteDir, 'performance.md')); rm(path.join(siteDir, 'techstack.md')); // a failed re-run must not report the previous run's pages
   if (args.includes('--no-health')) { rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); }
   if (!args.includes('--a11y')) rm(path.join(siteDir, 'a11y.json'));
+  if (!compareFlag) for (const f of ['visual.json', 'visual.md', 'visual-review.html', 'visual-diff', 'drift.md']) rm(path.join(out, f)); // a comparison from an earlier run must not be shown as this run's result
   if (!args.includes('--verify')) rm(path.join(out, 'handoff', 'verify'));
 }
-const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--archive') ? ['--archive'] : []), ...(args.includes('--warc') ? ['--warc'] : []), ...(opt('scenarios', null) ? ['--scenarios', path.resolve(opt('scenarios'))] : []), ...args.flatMap((a, i) => (a === '--hide' && args[i + 1] ? ['--hide', args[i + 1]] : [])), ...(opt('perf-runs', null) ? ['--perf-runs', opt('perf-runs')] : []), ...(opt('throttle', null) ? ['--throttle', opt('throttle')] : []), ...(opt('extract', null) ? ['--extract', path.resolve(opt('extract', null))] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
+const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--archive') ? ['--archive'] : []), ...(args.includes('--warc') ? ['--warc'] : []), ...(args.includes('--har') ? ['--har'] : []), ...(opt('scenarios', null) ? ['--scenarios', path.resolve(opt('scenarios'))] : []), ...args.flatMap((a, i) => (a === '--hide' && args[i + 1] ? ['--hide', args[i + 1]] : [])), ...(opt('perf-runs', null) ? ['--perf-runs', opt('perf-runs')] : []), ...(opt('throttle', null) ? ['--throttle', opt('throttle')] : []), ...(opt('extract', null) ? ['--extract', path.resolve(opt('extract', null))] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
 const crawlOk = crawlRan && (() => { try { return (JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []).length > 0; } catch { return false; } })(); // a crawl that exits 0 but saved no page is a failure
 if (crawlOk) await run(_t('整理設計包（tokens、Tailwind、W3C）'), 'export-design.mjs', [siteDir]);
 let healthOk = false;
@@ -218,7 +220,7 @@ if (!args.includes('--no-motion') && crawlOk) {
   for (const p of extra) {
     const dest = path.join(motionRoot, '_pages', p.slug), t0 = Date.now();
     console.log(_t`   3D／動畫：${p.url}`);
-    const ok = await new Promise((resolve) => { const c = spawn(process.execPath, [path.join(here, 'capture-3d.mjs'), p.url, '--out', dest, '--wait', String(waitMs), ...(args.includes('--headed') ? ['--headed'] : [])], { env: process.env, stdio: 'ignore' }); c.on('close', (code) => resolve(code === 0)); });
+    const ok = await new Promise((resolve) => { const c = spawn(process.execPath, [path.join(here, 'capture-3d.mjs'), p.url, '--out', dest, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])], { env: process.env, stdio: 'ignore' }); c.on('close', (code) => resolve(code === 0)); });
     const hostDir = path.join(dest, new URL(p.url).host.replace(/[^a-z0-9.-]/gi, '_'));
     if (ok) { addEntry(p.url, p.slug, p.title, hostDir); console.log(`     ✔ ${((Date.now() - t0) / 1000).toFixed(1)}s`); } else console.log(_t('     ✖ 略過（失敗或被 robots.txt 擋住）'));
   }
@@ -320,6 +322,11 @@ if (approveFlag || compareFlag) {
     const siteJ = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8'));
     const cur = makeBaseline({ tokens, health, url, pages: (siteJ.pages || []).length });
     if (approveFlag) {
+      if (!args.includes('--no-visual')) { // check the visual folder BEFORE touching baseline.json, so a refusal leaves the old baseline whole
+        const { removeVisualBaseline, visualDirFor, countVisualShots } = await import('./visual-regression.mjs'); const vd = visualDirFor(bf);
+        removeVisualBaseline(vd, true);
+        if (!countVisualShots(siteDir) && fs.existsSync(vd) && fs.readdirSync(vd).length) throw new Error(_t('這次沒有任何整頁截圖，不會用空的內容覆蓋原有的視覺基準（不需要視覺基準的話可加 --no-visual）。'));
+      }
       fs.mkdirSync(path.dirname(bf), { recursive: true }); fs.writeFileSync(bf, JSON.stringify(cur, null, 2) + '\n'); console.log(_t`✔ 已把這次的結果存成基準：${bf}`);
       if (args.includes('--no-visual')) { const { removeVisualBaseline, visualDirFor } = await import('./visual-regression.mjs'); removeVisualBaseline(visualDirFor(bf)); } // a stale visual baseline must not outlive the approval it belonged to
       else { const { saveVisualBaseline, visualDirFor } = await import('./visual-regression.mjs'); const n = saveVisualBaseline(siteDir, visualDirFor(bf)); console.log(_t`✔ 已存下 ${n} 張整頁截圖作為視覺基準：${visualDirFor(bf)}`); }

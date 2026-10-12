@@ -9,7 +9,7 @@ import path from 'node:path';
 import { _t } from './i18n.mjs';
 
 const NAME = /^[a-z0-9][a-z0-9_-]{0,39}$/;
-const SEL = /^[^{};<>@\\]{1,200}$/;
+const SEL = /^(?!.*\/\*)[^{};<>@\\]{1,200}$/;
 const KEYS = new Set(['Tab', 'Shift+Tab', 'Escape', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageDown', 'PageUp', 'Space']);
 
 export function parseScenarios(text) {
@@ -20,7 +20,7 @@ export function parseScenarios(text) {
     const n = i + 1; if (!s || typeof s !== 'object') throw new Error(_t`第 ${n} 個情境必須是物件。`);
     if (!NAME.test(String(s.name || ''))) throw new Error(_t`第 ${n} 個情境的 name 只能用小寫英數字、底線與連字號（最多 40 字）。`);
     if (seen.has(s.name)) throw new Error(_t`情境名稱重複：${s.name}`); seen.add(s.name);
-    const p = s.path ?? '/'; if (typeof p !== 'string' || !p.startsWith('/') || p.startsWith('//') || p.length > 300) throw new Error(_t`情境 ${s.name} 的 path 必須是以 / 開頭的站內路徑。`);
+    const p = s.path ?? '/'; if (typeof p !== 'string' || !p.startsWith('/') || p.startsWith('//') || p.length > 300 || /[\\\x00-\x1f\x7f]/.test(p)) throw new Error(_t`情境 ${s.name} 的 path 必須是以 / 開頭的站內路徑。`);
     const vp = s.viewport ?? {}; const w = vp.width ?? 1440, h = vp.height ?? 900;
     if (!(Number.isInteger(w) && w >= 280 && w <= 2560 && Number.isInteger(h) && h >= 280 && h <= 2000)) throw new Error(_t`情境 ${s.name} 的 viewport 寬 280–2560、高 280–2000。`);
     const sel = (v, what) => { if (typeof v !== 'string' || !SEL.test(v)) throw new Error(_t`情境 ${s.name} 的 ${what} 必須是 200 字以內的 CSS 選擇器（不能含 { } ; < > @ \\）。`); return v; };
@@ -48,9 +48,11 @@ export async function runScenarios(ctx, startUrl, scenarios, outDir, { log = () 
   for (const sc of scenarios) {
     const page = await ctx.newPage(); const row = { name: sc.name, path: sc.path, file: null, error: null, blockedWrites: 0 };
     try {
+      page.on('popup', (pp) => pp.close().catch(() => {}));
       await page.setViewportSize(sc.viewport);
       await page.route('**/*', (route) => { const rq = route.request(); if (['GET', 'HEAD', 'OPTIONS'].includes(rq.method())) return route.fallback(); row.blockedWrites++; return route.abort('blockedbyclient'); });
-      await page.goto(new URL(sc.path, origin).href, { waitUntil: 'load', timeout: 30000 }); await page.waitForTimeout(500);
+      const target = new URL(sc.path, origin); if (target.origin !== origin) throw new Error(_t('情境的 path 必須留在同一個網站內。'));
+      await page.goto(target.href, { waitUntil: 'load', timeout: 30000 }); await page.waitForTimeout(500);
       for (const st of sc.steps) {
         try {
           if (st.act === 'click') await page.locator(st.sel).first().click({ timeout: 5000 });
