@@ -27,8 +27,8 @@
     const list = (D.verdicts || []).filter((v) => has(v.tab));
     let html = '';
     if (!hide) html += '<div class="how" id="how"><span>' + _t('怎麼讀這份報告：上面的分頁分成四區——<b>看網站</b>（設計、排版、內容）、<b>檢查</b>（健檢、安全、速度、隱私、技術）、<b>比較</b>（畫面比對、歷史、自訂擷取）、<b>交付</b>（匯出給 AI）。') + '</span><span>' + _t('卡片顏色：<b>綠</b>＝沒事、<b>黃</b>＝值得看、<b>紅</b>＝要處理、<b>藍</b>＝只是資訊。點卡片看詳細。') + '</span><button id="howx" title="' + esc(_t('不再顯示')) + '">✕</button></div>';
-    const TF = D.topFixes || [];
-    if (TF.length) html += '<div class="card tf"><h3>' + _t('最該先處理的事') + '</h3><ol>' + TF.map((f, i) => '<li><b>' + esc(f.title) + '</b>' + (f.scope ? ' <small>(' + esc(f.scope) + ')</small>' : '') + (f.why ? '<br><small>' + esc(f.why) + '</small>' : '') + '<br><button class="tfc" data-i="' + i + '">' + _t('複製給 AI 的指令') + '</button></li>').join('') + '</ol></div>';
+    const TF = (D.topFixes || []).slice(0, 3), EF = { 1: _t('很快'), 2: _t('需要一點時間'), 3: _t('較費工') };
+    if (TF.length) html += '<div class="card tf"><h3>' + _t('最該先處理的事') + '</h3><ol>' + TF.map((f, i) => '<li><b>' + esc(f.title) + '</b>' + (f.scope ? ' <small>(' + esc(f.scope) + ')</small>' : '') + ' <small class="ef e' + esc(f.effort) + '">' + esc(EF[f.effort] || '') + '</small>' + (f.why ? '<br><small>' + esc(f.why) + '</small>' : '') + '<br><button class="tfc" data-i="' + i + '">' + _t('複製給 AI 的指令') + '</button></li>').join('') + '</ol></div>';
     if (list.length) html += '<div class="board">' + list.map((v) => '<button class="vc ' + v.status + '" data-tab="' + esc(v.tab) + '"><span class="t">' + IC[v.status] + ' ' + esc(v.title) + '</span><span class="h">' + esc(v.headline) + '</span>' + (v.next ? '<span class="n">' + esc(v.next) + '</span>' : '') + '<span class="go">' + _t('看詳細 →') + '</span></button>').join('') + '</div>';
     o.insertAdjacentHTML('afterbegin', html);
     o.querySelectorAll('.vc').forEach((b) => (b.onclick = () => show(b.dataset.tab)));

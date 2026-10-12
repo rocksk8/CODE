@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { computeTopFixes, renderTopFixesMd, renderTopFixesConsole, fixPrompt } from '../scripts/top-fixes.mjs';
+import { computeTopFixes, renderTopFixesMd, renderTopFixesConsole, fixPrompt, effortOf } from '../scripts/top-fixes.mjs';
 
 const mk = (files) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'se-tf-')); for (const [k, v] of Object.entries(files)) fs.writeFileSync(path.join(d, k), JSON.stringify(v)); return d; };
 
@@ -20,7 +20,7 @@ test('top fixes: ranked by severity and breadth, at most 3, each with a paste-re
     'a11y.json': { rules: [{ id: 'color-contrast', impact: 'serious', help: 'Contrast too low', helpUrl: 'https://dequeuniversity.com/x' }, { id: 'minor', impact: 'minor', help: 'x' }] },
   });
   try {
-    const top = computeTopFixes(d);
+    const top = computeTopFixes(d, 3);
     assert.equal(top.length, 3);
     assert.deepEqual(top.map((t) => t.id), ['health:crit-one', 'health:high-wide', 'security:csp']);
     for (const t of top) { assert.ok(t.prompt.includes(t.title)); assert.match(t.prompt, /代碼|程式碼/); }
@@ -39,4 +39,18 @@ test('top fixes: nothing to report gives an empty list and a friendly file; host
   } finally { fs.rmSync(d, { recursive: true, force: true }); }
   assert.deepEqual(computeTopFixes('/nonexistent-folder'), []);
   assert.match(renderTopFixesMd([]), /沒有發現|Nothing/);
+});
+
+test('top fixes: how hard a fix is counts - a quick fix outranks an equally important hard one, and the effort is shown', () => {
+  const d = mk({ 'health.json': { issues: [
+    { id: 'js-dependent', severity: 'high', title: 'Content needs JavaScript', affected: 4, total: 4, impact: 'a', fix: 'SSR' },
+    { id: 'description-missing', severity: 'high', title: 'No meta description', affected: 4, total: 4, impact: 'b', fix: 'Add one' },
+  ] } });
+  try {
+    const top = computeTopFixes(d);
+    assert.deepEqual(top.map((t) => [t.id, t.effort]), [['health:description-missing', 1], ['health:js-dependent', 3]]);
+    const md = renderTopFixesMd(top); assert.match(md, /\| # \|/); assert.ok(md.indexOf('No meta description') < md.indexOf('Content needs JavaScript'));
+    assert.match(renderTopFixesConsole(top), /1\. \[.*No meta description/);
+    assert.equal(effortOf('never-heard-of-it'), 2);
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
 });
