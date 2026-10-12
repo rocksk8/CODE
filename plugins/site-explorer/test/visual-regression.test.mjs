@@ -37,7 +37,7 @@ test('approve stores screenshots; same page passes; a visual change fails with a
     const skip = await run([url, '--compare', '--baseline', bf, '--no-visual', '--out', out]); assert.equal(skip.status, 0, skip.out);
     const loose = await run([url, '--compare', '--baseline', bf, '--visual-threshold', '100', '--out', out]); assert.equal(loose.status, 0, loose.out);
     const badv = await run([url, '--compare', '--baseline', bf, '--visual-threshold', 'abc', '--out', out]); assert.equal(badv.status, 1);
-  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 import { removeVisualBaseline, saveVisualBaseline } from '../scripts/visual-regression.mjs';
@@ -50,5 +50,5 @@ test('the visual baseline folder is only removed when it is ours; a user folder 
     const empty = path.join(d, 'b-visual'); fs.mkdirSync(empty); removeVisualBaseline(empty); assert.ok(!fs.existsSync(empty));
     removeVisualBaseline(path.join(d, 'none'));
     const file = path.join(d, 'c-visual'); fs.writeFileSync(file, 'x'); assert.throws(() => removeVisualBaseline(file));
-  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  } finally { fs.rmSync(d, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

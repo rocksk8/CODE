@@ -33,7 +33,7 @@ before(async () => {
   await Promise.all([open, closed].map((s) => new Promise((r) => s.listen(0, '0.0.0.0', r))));
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'se robust-')); // note the space: Mac paths have them
 });
-after(() => { open?.close(); closed?.close(); open?.closeAllConnections?.(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { open?.close(); closed?.close(); open?.closeAllConnections?.(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 
 const run = (script, args) => new Promise((resolve) => {
   const t0 = Date.now(), p = spawn(process.execPath, [path.join(root, 'scripts', script), ...args], { env: { ...process.env, SITE_EXPLORER_DB: path.join(tmp, 't.db') } });

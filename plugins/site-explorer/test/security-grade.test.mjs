@@ -51,7 +51,7 @@ test('live: a local TLS 1.2+ server with a self-signed certificate is probed and
     const g = await gradeTlsLive('localhost', srv.address().port);
     assert.equal(g.versions['TLS 1.2'], true); assert.equal(g.versions['TLS 1.3'], true); assert.equal(g.versions['TLS 1.0'], false);
     assert.equal(g.grade, 'F'); assert.ok(g.tests.some((x) => x.id === 'selfsigned' || x.id === 'untrusted'));
-  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('CSP/Referrer grading: a CSP without script limits earns nothing, the first duplicate directive wins, keywords are case-insensitive, referrer values are judged correctly', () => {
@@ -75,7 +75,7 @@ test('live: a TLS 1.0/1.1-only server is still probed and flagged for legacy pro
     const g = await gradeTlsLive('localhost', srv.address().port);
     if (g.grade === null) return t.skip('this OpenSSL build cannot speak TLS 1.0/1.1');
     assert.equal(g.versions['TLS 1.2'], false); assert.ok(g.tests.some((x) => x.id === 'legacy'));
-  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('key exchange and cipher: TLS 1.3 and ECDHE pass, small DH and no forward secrecy cap the grade, weak-cipher probing is honestly reported as untested', () => {
@@ -105,7 +105,7 @@ test('cipher enumeration: every accepted TLS 1.2 suite is found; suites without 
       assert.ok(bad.tests.find((t) => t.id === 'nofs').cap === 'B' && /^B/.test(bad.grade), 'RSA-kex suites cap at B: ' + bad.grade);
       assert.equal(good.tests.find((t) => t.id === 'nofs').cap, null); assert.ok(good.grade === 'A' || good.grade === 'A-', good.grade); assert.equal(none.tests.find((t) => t.id === 'nofs'), undefined, 'no enumeration, no row');
     } finally { open.close(); strict.close(); }
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
   const c = classifyCiphers(['AES128-SHA', 'ECDHE-RSA-AES128-GCM-SHA256', 'DHE-RSA-AES256-SHA', 'AES256-GCM-SHA384']);
   assert.deepEqual(c.noFs, ['aes128-sha', 'aes256-gcm-sha384']); assert.deepEqual(c.cbc, ['aes128-sha', 'dhe-rsa-aes256-sha']); assert.equal(c.total, 4);
   assert.deepEqual(classifyCiphers(null), { total: 0, noFs: [], cbc: [] });

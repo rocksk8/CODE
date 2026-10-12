@@ -35,6 +35,18 @@ async function http(url, { method = 'HEAD', redirect = 'manual', timeout = 10000
     return { status: r.status, location: r.headers.get('location'), headers: Object.fromEntries(r.headers.entries()), url: r.url };
   } catch (e) { return { status: null, error: String(e.cause?.code || e.message).slice(0, 80) }; }
 }
+/** Is a static file cached well? headers = lower-case response headers. Returns null when fine, otherwise { reason, seconds }. */
+export function cacheVerdict(headers = {}) {
+  const cc = String(headers['cache-control'] || '').toLowerCase();
+  if (/\b(no-store|no-cache)\b/.test(cc)) return { reason: 'no-cache', seconds: 0 };
+  const m = /(?:s-)?max-age\s*=\s*(\d+)/.exec(cc); const sm = /s-maxage\s*=\s*(\d+)/.exec(cc);
+  let seconds = m ? Number(m[1]) : null;
+  if (seconds == null && headers.expires) { const t = Date.parse(headers.expires); const d = Date.parse(headers.date || '') || Date.now(); if (Number.isFinite(t)) seconds = Math.max(0, Math.round((t - d) / 1000)); }
+  if (/\bimmutable\b/.test(cc)) return null;
+  if (seconds == null && sm) seconds = Number(sm[1]);
+  if (seconds == null) return headers.etag || headers['last-modified'] ? { reason: 'no-lifetime', seconds: 0 } : { reason: 'none', seconds: 0 };
+  return seconds < 86400 ? { reason: 'short', seconds } : null;
+}
 async function pool(items, n, fn) { const out = []; let i = 0; await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) { const k = i++; out[k] = await fn(items[k], k); await sleep(60); } })); return out; }
 
 function tlsInfo(host, port = 443) {
@@ -238,6 +250,17 @@ export async function runHealth(siteDir, opts = {}) {
   if (missAlt) add('onpage', missAlt / Math.max(1, imgTotal) > 0.3 ? 'medium' : 'low', 'img-alt', _t`${missAlt} / ${imgTotal} 張圖片缺少 alt 屬性`, { affected: perPage((p) => p.seo.images.missingAlt).length, scope: 'page', examples: live.flatMap((p) => p.seo.images.sampleMissingAlt), impact: _t('影響圖片搜尋與無障礙；缺 alt 的圖片螢幕閱讀器會朗讀檔名。'), fix: _t('為有意義的圖片寫描述性 alt；純裝飾圖片用 alt=""。') });
   else if (imgTotal) ok('onpage', _t('所有圖片都有 alt 屬性'));
   const heavyImg = perPage((p) => p.seo.images.oversized > 0); if (heavyImg.length) add('performance', 'medium', 'img-oversized', _t`${heavyImg.length} 個頁面載入遠大於顯示尺寸的圖片`, { affected: heavyImg.length, scope: 'page', examples: heavyImg.flatMap((p) => p.seo.images.sampleOversized), impact: _t('浪費頻寬，拖慢 LCP，行動網路尤其明顯。'), fix: _t('依顯示尺寸提供 srcset／sizes；使用 WebP／AVIF。') });
+  const cov = live.map((p) => p.seo.perf?.coverage).find(Boolean);
+  if (cov) {
+    const kb = (n) => Math.round(n / 1024);
+    if (cov.js.unused >= 100 * 1024 && cov.js.bytes && cov.js.unused / cov.js.bytes >= 0.5) add('performance', 'medium', 'unused-js', _t`首頁載入的 JavaScript 有 ${Math.round(cov.js.unused / cov.js.bytes * 100)}%（約 ${kb(cov.js.unused)} KB）在載入時沒用到`, { examples: cov.js.top.map((f) => `${f.url.split('/').slice(-2).join('/')}（${kb(f.unused)} / ${kb(f.bytes)} KB）`), impact: _t('瀏覽器要下載、解析、編譯這些程式碼，拖慢載入並增加主執行緒阻塞。'), fix: _t('用程式碼分割（動態 import）和 tree-shaking，只在需要的頁面或互動時才載入。') });
+    if (cov.css.unused >= 50 * 1024 && cov.css.bytes && cov.css.unused / cov.css.bytes >= 0.7) add('performance', 'low', 'unused-css', _t`首頁載入的 CSS 有 ${Math.round(cov.css.unused / cov.css.bytes * 100)}%（約 ${kb(cov.css.unused)} KB）在載入時沒用到`, { examples: cov.css.top.map((f) => `${f.url.split('/').slice(-2).join('/')}（${kb(f.unused)} / ${kb(f.bytes)} KB）`), impact: _t('CSS 會阻擋畫面顯示，沒用到的規則白白拖慢首次繪製。'), fix: _t('移除沒用到的樣式（例如用 PurgeCSS／Tailwind 的 content 設定），或把非首屏樣式延後載入。') });
+    facts.coverage = { jsUnusedPct: cov.js.bytes ? Math.round(cov.js.unused / cov.js.bytes * 100) : null, cssUnusedPct: cov.css.bytes ? Math.round(cov.css.unused / cov.css.bytes * 100) : null };
+  }
+  const noSize = perPage((p) => (p.seo.images.noSize || 0) >= 2); if (noSize.length) add('performance', 'medium', 'img-no-dimensions', _t`${noSize.length} 個頁面有圖片沒有指定寬高`, { affected: noSize.length, scope: 'page', examples: noSize.flatMap((p) => p.seo.images.sampleNoSize || []).slice(0, 5), impact: _t('瀏覽器不知道要預留多少空間，圖片載入時版面會跳動（CLS）。'), fix: _t('在 <img> 加上 width 與 height 屬性（或 CSS aspect-ratio）。') });
+  const eager = perPage((p) => (p.seo.images.offscreenEager || 0) >= 3); if (eager.length) add('performance', 'low', 'img-offscreen-eager', _t`${eager.length} 個頁面有多張遠在畫面下方的圖片一開始就載入`, { affected: eager.length, scope: 'page', examples: eager.flatMap((p) => p.seo.images.sampleOffscreen || []).slice(0, 5), impact: _t('和首屏內容搶頻寬，拖慢 LCP。'), fix: _t('畫面下方的圖片加上 loading="lazy"。') });
+  const lcpLazy = perPage((p) => p.seo.perf?.lcpLazy); if (lcpLazy.length) add('performance', 'medium', 'lcp-lazy', _t`${lcpLazy.length} 個頁面的最大內容圖片被設成延遲載入`, { affected: lcpLazy.length, scope: 'page', examples: urls(lcpLazy), impact: _t('最大的首屏圖片被延後載入，LCP 會明顯變慢。'), fix: _t('首屏的主視覺圖片不要用 loading="lazy"，並可加上 fetchpriority="high"。') });
+  const h1p = perPage((p) => /^https:/i.test(p.url) && (p.seo.perf?.http1Resources || 0) >= 5 && p.seo.perf.http1Resources / Math.max(1, p.seo.perf.sameHostResources || 1) > 0.8 && !isLocal(host)); if (h1p.length) add('performance', 'low', 'http1', _t`${h1p.length} 個頁面的資源主要走 HTTP/1.1`, { affected: h1p.length, scope: 'page', examples: urls(h1p), impact: _t('HTTP/1.1 一次只能處理少量並行請求，資源多的頁面載入較慢。'), fix: _t('在伺服器或 CDN 啟用 HTTP/2（或 HTTP/3）。') });
   const legacy = live.reduce((n, p) => n + p.seo.images.legacyFormat, 0); if (imgTotal && legacy / imgTotal > 0.6 && imgTotal > 4) add('performance', 'low', 'img-format', _t`${legacy} / ${imgTotal} 張圖片仍是 JPEG／PNG／GIF`, { fix: _t('改用 WebP 或 AVIF，通常可省 25–50%。') });
 
   const brokenImg = perPage((p) => (p.seo.images.broken || 0) > 0); if (brokenImg.length) add('onpage', 'high', 'img-broken', _t`${brokenImg.length} 個頁面有載入失敗的圖片`, { affected: brokenImg.length, scope: 'page', examples: brokenImg.flatMap((p) => p.seo.images.sampleBroken), impact: _t('訪客會看到破圖；對檢驗／驗收來說這是明確的瑕疵。'), fix: _t('修正圖片網址或補上遺失的檔案。') });
@@ -306,6 +329,16 @@ export async function runHealth(siteDir, opts = {}) {
   const blocking = perPage((p) => (p.seo.perf?.renderBlockingScripts || 0) > 2); if (blocking.length) add('performance', 'medium', 'render-blocking', _t`${blocking.length} 個頁面在 <head> 有 3 個以上阻塞渲染的 script`, { affected: blocking.length, scope: 'page', examples: blocking.map((p) => _t`${p.seo.perf.renderBlockingScripts} 個：${p.url}`), fix: _t('加上 defer／async，或移到 body 尾端。') });
   const tp = perPage((p) => (p.seo.perf?.thirdPartyCount || 0) > 10); if (tp.length) add('performance', 'low', 'third-party', _t`${tp.length} 個頁面載入超過 10 個第三方網域`, { affected: tp.length, scope: 'page', examples: tp.flatMap((p) => p.seo.perf.thirdPartyHosts.slice(0, 6)), fix: _t('審視追蹤碼與嵌入元件，延後載入或移除不必要者。') });
   const dom = perPage((p) => (p.seo.perf?.domNodes || 0) > 3000); if (dom.length) add('performance', 'low', 'dom-size', _t`${dom.length} 個頁面 DOM 節點超過 3000`, { affected: dom.length, scope: 'page', examples: dom.map((p) => _t`${p.seo.perf.domNodes}：${p.url}`), fix: _t('簡化版面、虛擬化長列表。') });
+  if (!isLocal(host) || process.env.SITE_EXPLORER_LOCAL_HEADER_CHECKS === '1') {
+    const staticRe = /\.(?:m?js|css|woff2?|ttf|otf|png|jpe?g|gif|webp|avif|svg|ico)$/i; const seen = new Set();
+    for (const p of live) for (const l of p.seo.perf?.largest || []) { try { const u = new URL(l.url); if (strip(u.hostname) === strip(host) && staticRe.test(u.pathname)) seen.add(u.href); } catch {} }
+    const files = [...seen].slice(0, 8); const weak = [];
+    const got = await pool(files, 3, async (f) => ({ f, r: await http(f, { method: 'HEAD', redirect: 'follow' }) }));
+    for (const { f, r } of got) { if (r.status !== 200 || !r.headers) continue; const v = cacheVerdict(r.headers); if (v) weak.push({ f, ...v }); }
+    facts.cachePolicy = { checked: got.length, weak: weak.length };
+    if (weak.length) add('performance', 'medium', 'cache-policy', _t`${weak.length} / ${got.length} 個靜態檔案沒有有效的瀏覽器快取`, { examples: weak.slice(0, 5).map((w) => `${new URL(w.f).pathname.split('/').pop()}（${w.reason === 'short' ? `max-age ${w.seconds}s` : w.reason === 'no-cache' ? 'no-cache' : _t('沒有 Cache-Control')}）`), impact: _t('回訪的使用者每次都要重新下載這些檔案，浪費頻寬、拖慢第二次載入。'), fix: _t('對帶雜湊或版本的 CSS／JS／圖片／字型設定 Cache-Control: public, max-age=31536000, immutable。') });
+    else if (got.length) ok('performance', _t`${got.length} 個靜態檔案有快取設定`);
+  }
   const noComp = perPage((p) => p.seo.http && p.seo.http.headers && !p.seo.http.headers['content-encoding'] && (p.seo.perf?.htmlBytes || 0) > 5000 && !isLocal(host)); if (noComp.length) add('performance', 'medium', 'no-compression', _t`${noComp.length} 個頁面的 HTML 沒有 gzip／brotli 壓縮`, { affected: noComp.length, scope: 'page', examples: urls(noComp), fix: _t('在伺服器或 CDN 啟用 brotli／gzip。') });
 
   // ---------------------------------------------------------------- mobile

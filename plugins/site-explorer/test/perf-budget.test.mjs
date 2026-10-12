@@ -78,5 +78,5 @@ test('total blocking time is measured, --perf-runs takes the median of repeated 
     const b = await run([url, '--throttle', 'mobile', '--out', path.join(dir, 'b')]); assert.equal(b.status, 0, b.out);
     const pb = JSON.parse(fs.readFileSync(path.join(site('b'), 'pages', 'home', 'page.json'), 'utf8')); assert.equal(pb.seo.perfThrottled, true); assert.ok(pb.seo.perf.loadMs >= pa.seo.perf.loadMs + 80, `throttled load ${pb.seo.perf.loadMs} vs ${pa.seo.perf.loadMs}`);
     for (const bad of [['--perf-runs', '0'], ['--perf-runs', 'x'], ['--throttle', 'slow']]) { const r = await run([url, ...bad, '--out', path.join(dir, 'c')]); assert.equal(r.status, 1, bad.join(' ')); }
-  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

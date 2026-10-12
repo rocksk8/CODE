@@ -47,7 +47,7 @@ before(async () => {
   assert.equal(r.status, 0, r.out);
   motionDir = path.join(tmp, 'm', `127.0.0.1_${server.address().port}`);
 });
-after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 
 const report = () => JSON.parse(fs.readFileSync(path.join(motionDir, 'motion.json'), 'utf8'));
 const skip = (t) => (!haveBrowser ? t.skip('no browser') : !haveThree ? t.skip('three not installed (npm install, not --omit=dev)') : false);

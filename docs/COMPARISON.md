@@ -20,6 +20,8 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 | 檢查網站是否符合你的設計規範（token 檔） | 有（`--tokens`，顏色用 CIEDE2000 比對，`--max-off-token` 可當 CI 門檻） | 有（`--tokens`、`--max-off-token`、Markdown 報告） | 未提及 | 未提及 |
 | 品牌手冊與深色模式 token | `--brand-guide` 產生可列印 HTML＋PDF；深色模式另有獨立色組與 CSS 變數 | 有（brand guide PDF、深色模式 token） | 未提及 | 未提及 |
 | 新手入口 | `site-explorer check 網址`：預設值最少，只印前 3 件事與儀表板位置 | 未提及 | 未提及 | 未提及 |
+| 爬蟲看到的 vs 訪客看到的 | 有（`crawler-view`：原始 HTML 與渲染後文字、5 種身分的回應與相似度、JSON-LD 值對畫面、canonical／hreflang 實際狀態） | 未提及 | 未提及 | 未提及 |
+| 圖形介面 | `site-explorer ui`：本機網頁（只有這台電腦連得到），輸入網址、選模式、看進度、開報告；沒有桌面安裝程式 | 未提及 | 未提及 | 未提及 |
 | 前後對照與歷史 | `changes.md`、歷史資料庫（儀表板「歷史」分頁有健檢分數趨勢圖）、Action 的 `max-drop`／`fail-on-new` | 本機 `--compare`／`--approve` 偏移檢查（失敗時結束碼 1）、GitHub Action | 未提及 | 未提及 |
 | GitHub Action | 有（PR 留言、`fail-on`、`min-health`、`max-drop`、`fail-on-new`） | 有（Marketplace，標註 PR） | 未提及 | 未提及 |
 | MCP | 4 個工具（探索、健檢、驗證、讀交接包） | 多個工具（token、偏移、DTCG、DESIGN.md 等） | 有（3 個工具） | 沒有（README 說明不維護 MCP） |

@@ -44,7 +44,7 @@ test('conformance: near colours count as matching, off-token values are listed w
   const md = renderTokenCheckMd(r, { maxOff: 10 }); assert.match(md, /#14b8a6/); assert.match(md, /10px/);
   assert.equal(checkTokens(parseTokenFile('{"c":{"$type":"color","a":{"$value":"#ffffff"}}}'), { palette: [{ hex: '#ffffff', uses: 1 }] }).offPct, 0);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'se-tc-'));
-  try { fs.writeFileSync(path.join(dir, 'token-check.json'), JSON.stringify({ ...r, failed: false })); const v = computeVerdicts(dir).find((x) => x.id === 'tokens'); assert.ok(v && v.status === 'bad', 'a quarter off-token is red'); fs.writeFileSync(path.join(dir, 'token-check.json'), JSON.stringify({ offPct: 3, failed: false })); assert.equal(computeVerdicts(dir).find((x) => x.id === 'tokens').status, 'ok'); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  try { fs.writeFileSync(path.join(dir, 'token-check.json'), JSON.stringify({ ...r, failed: false })); const v = computeVerdicts(dir).find((x) => x.id === 'tokens'); assert.ok(v && v.status === 'bad', 'a quarter off-token is red'); fs.writeFileSync(path.join(dir, 'token-check.json'), JSON.stringify({ offPct: 3, failed: false })); assert.equal(computeVerdicts(dir).find((x) => x.id === 'tokens').status, 'ok'); } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 const bin = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'site-explorer.mjs');
@@ -62,5 +62,5 @@ test('explore --tokens writes token-check.md; --max-off-token exits 4 when excee
     const b = await go(['--tokens', tf, '--max-off-token', '1'], 'b'); assert.equal(b.status, 4, b.out);
     const c = await go(['--tokens', tf, '--max-off-token', '100'], 'c'); assert.equal(c.status, 0, c.out);
     for (const [extra, re] of [[['--tokens', path.join(dir, 'missing.json')], /--tokens/], [['--tokens', path.join(dir, 'x.json')], /--tokens/], [['--max-off-token', '5'], /--tokens/], [['--tokens', tf, '--max-off-token', '150'], /0/]]) { if (extra[1].endsWith('x.json')) fs.writeFileSync(extra[1], '{"nothing":true}'); const r = await go(extra, 'd'); assert.equal(r.status, 1, extra.join(' ') + '\n' + r.out); assert.match(r.out, re); }
-  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

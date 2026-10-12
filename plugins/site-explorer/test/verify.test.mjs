@@ -17,7 +17,7 @@ before(async () => {
   try { (await launchBrowser()).close(); } catch { haveBrowser = false; }
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'se-verify-'));
 });
-after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+after(() => fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }));
 const copyDemo = (name) => { const d = path.join(tmp, name); fs.cpSync(demo, d, { recursive: true }); return d; };
 
 test('scoreSection: identical is 100, wrong height and colours score low, never outside 0–100', () => {

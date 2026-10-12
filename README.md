@@ -19,8 +19,12 @@
 ```bash
 npm i -g git+https://github.com/rocksk8/CODE.git
 site-explorer setup
-site-explorer https://example.com
+site-explorer ui                          # 不想打指令：開啟圖形介面（瀏覽器裡輸入網址、看進度、複製「最該先處理的 3 件事」）
+site-explorer check https://example.com   # 最快：幾分鐘內知道最該先修什麼
+site-explorer https://example.com         # 完整：設計、3D／動畫、健檢、交接包
 ```
+
+**跑太久、吃太多資源時**：每個階段有時間上限（爬取 30 分鐘、3D 25 分鐘、其他 10～20 分鐘；整個探索 120 分鐘），超過會印出「⏱ 超時通知」並停止該階段、繼續其他階段；可用記憶體剩不到 128 MB（或 2%）並持續 30 秒時印出「🧠 記憶體不足通知」並停止該階段，避免整台電腦卡死（macOS 只提醒、不停止，因為它的「可用記憶體」讀數不可靠）；CPU 長時間滿載會印出「🔥」提醒；超過 90 秒沒有新訊息會印出「⏳ 仍在執行」。可用環境變數 `SITE_EXPLORER_STAGE_MINUTES`、`SITE_EXPLORER_MAX_MINUTES` 調整。**Windows 的終端機若中文變亂碼**，先執行 `chcp 65001`，或加 `--lang en`。
 
 跑完會得到一個資料夾：雙擊 `dashboard.html` 看總覽；把 `handoff/` 整包丟給 AI，再貼上 `PROMPT.md` 裡的提示，它就能開始做頁面與動態——不用你寫一行說明。
 

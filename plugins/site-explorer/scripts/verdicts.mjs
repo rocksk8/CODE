@@ -54,6 +54,9 @@ export function computeVerdicts(siteDir, outDir = null) {
     const changed = (vis.rows || []).filter((r) => r.status !== 'same').length;
     push({ id: 'visual', title: _t('畫面和基準比對'), status: changed ? 'bad' : 'ok', headline: changed ? _t`${changed} 張截圖和基準不同（共 ${(vis.rows || []).length} 張）` : _t`${(vis.rows || []).length} 張截圖都和基準一致`, next: changed ? _t('逐張看差異；確認是想要的改版後用 --approve 更新基準。') : '', tab: 'visual', file: 'visual.md' });
   }
+  const cv = rd(path.join(siteDir, 'crawler-view.json'));
+  if (cv && Number.isFinite(cv.checked)) { const hi = (cv.issues || []).filter((i) => i.severity === 'high').length, md = (cv.issues || []).filter((i) => i.severity === 'medium').length;
+    push({ id: 'crawlerview', title: _t('爬蟲看到的內容'), status: hi ? 'bad' : md ? 'warn' : 'ok', headline: (cv.issues || []).length ? _t`${cv.checked} 頁中發現 ${(cv.issues || []).length} 項爬蟲與訪客看到的差異` : _t`${cv.checked} 頁，爬蟲與訪客看到的內容一致`, next: (cv.issues || []).length ? _t('看 crawler-view.md：哪些文字要靠 JavaScript、哪些爬蟲被擋、資料與畫面是否一致。') : '', tab: 'crawler', file: 'crawler-view.md' }); }
   const tc = rd(path.join(siteDir, 'token-check.json'));
   if (tc && Number.isFinite(tc.offPct)) push({ id: 'tokens', title: _t('設計規範符合度'), status: tc.failed ? 'bad' : tc.offPct <= 5 ? 'ok' : tc.offPct <= 20 ? 'warn' : 'bad', headline: _t`${(100 - tc.offPct).toFixed(1)}% 的顏色、圓角、字級符合你的 token 檔`, next: tc.offPct > 0 ? _t('看 token-check.md 列出的不符合項目。') : '', tab: 'design', file: 'token-check.md' });
   const ex = outDir || siteDir ? rd(path.join(siteDir, 'extractions.json')) : null;

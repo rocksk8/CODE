@@ -37,7 +37,7 @@ before(async () => {
   r = await run('health-check.mjs', ['--site', dir, '--no-link-check']); assert.equal(r.status, 0, r.out);
   H = JSON.parse(fs.readFileSync(path.join(dir, 'health.json'), 'utf8'));
 });
-after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 const ids = () => new Map(H.issues.map((i) => [i.id, i]));
 
 test('validateNodes: required vs recommended per type, anyOf groups, unknown types are left alone', () => {

@@ -6,6 +6,7 @@ import { findUrl, findUrls, intOpt, sameSite, loadRobots, CRAWLER_UA_TOKEN, norm
 import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
+import { summarizeCoverage } from './coverage.mjs';
 import { parseRules, extractCssInPage, extractRegex, toCsv } from './custom-extract.mjs';
 import { parseScenarios, runScenarios } from './scenarios.mjs';
 import { checkHtml } from './html-validity.mjs';
@@ -297,6 +298,18 @@ async function openPage(page, url) {
   return resp;
 }
 
+// Chromium's own coverage: how much of the JavaScript and CSS the page downloads is never used while it loads (the "unused code" audit). First page only; three seconds.
+let coverageDone = false;
+async function measureCoverage(ctx, url) {
+  const p = await ctx.newPage();
+  try {
+    await p.coverage.startJSCoverage({ resetOnNavigation: false }); await p.coverage.startCSSCoverage({ resetOnNavigation: false });
+    await openPage(p, url); await p.waitForTimeout(800);
+    const js = await p.coverage.stopJSCoverage(), css = await p.coverage.stopCSSCoverage();
+    return summarizeCoverage(js, css, new URL(url).hostname.replace(/^www\./, ''));
+  } finally { await p.close().catch(() => {}); }
+}
+
 // JS-built pages (SPA, WebGL experiences, intro screens) can be empty at "load": wait until real content appears, or give up after maxMs.
 async function waitForContent(page, maxMs) {
   const t0 = Date.now();
@@ -478,6 +491,7 @@ while (pages.length < maxPages) {
     data.status = resp?.status();
     // --- SEO / indexability signals ---
     data.seo = await page.evaluate(extractSeoInPage).catch((e) => { console.log('   (seo data skipped:', e.message.split('\n')[0] + ')'); return null; });
+    if (data.seo?.perf && !auth && !coverageDone && browser.browserType().name() === 'chromium') { coverageDone = true; data.seo.perf.coverage = await measureCoverage(ctx, page.url()).catch(() => null); }
     if (data.seo?.perf && !auth && (perfRuns > 1 || throttle)) { // repeated (and optionally throttled) cold loads on throwaway pages; the page's numbers become the median of the runs
       const runs = throttle ? [] : [data.seo.perf]; let throttleApplied = false;
       for (let k = 0; k < Math.max(perfRuns, throttle ? 1 : 2) - (throttle ? 0 : 1); k++) {

@@ -28,6 +28,7 @@ const HELP = _t`site-explorer ${version} — 探索網站：設計、內容、�
   login    <網址>   手動登入一次並存下登入狀態，之後用 --storage-state 探索登入後的頁面
   mcp               以 MCP 伺服器模式執行（讓 Claude Desktop、Cursor 等直接呼叫 explore／health／verify）
   verify   <handoff資料夾>   重建驗證：starter 對照原站逐區塊相似度＋差異圖（--min-score 當門檻）
+  crawler-view --site <資料夾>   爬蟲看到的 vs 訪客看到的：原始 HTML 與渲染後文字、不同爬蟲身分的回應、結構化資料對畫面、canonical／hreflang
   diagnose <網址>   這個網頁為什麼抓不到？（用爬蟲身分與瀏覽器預設身分各開一次，回報看到什麼）
   doctor   [網址]   診斷環境（每個問題都附修復指令）
 
@@ -67,7 +68,7 @@ const ROUTES = {
   health: (a) => (a.some(looksLikeUrl) ? [script('explore.mjs'), [...a, '--no-motion']] : [script('health-check.mjs'), a]),
   motion: (a) => [script('capture-3d.mjs'), a], crawl: (a) => [script('crawl.mjs'), a], design: (a) => [script('export-design.mjs'), a],
   report: (a) => [script('build-report.mjs'), a], compare: (a) => [script('compare-report.mjs'), a], history: (a) => [script('db.mjs'), a], db: (a) => [script('db.mjs'), a],
-  verify: (a) => [script('verify.mjs'), a], ui: (a) => [script('ui-server.mjs'), a], mcp: (a) => [script('mcp-server.mjs'), a], login: (a) => [script('login.mjs'), a], framework: (a) => [script('frameworks.mjs'), a], diagnose: (a) => [script('diagnose.mjs'), a], doctor: (a) => [script('doctor.mjs'), a], setup: (a) => [script('setup.mjs'), a],
+  'crawler-view': (a) => [script('crawler-view.mjs'), a], verify: (a) => [script('verify.mjs'), a], ui: (a) => [script('ui-server.mjs'), a], mcp: (a) => [script('mcp-server.mjs'), a], login: (a) => [script('login.mjs'), a], framework: (a) => [script('frameworks.mjs'), a], diagnose: (a) => [script('diagnose.mjs'), a], doctor: (a) => [script('doctor.mjs'), a], setup: (a) => [script('setup.mjs'), a],
 };
 
 if (!cmd || ['-h', '--help', 'help'].includes(cmd)) { console.log(HELP); process.exit(0); }

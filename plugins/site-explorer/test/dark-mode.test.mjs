@@ -23,5 +23,5 @@ test('dark mode: the colours the page really uses in dark mode are their own tok
     assert.equal(dm.supported, true); assert.equal(dm.colors.background, '#101418'); assert.equal(dm.colors.text, '#e6edf3'); assert.equal(dm.colors.surface, '#1a2128'); assert.equal(dm.colors.border, '#2b3540'); assert.ok(dm.contrast >= 4.5); assert.ok(dm.palette.length >= 3);
     assert.equal(a.tokens.color.background, '#ffffff', 'the light tokens are unchanged'); assert.match(a.css, /prefers-color-scheme: dark[\s\S]*--color-surface: #1a2128/);
     const b = await run(mk(false), 'light'); assert.equal(b.tokens.darkMode.supported, false); assert.equal(b.tokens.darkMode.colors, undefined); assert.doesNotMatch(b.css, /prefers-color-scheme: dark/);
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

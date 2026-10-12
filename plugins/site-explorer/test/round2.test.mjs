@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 let tmp;
 before(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'se-r2-')); });
-after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+after(() => fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }));
 
 test('design tokens: a white first paragraph (inside a dark hero) must not become the body text colour on a white page', () => {
   const dir = path.join(tmp, 'site'); fs.mkdirSync(dir);

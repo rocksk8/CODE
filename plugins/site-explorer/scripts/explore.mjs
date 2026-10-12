@@ -4,6 +4,7 @@
 import { _t, LANG } from './i18n.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
+import { stageLimitMs, runLimitMs, watchChild } from './guard.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +43,7 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
   --wait 4000          3D 擷取前等待毫秒
 
 【略過不需要的部分】
-  --no-motion          不擷取 3D／動畫          --no-health   不做 SEO／索引健檢
+  --no-motion          不擷取 3D／動畫          --no-health   不做 SEO／索引健檢   --no-crawler-view   不比對爬蟲看到的內容
   --no-link-check      健檢時不檢查連結狀態      --no-handoff  不產生交接包
   --no-db              不存入歷史資料庫
 
@@ -86,7 +87,7 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
 `;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 { // a misspelled flag must fail loudly: "--fial-on high" silently turning a CI gate off is worse than an error
-  const KNOWN = new Set(['--a11y', '--archive', '--warc', '--har', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--tokens', '--max-off-token', '--brand-guide', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
+  const KNOWN = new Set(['--a11y', '--archive', '--warc', '--har', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-crawler-view', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--tokens', '--max-off-token', '--brand-guide', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
   const unknown = args.filter((a) => a.startsWith('--') && !KNOWN.has(a) && !/^--lang=/.test(a));
   if (unknown.length) { const near = (u) => [...KNOWN].find((k) => k.length > 3 && (k.startsWith(u) || u.startsWith(k) || [...u].filter((c) => k.includes(c)).length >= k.length - 2 && Math.abs(k.length - u.length) <= 2)); console.error(_t`不認得的選項：${unknown.join(' ')}${near(unknown[0]) ? _t`（是不是 ${near(unknown[0])}？）` : ''}\n執行 site-explorer explore --help 看全部選項。`); process.exit(1); }
   if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--tokens', '--max-off-token', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--browser'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
@@ -158,19 +159,23 @@ const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
 const siteDir = path.join(siteRoot, host), motionDir = path.join(motionRoot, host);
 const steps = [];
-const total = 12 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--tokens') ? 1 : 0) + (args.includes('--brand-guide') ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
+const total = 12 - ['--no-motion', '--no-health', '--no-handoff', '--no-crawler-view'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--tokens') ? 1 : 0) + (args.includes('--brand-guide') ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
 let n = 0;
 
 let current = null; // the stage that is running: Ctrl-C / SIGTERM (CI timeout, MCP kill) must stop it too, not leave a browser crawling
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { current?.kill('SIGTERM'); } catch {} process.exit(sig === 'SIGINT' ? 130 : 143); });
+const RUN_T0 = Date.now(), RUN_LIMIT = runLimitMs(); const notices = [];
 function run(label, script, a) {
   return new Promise((resolve) => {
     const t0 = Date.now();
     console.log(`\n[${++n}/${total}] ${label}`);
+    if (Date.now() - RUN_T0 > RUN_LIMIT) { const m = _t`⏱ 超時通知：整個探索已超過 ${Math.round(RUN_LIMIT / 60000)} 分鐘，略過這個階段。`; console.log('   ' + m); notices.push(m); steps.push({ label, ok: false, s: '0.0' }); return resolve(false); }
     const p = spawn(process.execPath, [path.join(here, script), ...a], { env: { ...process.env, SITE_EXPLORER_LANG: LANG } });
     current = p;
-    let tail = '';
-    const onData = (d) => { tail = (tail + d).slice(-4000); for (const l of String(d).split('\n').map(stripControl)) if (l.trim() && !/ExperimentalWarning|trace-warnings|agent-proxy|android\.clients|For details: curl/.test(l)) console.log('   ' + l); };
+    let tail = '', lastOut = Date.now();
+    const stopWatch = watchChild(p, { limitMs: stageLimitMs(script), lang: LANG, getLastOutputAt: () => lastOut, notify: (kind, text) => { console.log('   ' + text); if (kind === 'timeout' || kind === 'memory') notices.push(text); } });
+    p.on('close', stopWatch); p.on('error', stopWatch);
+    const onData = (d) => { lastOut = Date.now(); tail = (tail + d).slice(-4000); for (const l of String(d).split('\n').map(stripControl)) if (l.trim() && !/ExperimentalWarning|trace-warnings|agent-proxy|android\.clients|For details: curl/.test(l)) console.log('   ' + l); };
     p.stdout.on('data', onData); p.stderr.on('data', onData);
     p.on('close', (code) => { const s = ((Date.now() - t0) / 1000).toFixed(1); steps.push({ label, ok: code === 0, s }); console.log(code === 0 ? `   ✔ ${s}s` : _t`   ✖ 失敗（${s}s）— 其他階段會繼續`); resolve(code === 0); });
   });
@@ -187,7 +192,7 @@ if (checks.some((c) => c.level === 'fail')) {
 
 { // results of stages that do not run this time must not be shown as if they were fresh (an old health score, a11y report, verify result or changes.md)
   const rm = (f) => { try { fs.rmSync(f, { recursive: true, force: true }); } catch {} };
-  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'techstack.json')); rm(path.join(siteDir, 'tracking-behaviors.json')); rm(path.join(siteDir, 'security.json')); rm(path.join(siteDir, 'figma')); rm(path.join(siteDir, 'scenarios')); rm(path.join(siteDir, 'extractions.json')); rm(path.join(siteDir, 'extractions.csv')); rm(path.join(siteDir, 'security.md')); rm(path.join(siteDir, 'tracking-behaviors.md')); rm(path.join(siteDir, 'performance.json')); rm(path.join(siteDir, 'performance.md')); rm(path.join(siteDir, 'top-fixes.json')); rm(path.join(siteDir, 'token-check.json')); rm(path.join(siteDir, 'token-check.md')); rm(path.join(siteDir, 'top-fixes.md')); rm(path.join(siteDir, 'techstack.md')); // a failed re-run must not report the previous run's pages
+  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'techstack.json')); rm(path.join(siteDir, 'tracking-behaviors.json')); rm(path.join(siteDir, 'security.json')); rm(path.join(siteDir, 'figma')); rm(path.join(siteDir, 'scenarios')); rm(path.join(siteDir, 'extractions.json')); rm(path.join(siteDir, 'extractions.csv')); rm(path.join(siteDir, 'security.md')); rm(path.join(siteDir, 'tracking-behaviors.md')); rm(path.join(siteDir, 'performance.json')); rm(path.join(siteDir, 'performance.md')); rm(path.join(siteDir, 'top-fixes.json')); rm(path.join(siteDir, 'crawler-view.json')); rm(path.join(siteDir, 'crawler-view.md')); rm(path.join(siteDir, 'token-check.json')); rm(path.join(siteDir, 'token-check.md')); rm(path.join(siteDir, 'top-fixes.md')); rm(path.join(siteDir, 'techstack.md')); // a failed re-run must not report the previous run's pages
   if (args.includes('--no-health')) { rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); }
   if (!args.includes('--a11y')) rm(path.join(siteDir, 'a11y.json'));
   if (!compareFlag && !opt('approve-visual', null)) for (const f of ['visual.json', 'visual.md', 'visual-review.html', 'visual-diff', 'drift.md']) rm(path.join(out, f)); // a comparison from an earlier run must not be shown as this run's result
@@ -202,6 +207,7 @@ if (crawlOk && opt('tokens', null)) { await run(_t('對照你的設計規範（t
 if (opt('max-off-token', null) != null && !opt('tokens', null)) { console.error(_t('--max-off-token 要搭配 --tokens 使用。')); process.exit(1); }
 let healthOk = false;
 if (crawlOk && args.includes('--a11y')) await run(_t('無障礙檢查（axe-core）'), 'a11y.mjs', ['--site', siteDir, ...authArgs, ...(args.includes('--max-pages') ? ['--max-pages', String(maxPages)] : [])]);
+if (crawlOk && !args.includes('--no-crawler-view') && !authArgs.length) await run(_t('爬蟲看到的 vs 訪客看到的（原始 HTML、不同爬蟲身分、結構化資料、canonical）'), 'crawler-view.mjs', ['--site', siteDir]);
 if (crawlOk && !args.includes('--no-health')) healthOk = await run(_t('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）'), 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
 if (crawlOk) await run(_t('技術堆疊（CMS、框架、函式庫、主機／CDN）'), 'techstack.mjs', ['--site', siteDir, ...(opt('tech-rules', null) ? ['--rules', path.resolve(opt('tech-rules', null))] : [])]);
 if (crawlOk) await run(_t('Figma 匯入檔（版面草稿 SVG）'), 'figma-export.mjs', ['--site', siteDir]);
@@ -230,7 +236,7 @@ if (!args.includes('--no-motion') && crawlOk) {
   const captureOne = async (p) => {
     const dest = path.join(motionRoot, '_pages', p.slug), t0 = Date.now();
     console.log(_t`   3D／動畫 [${++done}/${extra.length}]：${p.url}`);
-    const ok = await new Promise((resolve) => { const c = spawn(process.execPath, [path.join(here, 'capture-3d.mjs'), p.url, '--out', dest, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])], { env: process.env, stdio: 'ignore' }); const kill = setTimeout(() => { try { c.kill(); } catch {} }, PAGE_LIMIT_MS); c.on('close', (code) => { clearTimeout(kill); resolve(code === 0); }); c.on('error', () => { clearTimeout(kill); resolve(false); }); });
+    const ok = await new Promise((resolve) => { const c = spawn(process.execPath, [path.join(here, 'capture-3d.mjs'), p.url, '--out', dest, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])], { env: process.env, stdio: 'ignore' }); const stopW = watchChild(c, { limitMs: PAGE_LIMIT_MS, lang: LANG, quietMs: 1e9, notify: (k, t) => { console.log('     ' + t); if (k === 'timeout' || k === 'memory') notices.push(t); } }); c.on('close', (code) => { stopW(); resolve(code === 0); }); c.on('error', () => { stopW(); resolve(false); }); });
     const hostDir = path.join(dest, new URL(p.url).host.replace(/[^a-z0-9.-]/gi, '_'));
     if (ok) { addEntry(p.url, p.slug, p.title, hostDir); console.log(`     ✔ ${p.slug} ${((Date.now() - t0) / 1000).toFixed(1)}s`); } else console.log(_t`     ✖ 略過 ${p.slug}（失敗、逾時或被 robots.txt 擋住）`);
   };
@@ -286,6 +292,7 @@ else await run(_t('產生圖形化儀表板'), 'build-report.mjs', dashArgs());
 
 const failed = steps.filter((s) => !s.ok);
 console.log(_t`\n完成：${steps.length - failed.length}/${steps.length} 階段成功${failed.length ? _t('，失敗：') + failed.map((f) => f.label).join(_t('、')) : ''}`);
+if (notices.length) console.log(_t('\n⚠️ 本次執行的超時／資源通知：') + '\n' + [...new Set(notices)].map((x) => '  - ' + x).join('\n'));
 try { const hj = path.join(siteDir, 'health.json'); if (healthOk && fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(_t`健檢：${h.score}/100（${h.grade}）— 嚴重 ${h.severity.critical}・高 ${h.severity.high}・中 ${h.severity.medium}　詳見 ${path.join(siteDir, 'health.md')}`); } } catch {}
 if (!args.includes('--no-motion')) { // always say what happened to 3D / animation, so its absence from the summary never looks like the feature vanished
   try {

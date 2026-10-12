@@ -39,13 +39,16 @@ export async function extractSeoInPage() {
 
   // images
   const imgs = [...document.images];
-  const images = { total: imgs.length, missingAlt: 0, emptyAlt: 0, lazy: 0, oversized: 0, legacyFormat: 0, broken: 0, sampleBroken: [], sampleMissingAlt: [], sampleOversized: [] };
+  const images = { total: imgs.length, missingAlt: 0, emptyAlt: 0, lazy: 0, oversized: 0, legacyFormat: 0, broken: 0, noSize: 0, offscreenEager: 0, sampleNoSize: [], sampleOffscreen: [], sampleBroken: [], sampleMissingAlt: [], sampleOversized: [] };
   for (const i of imgs) {
     if (!i.hasAttribute('alt')) { images.missingAlt++; if (images.sampleMissingAlt.length < 5) images.sampleMissingAlt.push(i.currentSrc || i.src); } else if (i.alt.trim() === '') images.emptyAlt++;
     if (i.loading === 'lazy') images.lazy++;
     if (i.complete && i.naturalWidth === 0 && (i.currentSrc || i.src) && !/^data:/.test(i.currentSrc || i.src)) { images.broken++; if (images.sampleBroken.length < 5) images.sampleBroken.push(i.currentSrc || i.src); }
     if (i.clientWidth > 0 && i.naturalWidth > i.clientWidth * 2 && i.naturalWidth > 600) { images.oversized++; if (images.sampleOversized.length < 5) images.sampleOversized.push(`${(i.currentSrc || i.src).split('/').pop().slice(0, 50)} ${i.naturalWidth}px shown at ${i.clientWidth}px`); }
     if (/\.(jpe?g|png|gif|bmp)(\?|$)/i.test(i.currentSrc || i.src)) images.legacyFormat++;
+    const srcOf = (i.currentSrc || i.src || '').split(/[?#]/)[0].split('/').pop().slice(0, 50);
+    if ((i.currentSrc || i.src) && !/^data:/.test(i.currentSrc || i.src) && !(i.getAttribute('width') && i.getAttribute('height')) && getComputedStyle(i).aspectRatio === 'auto' && !/(^|;)\s*(width|height)\s*:/.test(i.getAttribute('style') || '')) { images.noSize++; if (images.sampleNoSize.length < 5) images.sampleNoSize.push(srcOf); }
+    const top = i.getBoundingClientRect().top + window.scrollY; if (top > window.innerHeight * 1.5 && i.loading !== 'lazy' && i.clientWidth > 40 && (i.currentSrc || i.src) && !/^data:/.test(i.currentSrc || i.src)) { images.offscreenEager++; if (images.sampleOffscreen.length < 5) images.sampleOffscreen.push(srcOf); }
   }
 
   // structured data
@@ -100,6 +103,9 @@ export async function extractSeoInPage() {
     fcpMs: fcp != null ? Math.round(fcp) : null, lcpMs: lcp ? Math.round(lcp.startTime) : null, lcpElement: lcp && lcp.element ? lcp.element.tagName.toLowerCase() + (lcp.url ? ' ' + lcp.url.split('/').pop().slice(0, 40) : '') : null, cls: +cls.toFixed(3), tbtMs: tbt ? tbt.sum : null, longTasks: tbt ? tbt.n : null,
     htmlBytes: nav ? (nav.encodedBodySize || nav.decodedBodySize || 0) : 0, requests: res.length + 1, totalBytes: total + (nav ? size(nav) : 0), byType, largest, thirdPartyHosts: [...thirdParty].slice(0, 12), thirdPartyCount: thirdParty.size, renderBlockingScripts: blockingScripts, stylesheetsInHead: blockingCss,
     domNodes: document.getElementsByTagName('*').length,
+    lcpLazy: !!(lcp && lcp.element && lcp.element.tagName === 'IMG' && lcp.element.loading === 'lazy'),
+    http1Resources: res.filter((e) => { try { return strip(new URL(e.name).hostname) === myHost && e.nextHopProtocol === 'http/1.1'; } catch { return false; } }).length,
+    sameHostResources: res.filter((e) => { try { return strip(new URL(e.name).hostname) === myHost; } catch { return false; } }).length,
   };
 
   return {

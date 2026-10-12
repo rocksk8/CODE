@@ -23,7 +23,7 @@ before(() => {
   fresh = path.join(tmp, 'plugin copy'); fs.mkdirSync(fresh);
   for (const f of ['bin', 'scripts', 'package.json', 'package-lock.json']) fs.cpSync(path.join(root, f), path.join(fresh, f), { recursive: true });
 });
-after(() => { if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 
 test('manifests agree: one version everywhere, light dependencies, pinned MCP, valid hook', () => {
   const pkg = J(path.join(root, 'package.json')), plug = J(path.join(root, '.claude-plugin', 'plugin.json')), top = J(path.join(repo, 'package.json'));
@@ -124,7 +124,7 @@ test('npm package: ships only what the CLI needs, is small, and the unpacked tar
   assert.ok(!paths.some((p) => /(^|\/)(test|docs|node_modules|tools)\//.test(p) || /\.env|\.pem|\.db$/.test(p)), 'tests, docs, tools or secrets leaked into the package');
   assert.ok(info.size < 1_500_000, `package is ${info.size} bytes`);
   const ex = path.join(tmp, 'unpacked'); fs.mkdirSync(ex);
-  assert.equal(spawnSync('tar', ['-xzf', path.join(dest, info.filename), '-C', ex]).status, 0);
+  assert.equal(spawnSync('tar', ['-xzf', path.join('pack', info.filename), '-C', 'unpacked'], { cwd: tmp }).status, 0); // relative paths: GNU tar on Windows reads "C:\\..." as a remote host
   const bin = path.join(ex, 'package', 'plugins', 'site-explorer', 'bin', 'site-explorer.mjs');
   const r = await run(tmp, [bin, '--version']); assert.equal(r.out.trim(), J(path.join(repo, 'package.json')).version);
   const h = await run(tmp, [bin, 'verify']); assert.match(h.out, /用法：site-explorer verify/);

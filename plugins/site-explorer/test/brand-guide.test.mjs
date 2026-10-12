@@ -36,5 +36,5 @@ test('explore --brand-guide writes design-bundle/brand-guide.html and a real PDF
     const sd = path.join(dir, 'site', fs.readdirSync(path.join(dir, 'site'))[0], 'design-bundle');
     const html = fs.readFileSync(path.join(sd, 'brand-guide.html'), 'utf8'); assert.match(html, /#14b8a6/i); assert.match(html, /Georgia/);
     const pdf = fs.readFileSync(path.join(sd, 'brand-guide.pdf')); assert.equal(pdf.subarray(0, 5).toString(), '%PDF-'); assert.ok(pdf.length > 3000);
-  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

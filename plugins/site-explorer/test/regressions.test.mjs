@@ -34,7 +34,7 @@ before(async () => {
   site = path.join(tmp, 'a', `127.0.0.1_${port}`);
   const h = await run('health-check.mjs', ['--site', site, '--no-link-check']); assert.equal(h.status, 0, h.out); H = J(path.join(site, 'health.json'));
 });
-after(() => { server?.close(); dead?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { server?.close(); dead?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 const skip = (t) => (!haveBrowser ? (t.skip('no browser'), true) : false);
 const pageOf = (slug) => J(path.join(site, 'pages', slug, 'page.json'));
 const urls = () => J(path.join(site, 'site.json')).pages.map((p) => new URL(p.url).pathname);

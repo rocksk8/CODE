@@ -12,7 +12,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const demo = path.join(root, '..', '..', 'docs', 'demo', 'acme-studio', 'handoff');
 let tmp;
 before(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'se-fw-')); });
-after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+after(() => fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }));
 const copyDemo = (n) => { const d = path.join(tmp, n); fs.cpSync(demo, d, { recursive: true }); return d; };
 const first = (html) => parseHtml(html).children[0];
 

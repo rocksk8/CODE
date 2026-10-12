@@ -17,7 +17,7 @@ const bin = path.join(root, 'bin', 'site-explorer.mjs');
 const SECRET = 'S3CR3T-SESSION-VALUE-9f8e7d';
 let tmp, haveBrowser = true;
 before(async () => { try { (await launchBrowser()).close(); } catch { haveBrowser = false; } tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'se-auth-')); });
-after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+after(() => fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }));
 const write = (name, obj, mode = 0o600) => { const f = path.join(tmp, name); fs.writeFileSync(f, typeof obj === 'string' ? obj : JSON.stringify(obj), { mode }); fs.chmodSync(f, mode); return f; };
 
 test('loadAuthState: clear errors for missing, broken and foreign files; warns about loose permissions and expired sessions', () => {

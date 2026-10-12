@@ -44,5 +44,5 @@ test('explore --warc writes pages/<page>/archive.warc.gz with the document, its 
     assert.deepEqual(recs.find((x) => x.uri.endsWith('/p.png')).body, PNG); assert.ok(!zlib.gunzipSync(buf).toString('latin1').includes('TOPSECRET123'));
     const pj = JSON.parse(fs.readFileSync(path.join(site, 'page.json'), 'utf8')); assert.ok(pj.warc.records >= 3);
     const none = await run([url, '--out', path.join(dir, 'n')]); const s2 = path.join(dir, 'n', 'site', fs.readdirSync(path.join(dir, 'n', 'site'))[0], 'pages', 'home'); assert.ok(!fs.existsSync(path.join(s2, 'archive.warc.gz')), 'off by default');
-  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
