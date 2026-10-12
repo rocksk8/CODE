@@ -1402,7 +1402,7 @@
 "偵測到 <b>": "detected <b>",
 "</b> 建站特徵": "</b> platform signature(s)",
 "未偵測到常見建站平台（可能是自訂程式或靜態站）": "No common site-building platform detected (possibly custom code or a static site)",
-"主色 <b style=\"color:": "Primary colour <b style=\"color:",
+"主色 ": "Primary colour ",
 "</b>，標題字型 <b>": "</b>, heading font <b>",
 "</b>，間距以 <b>": "</b>, spacing based on <b>",
 "px</b> 為基準。": "px</b>.",
@@ -2681,5 +2681,11 @@
 "--notify-on 只能是 always、drop 或 issues。": "--notify-on must be always, drop or issues.",
 "⚠️ 通知沒有送出：{}": "⚠️ The notification was not sent: {}",
 "📣 已送出通知（{}）": "📣 Notification sent ({})",
-"📣 沒有需要通知的變化，未送出。": "📣 No change worth a notification; nothing sent."
+"📣 沒有需要通知的變化，未送出。": "📣 No change worth a notification; nothing sent.",
+"<div class=\"card\" style=\"border-color:var(--warn-t);margin-bottom:14px\"><h3 style=\"color:var(--warn-t)\">⚠️ 部分頁面被擋住</h3><p>": "<div class=\"card\" style=\"border-color:var(--warn-t);margin-bottom:14px\"><h3 style=\"color:var(--warn-t)\">⚠️ Some pages were blocked</h3><p>",
+"<div class=\"hint\" style=\"color:var(--bad-t);margin:6px 0\">這一頁在擷取時幾乎是空的，沒有版面可顯示（原因見「總覽」的紅色警告）。</div>": "<div class=\"hint\" style=\"color:var(--bad-t);margin:6px 0\">This page was almost empty when captured and has no layout to show (see the red warning on the \"Overview\" for the reason).</div>",
+"<div class=\"card\" style=\"border-color:var(--bad-t);margin-bottom:14px\"><h3 style=\"color:var(--bad-t)\">⚠️ 這次擷取不完整（": "<div class=\"card\" style=\"border-color:var(--bad-t);margin-bottom:14px\"><h3 style=\"color:var(--bad-t)\">⚠️ This capture is incomplete (",
+"；<b style=\"color:var(--bad-t)\">錯誤回應 ": "; <b style=\"color:var(--bad-t)\">error responses ",
+"<b style=\"color:var(--bad-t)\">沒有偵測到</b>": "<b style=\"color:var(--bad-t)\">not detected</b>",
+"<b style=\"color:var(--bad-t)\">是 +": "<b style=\"color:var(--bad-t)\">yes +"
 }

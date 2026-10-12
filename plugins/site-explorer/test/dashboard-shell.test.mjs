@@ -32,6 +32,14 @@ test('dashboard: logo, grouped sidebar with icons, page title and description pe
       for (const b of await pg.locator('#tabs button').all()) { if (!(await b.isVisible())) continue; await b.click(); assert.ok((await pg.locator('#ptitle').textContent()).length > 1, 'page title'); assert.ok((await pg.locator('#pdesc').textContent()).length > 5, 'page description'); assert.doesNotMatch(await pg.locator('#pdesc').textContent(), /[一-鿿]/, 'English description in an English dashboard'); }
       const side = await pg.locator('nav').boundingBox(); assert.ok(side.x < 5 && side.width > 200, 'sidebar on a wide screen');
       await ctx.close();
+      // accessibility: no WCAG A/AA violations on any tab, in light or dark colours
+      const { createRequire } = await import('node:module'); const axeSrc = fs.readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
+      for (const scheme of ['light', 'dark']) {
+        const c = await br.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: scheme }); const ap = await c.newPage(); await ap.goto('file://' + dash); await ap.evaluate(axeSrc); const bad = [];
+        const count = await ap.locator('#tabs button').count();
+        for (let i = 0; i < count; i++) { const b = ap.locator('#tabs button').nth(i); if (!(await b.isVisible())) continue; await b.click(); await ap.waitForTimeout(400); const r = await ap.evaluate(async () => await axe.run(document, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] })); for (const v of r.violations) bad.push(`${scheme} tab${i} ${v.id}: ${v.nodes[0].html.slice(0, 100)}`); }
+        await c.close(); assert.deepEqual(bad, [], 'accessibility violations');
+      }
       const m = await br.newContext({ viewport: { width: 390, height: 800 } }); const mp = await m.newPage(); await mp.goto('file://' + dash);
       assert.ok(await mp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no horizontal scrolling on a phone');
       assert.deepEqual(errs, []);

@@ -25,7 +25,7 @@ function show(k){if(k==='data'&&!document.body.classList.contains('detail'))setD
   const ms=M?M.targets.length:0;
   const sentences=[];
   if(S){sentences.push(_t('共探索 <b>')+S.pages.length+_t('</b> 頁，')+(plat.length?_t('偵測到 <b>')+plat.map(p=>esc(p.platform)).join(_t('、'))+_t('</b> 建站特徵'):_t('未偵測到常見建站平台（可能是自訂程式或靜態站）'))+_t('。'));}
-  if(T){sentences.push(_t('主色 <b style="color:')+(c.brand||'inherit')+'">'+esc(c.brand||'—')+_t('</b>，標題字型 <b>')+esc(T.typography.fontStack.heading||'?')+_t('</b>，間距以 <b>')+T.spacing.baseUnit+_t('px</b> 為基準。'));}
+  if(T){sentences.push(_t('主色 ')+'<i class="dot" style="background:'+(c.brand||'transparent')+'"></i> <b>'+esc(c.brand||'—')+_t('</b>，標題字型 <b>')+esc(T.typography.fontStack.heading||'?')+_t('</b>，間距以 <b>')+T.spacing.baseUnit+_t('px</b> 為基準。'));}
   if(M){sentences.push(ms?_t('發現 <b>')+ms+_t('</b> 個 3D／動畫元素')+(Object.entries(M.libs).filter(([,v])=>v===true).length?_t('，使用 ')+Object.entries(M.libs).filter(([,v])=>v===true).map(([k])=>'<b>'+k+'</b>').join(_t('、')):'')+_t('。'):_t('沒有發現 3D 或動畫元素。'));}
   o.innerHTML='<div class="grid g3">'+
    (S?_t('<div class="card"><h3>頁面</h3><div class="big">')+S.pages.length+_t('</div><div class="hint">耗時 ')+S.seconds+_t(' 秒</div></div>'):'')+
@@ -38,7 +38,7 @@ function show(k){if(k==='data'&&!document.body.classList.contains('detail'))setD
   (S?.assets?.length?_t('<div class="card" style="margin-top:14px"><h3>品牌素材</h3><div class="imgs">')+S.assets.map(a=>'<div><img src="'+a.src+'" style="object-fit:contain;background:#8884"><div class="hint">'+esc(a.name)+'</div></div>').join('')+'</div></div>':'');
 
   const blocked=S?.blockedPages||[];
-  if(blocked.length)o.insertAdjacentHTML('afterbegin',_t('<div class="card" style="border-color:var(--warn);margin-bottom:14px"><h3 style="color:var(--warn)">⚠️ 部分頁面被擋住</h3><p>')+blocked.map(b=>esc(b.reason)+_t('：')+esc(b.url)).join('<br>')+_t('</p><p class="hint">以下結果可能不完整。可降低頻率、確認你有權存取，或請 Claude 用瀏覽器工具互動補查。</p></div>'));
+  if(blocked.length)o.insertAdjacentHTML('afterbegin',_t('<div class="card" style="border-color:var(--warn-t);margin-bottom:14px"><h3 style="color:var(--warn-t)">⚠️ 部分頁面被擋住</h3><p>')+blocked.map(b=>esc(b.reason)+_t('：')+esc(b.url)).join('<br>')+_t('</p><p class="hint">以下結果可能不完整。可降低頻率、確認你有權存取，或請 Claude 用瀏覽器工具互動補查。</p></div>'));
   const steps=[];
   if(D.health){const t=D.health.issues.filter(i=>['critical','high'].includes(i.severity))[0];steps.push([_t('先處理 SEO／索引問題'),t?esc(t.title)+_t('（共 ')+D.health.issues.filter(i=>['critical','high'].includes(i.severity)).length+_t(' 項嚴重／高優先，見「健檢」分頁）'):_t('沒有嚴重問題，可到「健檢」分頁看中低優先建議')]);}
   if(S)steps.push([_t('把這個風格變成 Claude Design 的設計系統'),_t('在 Claude Code 輸入：<code>/site-explorer:to-design ')+esc(S.startUrl)+'</code>']);
@@ -106,8 +106,8 @@ function show(k){if(k==='data'&&!document.body.classList.contains('detail'))setD
 
 // ---------- layout ----------
 const KIND={header:_t('頁首'),hero:_t('主視覺 Hero'),features:_t('功能／特色格'),pricing:_t('價格方案'),testimonial:_t('客戶見證'),faq:'FAQ',form:_t('表單'),logos:_t('Logo 牆'),stats:_t('數據亮點'),gallery:_t('圖庫'),cta:_t('行動呼籲 CTA'),footer:_t('頁尾'),content:_t('內容區')};
-const KCOL={header:'#64748b',hero:'#7c3aed',features:'#2563eb',pricing:'#059669',testimonial:'#d97706',faq:'#0891b2',form:'#db2777',logos:'#475569',stats:'#ca8a04',gallery:'#9333ea',cta:'#dc2626',footer:'#475569',content:'#94a3b8'};
-const kchip=(k)=>'<span class="kind" style="background:'+(KCOL[k]||'#94a3b8')+'">'+esc(KIND[k]||k)+'</span>';
+const KCOL={header:'#64748b',hero:'#7c3aed',features:'#2563eb',pricing:'#047857',testimonial:'#b45309',faq:'#0e7490',form:'#db2777',logos:'#475569',stats:'#8a5a00',gallery:'#9333ea',cta:'#c62828',footer:'#475569',content:'#5b6b80'};
+const kchip=(k)=>'<span class="kind" style="background:'+(KCOL[k]||'#5b6b80')+'">'+esc(KIND[k]||k)+'</span>';
 const lumOf=(h)=>{const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255).map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));return .2126*c[0]+.7152*c[1]+.0722*c[2]};
 const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(Math.min(x,y)+.05))};
 (function(){
@@ -115,10 +115,10 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   const MODES=[['shot',_t('截圖／檢視元素')],['slices',_t('區塊切片')],['skeleton',_t('頁面骨架')],['side',_t('響應式並排')]];
   function draw(){
     const p=D.pages[pi];
-    l.innerHTML='<div class="card"><select id="pg">'+D.pages.map((q,i)=>'<option value="'+i+'"'+(i===pi?' selected':'')+'>'+esc(q.title||q.url)+(q.emptyPage?_t('（空白頁，沒有版面）'):'')+'</option>').join('')+'</select> '+
+    l.innerHTML='<div class="card"><select id="pg" aria-label="'+esc(_t('選擇頁面'))+'">'+D.pages.map((q,i)=>'<option value="'+i+'"'+(i===pi?' selected':'')+'>'+esc(q.title||q.url)+(q.emptyPage?_t('（空白頁，沒有版面）'):'')+'</option>').join('')+'</select> '+
       '<div class="seg" style="margin-left:8px">'+MODES.map(m=>'<button data-mode="'+m[0]+'" aria-pressed="'+(m[0]===mode)+'">'+m[1]+'</button>').join('')+'</div>'+
       (p.mobileOverflow?_t('<span class="chip warn">手機版橫向溢出</span>'):'')+
-      (p.emptyPage?_t('<div class="hint" style="color:#dc2626;margin:6px 0">這一頁在擷取時幾乎是空的，沒有版面可顯示（原因見「總覽」的紅色警告）。</div>'):'')+
+      (p.emptyPage?_t('<div class="hint" style="color:var(--bad-t);margin:6px 0">這一頁在擷取時幾乎是空的，沒有版面可顯示（原因見「總覽」的紅色警告）。</div>'):'')+
       (p.blocks.length?'<div style="margin:4px 0 10px">'+p.blocks.map(b=>kchip(b.kind)).join(' <span class="hint">→</span> ')+'</div>':'')+
       '<div id="lbody"></div></div>';
     $('#pg').onchange=(e)=>{pi=+e.target.value;draw()};
@@ -129,7 +129,7 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   function shotView(p,body){
     body.innerHTML='<div class="seg">'+['desktop','tablet','mobile'].map(v=>'<button data-v="'+v+'" aria-pressed="'+(v===vp)+'">'+({desktop:_t('桌機 1440'),tablet:_t('平板 768'),mobile:_t('手機 390')})[v]+'</button>').join('')+'</div>'+
       (vp==='desktop'&&p.elements.length?'<div class="seg"><button id="tgI" aria-pressed="'+inspect+_t('">🔍 檢視元素：')+(inspect?_t('開'):_t('關'))+_t('</button></div><span class="hint">游標移到畫面上的元素，右側顯示字型、色碼、間距；點擊釘選並複製 CSS</span>'):'')+
-      '<div class="shot"><div class="frame">'+(p.shots[vp]?'<span class="wrapimg" id="wi"><img src="'+p.shots[vp]+'" id="shotimg"><div class="ov" id="ov"></div></span>':_t('<div class="empty">沒有截圖（使用了 --no-screenshots？）</div>'))+'</div>'+
+      '<div class="shot"><div class="frame">'+(p.shots[vp]?'<span class="wrapimg" id="wi"><img src="'+p.shots[vp]+'" id="shotimg" alt="'+esc(p.title||p.url)+'"><div class="ov" id="ov"></div></span>':_t('<div class="empty">沒有截圖（使用了 --no-screenshots？）</div>'))+'</div>'+
       (vp==='desktop'&&p.elements.length&&inspect?_t('<div class="insp card" id="insp"><h3>元素資訊</h3><div class="hint">把游標移到左側畫面</div></div>'):_t('<div class="map"><h3>區塊地圖</h3>')+mapHtml(p)+'</div>')+'</div>';
     body.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{vp=b.dataset.v;draw()});
     const tg=$('#tgI',body);if(tg)tg.onclick=()=>{inspect=!inspect;draw()};
@@ -211,7 +211,7 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
      '<div class="seg" style="margin-top:10px">'+modes.map(k=>'<button data-m="'+k+'">'+({idle:_t('自走'),hover:_t('滑鼠掃過'),drag:_t('拖曳')})[k]+'</button>').join('')+'</div>'+
      _t('<div class="player"><div class="stage"><img></div></div><div class="ctrl"><button class="pl">▶ 播放</button><input type="range" min="0" value="0"><span class="hint cnt"></span></div><div class="film"></div>');
     const img=$('img',card),rng=$('input',card),film=$('.film',card),cnt=$('.cnt',card);
-    const set=(n)=>{const fr=t.frames[mode];i=(n+fr.length)%fr.length;img.src=fr[i];rng.value=i;cnt.textContent=(i+1)+' / '+fr.length;film.querySelectorAll('img').forEach((x,j)=>x.classList.toggle('cur',j===i))};
+    rng.setAttribute('aria-label','frame');img.alt='';const set=(n)=>{const fr=t.frames[mode];i=(n+fr.length)%fr.length;img.src=fr[i];rng.value=i;cnt.textContent=(i+1)+' / '+fr.length;film.querySelectorAll('img').forEach((x,j)=>x.classList.toggle('cur',j===i))};
     const load=()=>{const fr=t.frames[mode];rng.max=fr.length-1;film.innerHTML='';fr.forEach((f,j)=>{const x=el('<img src="'+f+'" loading="lazy">');x.onclick=()=>set(j);film.append(x)});card.querySelectorAll('[data-m]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===mode));set(0)};
     card.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;load()});
     rng.oninput=()=>set(+rng.value);
@@ -220,7 +220,7 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
     wrap.append(card);
   });
   if(!M.targets.length)wrap.append(el(_t('<div class="card empty" style="margin-top:14px">沒有偵測到 3D 或動畫元素。若網站是互動體驗頁，請調大 --wait 後重跑。</div>')));
-  if(M.scroll.length){const sc=el(_t('<div class="card" style="margin-top:14px"><h3>捲動序列（拖動滑桿＝捲動頁面）</h3><div class="player"><div class="stage"><img></div></div><div class="ctrl"><input type="range" min="0" max="')+(M.scroll.length-1)+'" value="0"><span class="hint">'+M.scrollChangedFrames+' / '+M.scrollFrames+_t(' 張畫面不同</span></div></div>'));const im=$('img',sc),r=$('input',sc);im.src=M.scroll[0];r.oninput=()=>im.src=M.scroll[r.value];m.append(sc)}
+  if(M.scroll.length){const sc=el(_t('<div class="card" style="margin-top:14px"><h3>捲動序列（拖動滑桿＝捲動頁面）</h3><div class="player"><div class="stage"><img></div></div><div class="ctrl"><input type="range" min="0" max="')+(M.scroll.length-1)+'" value="0"><span class="hint">'+M.scrollChangedFrames+' / '+M.scrollFrames+_t(' 張畫面不同</span></div></div>'));const im=$('img',sc),r=$('input',sc);im.alt='';r.setAttribute('aria-label','scroll');im.src=M.scroll[0];r.oninput=()=>im.src=M.scroll[r.value];m.append(sc)}
   if(M.cssKeyframes.length||M.shaderSamples.length)m.append(el(_t('<div class="card" style="margin-top:14px"><h3>原始線索</h3>')+(M.cssKeyframes.length?_t('<details><summary>CSS keyframes（')+M.cssKeyframes.length+_t('）</summary><pre>')+esc(JSON.stringify(M.cssKeyframes,null,2))+'</pre></details>':'')+(M.shaderSamples.length?_t('<details><summary>Shader 片段（')+M.shaderSamples.length+_t('）</summary><pre>')+esc(M.shaderSamples.join('\n\n----\n\n'))+'</pre></details>':'')+'</div>'));
 })();
 
@@ -321,14 +321,14 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   const o=$('#s-overview');if(!o||!S)return;const bad=(S.pages||[]).filter(p=>p.emptyPage);if(!bad.length)return;
   const why=d=>!d?_t('原因不明；可試 <code>--wait 30000</code> 或 <code>--headed</code>。'):(d.alt&&d.alt.contentAppeared)?_t('<b>用瀏覽器預設身分就讀得到內容（')+d.alt.textChars+_t(' 字），用爬蟲身分讀不到</b>：網站依「識別字串」提供了不同的內容。'):(d.scripts>0&&d.dataRequests===0&&d.canvases===0&&d.textChars===0)?_t('<b>腳本有載入，卻沒有發出任何資料請求，也沒有建立任何畫面</b>：程式像是在等某個條件而停住（偵測瀏覽器或 WebGL、使用者互動、特定網址參數），或執行時出錯。請執行 <code>site-explorer diagnose &lt;網址&gt;</code>，比較「爬蟲身分」與「瀏覽器預設身分」。'):d.blockPage?_t('<b>像是防機器人／驗證頁</b>：網站把自動化瀏覽器擋在外面。可試 <code>--headed</code>（顯示瀏覽器視窗）。'):(d.canvases>0&&d.textChars<40)?_t('<b>像是 WebGL／canvas 整頁體驗</b>：畫面由 3D 繪製，網頁上幾乎沒有文字或版面元素可抽取。請看「3D／動畫」分頁與截圖。'):(d.iframes>0&&d.elements<40)?_t('內容可能在 iframe 裡，目前不會深入 iframe。'):(d.buttons>0&&d.textChars<40)?_t('可能要先點「進入」或同意 Cookie 才會顯示內容。可試 <code>--headed</code> 親手點一下。'):_t('原因不明；可試 <code>--wait 30000</code> 或 <code>--headed</code>。');
   const shot=p=>{const pg=(D.pages||[]).find(x=>x.slug===p.slug);const src=pg&&pg.shots&&pg.shots.desktop;return src?'<img src="'+esc(src)+_t('" style="max-width:260px;border:1px solid var(--line);border-radius:8px;margin-top:8px" alt="擷取當下的畫面">'):''};
-  o.insertAdjacentHTML('afterbegin',_t('<div class="card" style="border-color:#dc2626;margin-bottom:14px"><h3 style="color:#dc2626">⚠️ 這次擷取不完整（')+bad.length+_t(' 頁幾乎是空的）</h3>')+bad.map(p=>'<div style="margin:8px 0"><b>'+esc(p.title||p.url)+'</b><br><small>'+esc(p.url)+'</small><br>'+(p.emptyDiag?_t('<small>DOM 元素 ')+p.emptyDiag.elements+'・canvas '+p.emptyDiag.canvases+'・iframe '+p.emptyDiag.iframes+_t('・可見文字 ')+p.emptyDiag.textChars+_t(' 字')+(p.emptyDiag.requests!=null?_t('・請求 ')+p.emptyDiag.requests+_t('（腳本 ')+p.emptyDiag.scripts+_t('、資料請求 ')+p.emptyDiag.dataRequests+_t('）'):'')+_t('・WebGL：')+esc(p.emptyDiag.webgl||_t('無'))+'</small><br>'+((p.emptyDiag.consoleErrors||[]).length?_t('<small>頁面錯誤：')+p.emptyDiag.consoleErrors.map(esc).join(_t('；'))+'</small><br>':''):'')+why(p.emptyDiag)+'<br>'+shot(p)+'</div>').join('')+'</div>');
+  o.insertAdjacentHTML('afterbegin',_t('<div class="card" style="border-color:var(--bad-t);margin-bottom:14px"><h3 style="color:var(--bad-t)">⚠️ 這次擷取不完整（')+bad.length+_t(' 頁幾乎是空的）</h3>')+bad.map(p=>'<div style="margin:8px 0"><b>'+esc(p.title||p.url)+'</b><br><small>'+esc(p.url)+'</small><br>'+(p.emptyDiag?_t('<small>DOM 元素 ')+p.emptyDiag.elements+'・canvas '+p.emptyDiag.canvases+'・iframe '+p.emptyDiag.iframes+_t('・可見文字 ')+p.emptyDiag.textChars+_t(' 字')+(p.emptyDiag.requests!=null?_t('・請求 ')+p.emptyDiag.requests+_t('（腳本 ')+p.emptyDiag.scripts+_t('、資料請求 ')+p.emptyDiag.dataRequests+_t('）'):'')+_t('・WebGL：')+esc(p.emptyDiag.webgl||_t('無'))+'</small><br>'+((p.emptyDiag.consoleErrors||[]).length?_t('<small>頁面錯誤：')+p.emptyDiag.consoleErrors.map(esc).join(_t('；'))+'</small><br>':''):'')+why(p.emptyDiag)+'<br>'+shot(p)+'</div>').join('')+'</div>');
 })();
 // ---------- what the page actually loaded (network, shadow DOM / iframes, accessibility tree) ----------
 (function(){
   const o=$('#s-overview');if(!o||!S)return;const p=(S.pages||[]).find(x=>x.network);if(!p)return;const n=p.network,d=p.deep,a=p.aria;
   const li=x=>'<li>'+x+'</li>';
   const rows=[
-    li(_t('請求 <b>')+n.total+_t('</b> 個（')+Object.entries(n.byType).sort((x,y)=>y[1]-x[1]).slice(0,6).map(([k,v])=>esc(k)+' '+v).join(_t('、'))+_t('）；第三方網域 ')+(n.thirdParty||[]).length+_t(' 個')+(n.errorCount?_t('；<b style="color:#dc2626">錯誤回應 ')+n.errorCount+_t(' 個（403/429：')+n.blockedLike+_t('）</b>'):'')),
+    li(_t('請求 <b>')+n.total+_t('</b> 個（')+Object.entries(n.byType).sort((x,y)=>y[1]-x[1]).slice(0,6).map(([k,v])=>esc(k)+' '+v).join(_t('、'))+_t('）；第三方網域 ')+(n.thirdParty||[]).length+_t(' 個')+(n.errorCount?_t('；<b style="color:var(--bad-t)">錯誤回應 ')+n.errorCount+_t(' 個（403/429：')+n.blockedLike+_t('）</b>'):'')),
     n.assets3d&&n.assets3d.length?li(_t('3D 資源：')+n.assets3d.map(x=>'<code>'+esc(x.url)+'</code> ('+x.status+')').join(_t('、'))):'',
     n.apis&&n.apis.length?li(_t('API／JSON：')+n.apis.slice(0,6).map(x=>'<code>'+esc(x.url)+'</code> ('+x.status+')').join(_t('、'))):'',
     n.apiTextSamples&&n.apiTextSamples.length?li(_t('API 回應裡的文字（頁面上看不到時，內容常在這裡）：<ul>')+n.apiTextSamples.slice(0,6).map(t=>li(esc(t))).join('')+'</ul>'):'',
@@ -341,8 +341,8 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
 (function(){
   const o=$('#s-overview');if(!o||!S||!S.privacy||!S.privacy.pagesChecked)return;const v=S.privacy,CAT={analytics:_t('流量分析'),ads:_t('廣告／再行銷'),'tag-manager':_t('標籤管理'),'session-replay':_t('行為錄影／熱圖'),chat:_t('客服聊天'),social:_t('社群'),video:_t('影音嵌入'),payments:_t('金流'),maps:_t('地圖'),security:_t('防機器人'),fonts:_t('外部字型'),cmp:_t('同意管理工具')};
   const trk=new Set(['analytics','ads','tag-manager','session-replay']);
-  const banner=!v.consentChecked?_t('未檢查'):v.consentBanner?_t('<b style="color:#16a34a">有</b>'):_t('<b style="color:#dc2626">沒有偵測到</b>');
-  const vend=v.vendors.length?v.vendors.map(x=>'<span class="chip" style="'+(trk.has(x.cat)?'border-color:#dc2626':'')+'">'+esc(x.name)+'<small> · '+esc(CAT[x.cat]||x.cat)+(x.when==='after'?_t(' · 點同意／捲動後才出現'):'')+'</small></span>').join(' '):_t('沒有辨識到已知的第三方追蹤／嵌入服務');
+  const banner=!v.consentChecked?_t('未檢查'):v.consentBanner?_t('<b style="color:#16a34a">有</b>'):_t('<b style="color:var(--bad-t)">沒有偵測到</b>');
+  const vend=v.vendors.length?v.vendors.map(x=>'<span class="chip" style="'+(trk.has(x.cat)?'border-color:var(--bad-t)':'')+'">'+esc(x.name)+'<small> · '+esc(CAT[x.cat]||x.cat)+(x.when==='after'?_t(' · 點同意／捲動後才出現'):'')+'</small></span>').join(' '):_t('沒有辨識到已知的第三方追蹤／嵌入服務');
   const ck=v.cookies.length?_t('<table class="t" style="width:100%;font-size:13px"><tr><th>Cookie</th><th>誰設的</th><th>有效期</th><th>Secure</th><th>HttpOnly</th></tr>')+v.cookies.slice(0,30).map(c=>'<tr><td><code>'+esc(c.name)+'</code>'+(c.thirdParty?_t(' <small>第三方</small>'):'')+'</td><td>'+esc(c.owner||'—')+(c.tracking?' ⚠️':'')+'</td><td>'+(c.days==null?_t('工作階段'):c.days+_t(' 天'))+'</td><td>'+(c.secure?_t('是'):_t('否'))+'</td><td>'+(c.httpOnly?_t('是'):_t('否'))+'</td></tr>').join('')+'</table>':_t('頁面載入時沒有設定 Cookie。');
   o.insertAdjacentHTML('beforeend',_t('<div class="card" style="margin-top:14px"><h3>追蹤碼與 Cookie（誰在看訪客）</h3><div class="hint">第一頁在「還沒點任何同意按鈕」時的狀態；只記名稱與旗標，不記 Cookie 的值。</div><p>Cookie 橫幅：')+banner+_t('　追蹤／廣告類服務：<b>')+v.trackingVendors.length+_t('</b> 個</p><p>')+vend+'</p>'+ck+'</div>');
 })();
@@ -351,7 +351,7 @@ const ratioOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return ((Math.max(x,y)+.05)/(M
   const o=$('#s-overview');if(!o||!S)return;const p=(S.pages||[]).find(x=>x.responsive&&x.responsive.desktop);if(!p)return;const r=p.responsive,ks=['desktop','tablet','mobile'].filter(k=>r[k]),N={desktop:_t('桌機'),tablet:_t('平板'),mobile:_t('手機')},NV={links:_t('連結直接顯示'),toggle:_t('收進選單按鈕'),hidden:_t('連結被隱藏、找不到選單按鈕'),none:_t('沒有導覽列')};
   const row=(l,f)=>'<tr><td>'+l+'</td>'+ks.map(k=>'<td>'+f(r[k])+'</td>').join('')+'</tr>';
   const warn=[];const d=r.desktop,t=r.tablet,m=r.mobile;if(t&&t.overflowX)warn.push(_t('平板寬度出現橫向捲動（+')+t.overflowPx+_t('px）'));if(m&&d.navLinks>=3&&m.nav==='hidden')warn.push(_t('手機寬度找不到導覽選單'));if(m&&m.maxColumns>=3)warn.push(_t('手機寬度仍並排 ')+m.maxColumns+_t(' 欄'));if(m&&d.textChars>400&&m.textChars<d.textChars*0.6)warn.push(_t('手機版文字量只有桌機的 ')+Math.round(m.textChars/d.textChars*100)+'%');
-  o.insertAdjacentHTML('beforeend',_t('<div class="card" style="margin-top:14px"><h3>手機／平板實測</h3><div class="hint">')+esc(p.url)+_t('　三種寬度各量一次，不是預設值。</div><table class="t" style="width:100%;font-size:13px"><tr><th></th>')+ks.map(k=>'<th>'+N[k]+' '+r[k].width+'px</th>').join('')+'</tr>'+row(_t('導覽'),x=>esc(NV[x.nav]||x.nav)+_t('（')+x.navLinks+_t(' 個連結）'))+row(_t('並排欄數（最多）'),x=>x.maxColumns>1?x.maxColumns:_t('單欄'))+row(_t('h1／內文字級 px'),x=>(x.h1Px==null?'—':x.h1Px)+_t('／')+(x.bodyPx==null?'—':x.bodyPx))+row(_t('橫向溢出'),x=>x.overflowX?_t('<b style="color:#dc2626">是 +')+x.overflowPx+'px</b>':_t('否'))+row(_t('可見文字量'),x=>x.textChars)+'</table>'+(warn.length?'<ul>'+warn.map(w=>'<li style="color:#dc2626">⚠️ '+esc(w)+'</li>').join('')+'</ul>':_t('<p>沒有發現明顯的響應式問題。</p>'))+'</div>');
+  o.insertAdjacentHTML('beforeend',_t('<div class="card" style="margin-top:14px"><h3>手機／平板實測</h3><div class="hint">')+esc(p.url)+_t('　三種寬度各量一次，不是預設值。</div><table class="t" style="width:100%;font-size:13px"><tr><th></th>')+ks.map(k=>'<th>'+N[k]+' '+r[k].width+'px</th>').join('')+'</tr>'+row(_t('導覽'),x=>esc(NV[x.nav]||x.nav)+_t('（')+x.navLinks+_t(' 個連結）'))+row(_t('並排欄數（最多）'),x=>x.maxColumns>1?x.maxColumns:_t('單欄'))+row(_t('h1／內文字級 px'),x=>(x.h1Px==null?'—':x.h1Px)+_t('／')+(x.bodyPx==null?'—':x.bodyPx))+row(_t('橫向溢出'),x=>x.overflowX?_t('<b style="color:var(--bad-t)">是 +')+x.overflowPx+'px</b>':_t('否'))+row(_t('可見文字量'),x=>x.textChars)+'</table>'+(warn.length?'<ul>'+warn.map(w=>'<li style="color:var(--bad-t)">⚠️ '+esc(w)+'</li>').join('')+'</ul>':_t('<p>沒有發現明顯的響應式問題。</p>'))+'</div>');
 })();
 // ---------- interaction states: what appeared after clicking / scrolling / pressing keys ----------
 (function(){
@@ -463,7 +463,7 @@ function openPage(p){
   const render=()=>{
     sec.innerHTML=_t('<div class="card"><h3>讓接手的 AI 直接開始做</h3><div class="steps"><div><b>1</b> 選要 AI 做什麼</div><div><b>2</b> 複製提示貼給 AI</div><div><b>3</b> 把資料夾（或下面的單一檔案）給它</div></div>')+
     '<div class="seg" id="xseg">'+[['A',_t('做頁面')],['B',_t('做動態／3D')],['C',_t('兩者（先頁面再動態）')]].filter(([x])=>x==='A'||k.hasMotion).map(([x,l])=>'<button data-x="'+x+'" aria-pressed="'+(cur===x)+'">'+l+'</button>').join('')+'</div>'+
-    '<pre class="prompt" id="xprompt">'+(mk(cur).trim()?esc(mk(cur)):esc(_t('（找不到這個目標的提示，請直接開啟 handoff 資料夾裡的 PROMPT.md）')))+_t('</pre><div class="xact"><button class="go" id="xcopy">複製提示</button><label class="hint"><input type="checkbox" id="xpath" ')+(withPath?'checked':'')+_t('> 附上資料夾位置（AI 能讀你電腦檔案時，例如 Claude Code）</label></div>')+
+    '<pre class="prompt" id="xprompt" tabindex="0">'+(mk(cur).trim()?esc(mk(cur)):esc(_t('（找不到這個目標的提示，請直接開啟 handoff 資料夾裡的 PROMPT.md）')))+_t('</pre><div class="xact"><button class="go" id="xcopy">複製提示</button><label class="hint"><input type="checkbox" id="xpath" ')+(withPath?'checked':'')+_t('> 附上資料夾位置（AI 能讀你電腦檔案時，例如 Claude Code）</label></div>')+
     _t('<div class="row"><span>資料夾</span><span><code>')+esc(k.dir)+'</code> <button class="chip" data-cp="'+esc(k.dir)+_t('">複製路徑</button></span></div>')+
     (k.hasMotion?_t('<div class="row"><span>預覽動態起手式</span><span><code>npx serve "')+esc(k.dir)+'"</code> <button class="chip" data-cp="npx serve &quot;'+esc(k.dir)+_t('&quot;">複製</button> <span class="hint">→ 開 /starter/motion/</span></span></div>'):'')+'</div>'+
     _t('<div class="card" style="margin-top:14px"><h3>交給 AI 之前</h3>')+ok.map(x=>'<p class="say">✅ '+x+'</p>').join('')+issues.map(([t,x])=>'<p class="say">'+(t==='bad'?'❌':'⚠️')+' '+x+'</p>').join('')+'</div>'+
@@ -503,3 +503,5 @@ function openPage(p){
 
 show(location.hash.slice(1)&&tabs.some(t=>t[0]===location.hash.slice(1))?location.hash.slice(1):'overview');
 
+// keyboard users must be able to scroll wide tables
+new MutationObserver(()=>document.querySelectorAll('main [style*="overflow:auto"]:not([tabindex])').forEach(e=>e.setAttribute('tabindex','0'))).observe(document.querySelector('main')||document.body,{childList:true,subtree:true});
