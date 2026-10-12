@@ -24,8 +24,9 @@ Besides the test suite, fresh read-only reviewers (separate agents with no knowl
 | 2 | Security (10 groups); robustness / edge cases (15 groups) | 25 | fixed: read-only interaction (POST/PUT/DELETE refused), passwords in URLs, robots.txt matcher ReDoS, charset (Big5 etc.), unknown flags rejected, DNS-aware SSRF guard, WebSocket blocking, bounded HTML scanning, `file://` iframe hang, defanged Markdown, query-string tokens, terminal escapes, planted symlink, output path confinement |
 | 3 | Regression review of rounds 1–2 (7); docs-vs-behaviour review (9) | 16 | fixed: trailing-dot hosts, private-resolving start hosts, long tags in word counts, stale results after a failed run, destructive-link rule, docs wording |
 | 4 | Regression review of round 3 plus three realistic fixture sites (marketing site, SPA, cookie banner + delete button) | 8 | fixed, including one high-severity regression introduced by round 3 itself (a widened regex could hang the crawler on a hostile page); replaced by a linear tag scanner |
+| 5 | Regression review of the remaining-audit-items and new-format PRs; claims in this report and the comparison checked against the code | 7 | fixed: regression gates silently passing when the baseline failed, gate reasons missing from the PR comment, invalid `DESIGN.md` front matter when site text tripped the injection filter, Chinese banner in an English Action run, MCP `out_dir` escaping through a symlink, wrong font fallbacks in the Tailwind v4 theme, stale test count |
 
-Round 3 and round 4 each found real problems *in the previous round's fixes*, which is why the loop was repeated rather than stopped after the first round.
+Rounds 3, 4 and 5 each found real problems *in the previous round's fixes*, which is why the loop was repeated rather than stopped after the first round.
 
 ## 3. Safety properties that are tested
 
@@ -60,4 +61,4 @@ These could not be exercised in the build environment, so they are untested here
 
 ## 7. Pull requests behind this report
 
-#21 framework outputs · #22 English output · #23 review rounds 1–2 · #24 security fixes · #25 `--json` early failures and help · #26 round-3 fixes · #27 Chinese console lines · #28 round-4 fixes · #29 remaining audit items · #30 Tailwind v4 `@theme`, `DESIGN.md`, OKLCH, Action regression gates, this report and the comparison document.
+#21 framework outputs · #22 English output · #23 review rounds 1–2 · #24 security fixes · #25 `--json` early failures and help · #26 round-3 fixes · #27 Chinese console lines · #28 round-4 fixes · #29 remaining audit items · #30 Tailwind v4 `@theme`, `DESIGN.md`, OKLCH, Action regression gates, this report and the comparison document · #31 `DESIGN.md` weights · #32 round-5 fixes.

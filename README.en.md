@@ -218,6 +218,7 @@ Everything goes into `motion.md`, each item marked "an AI cannot watch this dire
 | `DECISIONS.md` | **Living** decision log, open questions, assumptions, provenance (who read which pages, when, as whom) |
 | `CLAUDE.md` | For an AI working in this folder: how to read it, what not to do, log every decision |
 | `inventory.csv` | Every page (opens in Excel): URL inventory for redirect planning |
+| `content/` | The readable text of every page as Markdown, in document order (`content/INDEX.md` lists them). Links are written as `text (url)` and images as `[image: alt]`, so the files can never render a clickable or tracking element |
 | `tokens/`, `media/` | css / W3C / Tokens Studio / Tailwind (v3 config and v4 `@theme`, OKLCH colours) / `DESIGN.md` (design rules for AI coding tools) / palette SVG; section crops, filmstrips, brand assets |
 
 The whole package is relocatable: every file referenced in a document is inside it (tests guarantee that). Regenerating never deletes your work: an edited `starter/` is kept as `starter.backup-<time>`, and `DECISIONS.md` is only appended to.
@@ -240,6 +241,32 @@ The whole package is relocatable: every file referenced in a document is inside 
 Indexing & crawling 25% · on-page SEO 20% · links 10% · performance 15% · mobile 10% · security & transport 10% · structured data & social 5% · AI-crawler friendliness 5% (with `--a11y` an accessibility category of weight 10 is added and the others shrink proportionally). Scoring has diminishing returns, and any *critical* problem (site blocked, whole site noindex, no HTTPS, expired certificate) caps the total at 55. **The score is a relative indicator, not Google's score**; it only covers the crawled pages (a sample); performance is lab data.
 
 The report opens with a **verdict** (pass / conditional / fail). For automation: `site-explorer explore <url> --fail-on high` exits with code 4 when there are issues of that severity or worse. Run the same site again and the report lists new and fixed issues.
+
+**Local drift baseline.** `site-explorer explore <url> --approve` stores this run's design tokens (colours, fonts, spacing…) and health result as a baseline (default `<out>/baseline.json`; choose a path with `--baseline <file>` to keep it in version control). Later, `site-explorer explore <url> --compare` compares with it and exits with code 4 — writing `drift.md` — when any design token changed, the health score dropped by more than `--max-drop` (default 5), or a new issue at `--fail-on-new` (default high) or worse appeared. Tokens are compared exactly; to accept a new look, review it and run `--approve` again.
+
+**Technology stack.** Every exploration writes `techstack.md/json`: about 55 technologies (CMS, frameworks, libraries, hosting/CDN, analytics) recognised from script URLs, response headers, cookies, the generator tag and page globals, each with evidence and confidence — never guessed from visual style.
+
+**Performance budgets and run history.** `--budget <file.json>` (e.g. `{"lcpMs": 2500, "totalKB": {"max": 1500, "level": "warn"}}`). Metrics: ttfbMs, fcpMs, lcpMs, loadMs, cls, totalKB, requests, thirdPartyRequests, renderBlockingScripts, domNodes. A violated `fail`-level budget exits with code 4; every result is appended to `<out>/perf-history.json` (last 60 runs); the report is `performance.md/json` in each site folder.
+
+**Tracking behaviour check.** `tracking-behaviors.md/json` goes beyond listing trackers: does the page use a session-recording service (Hotjar, Clarity, FullStory…), read canvas / WebGL / audio fingerprints or probe fonts heavily, and is typed text sent to another site? (The probe types a random string into one ordinary text box and clears it — it never submits; forms with a password field, payment-looking fields and logged-in sessions are never probed.) A hit is a reason to look, not proof of misuse.
+
+**Whole-page visual regression.** `--approve` also stores the desktop / tablet / mobile full-page screenshots in `<baseline name>-visual/` next to the baseline file; `--compare` compares them pixel by pixel (a pixel differs when a colour channel is off by more than 16/255), allows `--visual-threshold` (default 0.5%) of pixels to differ per screenshot, and otherwise exits with code 4, writing `visual.md` and `visual-diff/*.png` (changes in red). `--no-visual` skips it. This compares whole screens, so dynamic content (carousels, ads, clocks) causes differences — tune the threshold.
+
+**Page archive.** `--archive` saves `pages/<page>/archive.html` for every page — a single HTML file that opens offline (CSS and images embedded up to a size cap; scripts, iframes and event attributes removed and a Content-Security-Policy added), a simplified SingleFile. Off by default because the files are large; resources over the cap stay as URLs (they will not load offline).
+
+**Security header and TLS grade.** Every exploration writes `security.md/json` — a Mozilla-Observatory / SSL-Labs-style configuration check: CSP strength, HSTS, nosniff, framing protection, Referrer-Policy, login-cookie flags, subresource integrity of external scripts, plus which TLS versions the server accepts and the certificate's validity / domain / trust / key size, each with its score effect and how to fix it, graded A+ to F. It is a configuration check on public information, not a vulnerability scan; the grade is for comparing runs, not a certification.
+
+**CI output (SARIF / JUnit).** `--sarif <file>` and `--junit <file>` write health issues, performance-budget violations, security-grade deductions, TLS problems and (when a comparison ran) visual differences as SARIF 2.1.0 (GitHub code scanning and others) and JUnit XML (Jenkins, GitLab, CircleCI, Azure DevOps). The GitHub Action always produces `results.sarif` / `results.xml`; their paths are the outputs `sarif-file` / `junit-file`, ready for `github/codeql-action/upload-sarif`.
+
+**Figma files.** Every exploration writes one layered SVG per page into `figma/` (real positions, sizes, fills, corner radii and text) that you drag into Figma and edit; import design variables with Tokens Studio from `design-bundle/tokens.studio.json`. It is a layout draft built from the measured elements (up to 240), not a pixel-exact copy: text is limited to the first 50 characters and images are grey placeholders.
+
+**HTML validity.** The health check inspects the raw HTML the server sends — unclosed or mis-nested tags, stray closing tags, duplicate ids / attributes, nested links or buttons, block elements inside `<p>`, list / table children in the wrong parent, deprecated elements, missing doctype, late charset. It is conservative (reports only what is certainly wrong), not a full W3C validator.
+
+**Custom extraction rules.** `--extract rules.json`, e.g. `{"price": {"css": ".price"}, "sku": {"css": "[itemprop=sku]", "attr": "content"}, "order": {"regex": "order-(\\d+)"}}`. css rules run on the rendered page (up to 50 matches); regex rules run on the visible text (or on the HTML with `"in": "html"`); the result is `extractions.csv/json`, one row per page. The rules file is parsed strictly (rule names, counts and regexes that could hang are rejected).
+
+**Verify masks.** `verify` accepts `--ignore <selector>` (repeatable) to exclude dynamic regions (ads, clocks, carousels); elements marked `data-verify-ignore` are excluded too; `--min-section <0-100>` fails the run when any single section scores below the threshold.
+
+**Per-page Markdown.** The readable text of every page is written in document order to `content/<page>.md` (plus `INDEX.md`); links are written as `text (url)`, so the files never contain a clickable or tracking element.
 
 ### Trackers, cookies, structured data, tablet/phone, before/after
 

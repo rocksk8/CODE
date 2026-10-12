@@ -219,12 +219,12 @@ if (isMain(import.meta.url)) {
       console.log(_t`\n頁面：消失 ${pd.removed.length}・新增 ${pd.added.length}・內容有變 ${pd.changed.length}・沒變 ${pd.unchanged}`);
       for (const r of pd.removed.slice(0, 10)) console.log(_t`  ✖ ${r.path}（需要 301）`);
       for (const c of pd.changed.slice(0, 10)) console.log(_t`  ✎ ${c.path}：${c.changes.map((x) => x.field).join(_t('、'))}`);
-      const md = opt('md'); if (md) { fs.writeFileSync(requireExtension(md, /\.md$/i, '*.md'), renderChangesMd(db, a, b)); console.log(_t('已寫入改版前後對照：') + md); }
+      const md = opt('md'); if (rest.includes('--md') && !md) throw new Error(_t('--md 需要一個檔名（例如 --md 對照.md）')); if (md) { fs.writeFileSync(requireExtension(md, /\.md$/i, '*.md'), renderChangesMd(db, a, b)); console.log(_t('已寫入改版前後對照：') + md); }
       break;
     }
     case 'export': {
       const dump = Object.fromEntries(['runs', 'colors', 'pages', 'platforms', 'libs', 'motion'].map((t) => [t, db.prepare(`SELECT * FROM ${t}`).all()]));
-      const out = opt('out'); if (out) { fs.writeFileSync(requireExtension(out, /\.json$/i, '*.json'), JSON.stringify(dump, null, 2)); console.log(_t('已匯出'), out); } else console.log(JSON.stringify(dump, null, 2)); break;
+      const out = opt('out'); if (rest.includes('--out') && !out) throw new Error(_t('--out 需要一個檔名（例如 --out 備份.json）')); if (out) { fs.writeFileSync(requireExtension(out, /\.json$/i, '*.json'), JSON.stringify(dump, null, 2)); console.log(_t('已匯出'), out); } else console.log(JSON.stringify(dump, null, 2)); break;
     }
     default: console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1).filter((l) => l.startsWith('//')).slice(0, 8).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
   } } catch (e) { console.error('✖ ' + String(e.message || e).split('\n')[0]); process.exit(1); } // one line, not a stack trace

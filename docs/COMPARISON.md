@@ -26,6 +26,26 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 | React／Vue／Astro 專案與 shadcn 主題 | 有（從 starter 轉出） | 只有 shadcn 主題 | 否 | 否 |
 | 離線單檔儀表板 | 有 | `--html` 報告與選用 app | 未提及 | 未提及 |
 
+## 相鄰類別的功能（本版新增，附對照）
+
+下表只列 site-explorer 已實作且有測試的能力；對手那一欄只引用該專案 README（見文末連結）寫了的內容。
+
+| 能力 | site-explorer | 相鄰工具（README 自述） |
+|---|---|---|
+| 技術堆疊偵測 | `techstack.md/json`：約 55 種技術，依腳本網址、回應標頭、Cookie、generator、全域變數，附證據與信心 | Wappalyzer（HTTPArchive 分支）：以 HTML、JS 變數、標頭、Cookie、DNS、meta、腳本網址比對指紋資料庫；我們的規則表小得多，沒有 DNS 比對 |
+| 效能預算與歷次紀錄 | `--budget`（ttfb、fcp、lcp、load、cls、總 KB、請求數、第三方請求、阻擋渲染腳本、DOM 節點）＋ `perf-history.json`（最近 60 筆） | Lighthouse CI：斷言、預算、伺服器儀表板與差異介面、多次執行降低變異；我們是 Playwright 實測的實驗室數據，沒有 Lighthouse 分數、也沒有儀表板伺服器 |
+| `verify` 區域遮罩與門檻 | `--ignore <選擇器>`、`data-verify-ignore`、`--min-section` | BackstopJS、Lost Pixel 有遮罩與敏感度門檻；我們的遮罩只用在 `verify` 的逐區塊比對 |
+| 指紋、錄製與輸入外流偵測 | `tracking-behaviors.md/json`：canvas／WebGL／音訊指紋、字型探測、11 種錄製／熱點圖服務、輸入文字是否送往其他網站（探針不送出表單） | Blacklight collector（GPL-3.0）：canvas／字型指紋、key logging、session recorder 等，另有事件與 HAR；我們是獨立實作，偵測面較少，也沒有 HAR |
+| 整頁視覺回歸 | `--approve`／`--compare` 連同桌機、平板、手機整頁截圖逐像素比對，門檻與差異圖，結束碼 4 | BackstopJS：情境腳本（點擊、懸停、Cookie）、等待條件、Docker 渲染、HTML 報告與核准流程；我們沒有情境腳本，也沒有互動式核准介面 |
+| 頁面封存 | `--archive`：每頁一個離線單一 HTML（CSS、圖片內嵌，移除腳本） | SingleFile：完整單檔與註解、使用者腳本；ArchiveBox／Browsertrix：WARC／WACZ。我們沒有 WARC，也不處理需要腳本才能顯示的內容 |
+| 安全標頭與 TLS 評等 | `security.md/json`：標頭 A+～F、TLS 協定版本與憑證評等，每項附修正方式 | MDN HTTP Observatory：10 項標頭測試加分數與字母等級；SSL Labs：協定、金鑰交換、加密強度加權評分。我們的評分規則是自訂的，沒有逐字對照它們的公開評分表，也不測密碼套件強度 |
+| SARIF／JUnit | `--sarif`、`--junit`，Action 輸出檔案路徑 | BackstopJS 輸出 JUnit；Nuclei 輸出 SARIF |
+| Figma | `figma/*.svg` 圖層化版面草稿 ＋ Tokens Studio 設計變數 | html.to.design、Builder.io figma-html：直接由網址或瀏覽器擴充功能轉成可編輯設計稿（含 auto layout）；我們的 SVG 沒有 auto layout，文字只取前 50 字，圖片是佔位 |
+| HTML 有效性 | 健檢納入保守的原始 HTML 檢查 | Nu Html Checker：完整的 HTML／CSS／SVG 驗證；我們只報確定有問題的，沒有內容模型驗證 |
+| 自訂擷取 | `--extract` CSS 選擇器與 regex，輸出 CSV／JSON | Screaming Frog 有 XPath／CSS／regex 擷取（只看到搜尋摘要，官網在本環境無法連線，未能查證其細節） |
+| 逐頁 Markdown 匯出 | 每頁 `content.md` | Crawl4AI、Firecrawl 以此為核心；我們是附帶輸出，沒有託管或 SDK |
+| 本機偏移基準 | `--approve`／`--compare`（設計 token、健檢分數、新問題、整頁畫面） | dembrandt 有互動式管理與選用 app；我們只有指令列 |
+
 ## 其他類別的工具（只做其中一段）
 
 | 工具 | 它做什麼 | 與 site-explorer 的關係 |
@@ -39,11 +59,13 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 
 ## 對手有、我們沒有（或我們比較弱）
 
-- dembrandt：stealth 模式、brand guide 輸出、本機互動式偏移基準管理與選用 app、cookie／basic auth／自訂標頭等多種登入方式（我們只支援 storage state）。
+- dembrandt：stealth 模式、brand guide 輸出、互動式偏移基準管理與選用 app、cookie／basic auth／自訂標頭等多種登入方式（我們只支援 storage state）。
 - Crawl4AI：Firefox 與 WebKit、代理與輪替、通用的 LLM 抽取。
-- Lighthouse 系列：完整的效能稽核與效能預算。
-- Firecrawl、Crawl4AI：把整個網站轉成 Markdown 的能力、託管服務與多語言 SDK。我們沒有做整頁 Markdown 轉換。
+- Lighthouse 系列：完整的 Lighthouse 稽核分數與伺服器儀表板（我們只有 Playwright 實測的指標與預算）。
+- Firecrawl、Crawl4AI：託管服務與多語言 SDK。
+- BackstopJS：情境腳本與核准介面；Wappalyzer：大型指紋資料庫；Blacklight：HAR 與更多偵測項目；html.to.design：auto layout 與直接由網址轉換。
 - 我們只用 Chromium，也只在 Linux 實測。
+- 刻意不做：判斷網站是否由 AI 生成（準確度證據不足，容易誤判）、弱點掃描（需要授權）。
 
 ## 我們自己標明的限制
 
@@ -63,8 +85,20 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 - Unlighthouse：https://github.com/harlan-zw/unlighthouse
 - Lighthouse CI：https://github.com/GoogleChrome/lighthouse-ci
 - Playwright MCP：https://github.com/microsoft/playwright-mcp
+- Wappalyzer（HTTPArchive 分支）：https://github.com/HTTPArchive/wappalyzer
+- wappalyzergo：https://github.com/projectdiscovery/wappalyzergo
+- BackstopJS：https://github.com/garris/BackstopJS
+- Lost Pixel：https://github.com/lost-pixel/lost-pixel
+- SingleFile：https://github.com/gildas-lormeau/SingleFile
+- ArchiveBox：https://github.com/ArchiveBox/ArchiveBox
+- Browsertrix：https://github.com/webrecorder/browsertrix
+- Blacklight collector：https://github.com/the-markup/blacklight-collector
+- MDN HTTP Observatory：https://github.com/mdn/mdn-http-observatory
+- Builder.io figma-html：https://github.com/BuilderIO/figma-html
+- Nuclei：https://github.com/projectdiscovery/nuclei
+- Nu Html Checker：https://github.com/validator/validator
 - Pa11y：https://github.com/pa11y/pa11y
 - axe-core CLI：https://github.com/dequelabs/axe-core-npm
 - Project Wallace css-analyzer：https://github.com/projectwallace/css-analyzer
 
-未能查證：Screaming Frog、Sitebulb（官網在本環境無法連線）。
+未能查證（官網在本環境無法連線，只看到搜尋摘要或完全沒有資料，因此不比較細節）：Screaming Frog、Sitebulb、SSL Labs 官網、html.to.design 官網、Percy、Chromatic、BuiltWith。

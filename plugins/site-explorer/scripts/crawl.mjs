@@ -6,6 +6,12 @@ import { findUrl, findUrls, intOpt, sameSite, loadRobots, CRAWLER_UA_TOKEN, norm
 import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
+import { parseRules, extractCssInPage, extractRegex, toCsv } from './custom-extract.mjs';
+import { checkHtml } from './html-validity.mjs';
+import { archiveInPage } from './page-archive.mjs';
+import { extractMarkdownInPage, renderPageMarkdown } from './page-markdown.mjs';
+import { extractTechInPage } from './techstack.mjs';
+import { fingerprintHooks, collectBehaviors } from './tracking-behaviors.mjs';
 import { BANNER, sanitizeDoc } from './untrusted.mjs';
 import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch, isInternalHost, resolvesInternal, stripMarkup, tagList, attrValue } from './util.mjs';
 import { parseSitemap } from './health-check.mjs';
@@ -35,6 +41,7 @@ const maxDepth = intOpt(args, 'depth', 2, { min: 0, max: 6 });
 const interactMax = args.includes('--no-interact') ? 0 : intOpt(args, 'interact-pages', 3, { min: 0, max: 30 }); let interactedPages = 0, abProbes = 0; // pages we walk through click/scroll/key states on
 const contentWaitMs = intOpt(args, 'wait', 12000, { min: 0, max: 120000 }); // how long to wait for a script-built page to put something on screen
 const shots = !args.includes('--no-screenshots');
+let extractRules = null; if (opt('extract', null)) { try { extractRules = parseRules(fs.readFileSync(opt('extract', null), 'utf8')); } catch (e) { console.error(String(e.message).split('\n')[0]); process.exit(1); } }
 let origin = new URL(startUrl).origin; // follows the first redirect (example.com -> www.example.com)
 const host = new URL(startUrl).host.replace(/[^a-z0-9.-]/gi, '_');
 const outDir = path.join(opt('out', './site-report'), host);
@@ -316,11 +323,12 @@ async function fetchRaw(u) {
       canonical: tags.some((t) => t.name === 'link' && /canonical/i.test(attrValue(t.attrs, 'rel') || '')),
       jsonld: tags.filter((t) => t.name === 'script' && /application\/ld\+json/i.test(attrValue(t.attrs, 'type') || '')).length,
       metaRobots: metaRobots ? (attrValue(metaRobots.attrs, 'content') || '') : null,
+      validity: checkHtml(html).slice(0, 14).map((f) => ({ id: f.id, severity: f.severity, count: f.count, examples: f.examples })),
       csrShell: tags.some((t) => t.name === 'div' && /^(root|app|__next|__nuxt)$/i.test(attrValue(t.attrs, 'id') || '') && /^\s*<\/div>/i.test(html.slice(t.end, t.end + 40))),
     };
   } catch (e) { return { error: String(e.message).slice(0, 100) }; }
 }
-const pickHeaders = (h = {}) => Object.fromEntries(['content-type', 'x-robots-tag', 'cache-control', 'content-encoding', 'strict-transport-security', 'content-security-policy', 'x-content-type-options', 'x-frame-options', 'referrer-policy', 'permissions-policy', 'server', 'x-powered-by', 'link', 'last-modified', 'etag', 'vary', 'age', 'cf-cache-status', 'x-cache'].filter((k) => h[k] !== undefined).map((k) => [k, k === 'content-security-policy' ? String(h[k]).slice(0, 200) : h[k]]));
+const pickHeaders = (h = {}) => Object.fromEntries(['content-type', 'x-robots-tag', 'cache-control', 'content-encoding', 'strict-transport-security', 'content-security-policy', 'x-content-type-options', 'x-frame-options', 'referrer-policy', 'permissions-policy', 'server', 'x-powered-by', 'link', 'last-modified', 'etag', 'vary', 'age', 'cf-cache-status', 'x-cache', 'via', 'x-served-by', 'cf-ray', 'x-vercel-id', 'x-nf-request-id', 'x-amz-cf-id', 'x-github-request-id', 'x-shopify-stage', 'x-wix-request-id', 'x-drupal-cache', 'x-generator', 'x-pingback', 'x-aspnet-version', 'x-akamai-transformed', 'x-fastly-request-id', 'x-turbo-charged-by', 'x-litespeed-cache', 'platform', 'x-ghost-cache-status'].filter((k) => h[k] !== undefined).map((k) => [k, k === 'content-security-policy' ? String(h[k]).slice(0, 200) : h[k]]));
 
 // Pages a script-built or 3D site hides from the live DOM: ask the places crawlers ask (raw HTML links, sitemap.xml, the home page).
 async function discoverMore(fromUrl) {
@@ -367,7 +375,8 @@ const authFile = opt('storage-state', null);
 let auth = null;
 if (authFile) { try { auth = loadAuthState(authFile); } catch (e) { console.error(e.message); await browser.close(); process.exit(1); } for (const w of auth.warnings) console.error('⚠️  ' + w); console.error(_t('🔐 以登入狀態探索：輸出（截圖、文字、儀表板）可能含個人資料，請勿公開分享。已略過登出、刪除、取消等會改變資料的連結。')); }
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA, ...(auth ? { storageState: auth.file } : {}) });
-await guardInternal(ctx, startUrl); // a public site (or a redirect from it) cannot make the browser read localhost / the LAN
+await guardInternal(ctx, startUrl);
+await ctx.addInitScript(fingerprintHooks).catch(() => {}); // passive recorders for tracking-behaviors.mjs (canvas / WebGL / audio / font probing) // a public site (or a redirect from it) cannot make the browser read localhost / the LAN
 const stripHash = (u) => { const x = new URL(u); x.hash = ''; return x.href; };
 const queue = [[stripHash(startUrl), 0]], seen = new Set([norm(startUrl)]), pages = [], headers = {};
 for (const extra of findUrls(args).slice(1)) { try { if (!sameSite(extra, origin) || seen.has(norm(extra))) continue; seen.add(norm(extra)); queue.push([stripHash(extra), 0]); } catch {} } // extra URLs given on the command line are crawled too (script-built sites hide them from each other)
@@ -434,6 +443,8 @@ while (pages.length < maxPages) {
     const aria = await ariaTree(page);
     data.aria = aria ? { lines: aria.lines, headings: aria.headings, links: aria.links, buttons: aria.buttons, images: aria.images, landmarks: aria.landmarks, head: aria.text.split('\n').slice(0, 40).join('\n').slice(0, 3500) } : null;
     data._ariaText = aria?.text || null; // written to aria.yml below, not kept in page.json
+    data.tech = await page.evaluate(extractTechInPage).catch(() => null); // globals / DOM markers for techstack.mjs
+    data._markdown = await page.evaluate(extractMarkdownInPage).catch(() => null); // written to content.md below (document order, one file per page)
     data.emptyPage = !contentReady;
     if (data.emptyPage) { // say WHY, from what the page actually contains
       data.emptyDiag = await page.evaluate(() => {
@@ -479,7 +490,17 @@ while (pages.length < maxPages) {
       } catch {}
     }
     const dir = path.join(outDir, 'pages', slugOf(url)); fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'page.html'), await page.content());
+    const __html = await page.content(); fs.writeFileSync(path.join(dir, 'page.html'), __html);
+    if (extractRules) { // --extract: the user's own rules, on the rendered page
+      try {
+        const css = await page.evaluate(extractCssInPage, extractRules.filter((r) => r.css).map(({ name, css, attr, all }) => ({ name, css, attr, all })));
+        const text = extractRules.some((r) => r.regex && r.in === 'text') ? await page.evaluate(() => (document.body ? document.body.innerText : '').slice(0, 300000)) : '';
+        data.extract = { ...css, ...extractRegex(extractRules, { text, html: __html }) };
+      } catch { data.extract = null; }
+    }
+    if (args.includes('--archive')) { // opt-in single-file offline copy (rendered DOM, CSS and images inlined, scripts removed)
+      try { const a = await page.evaluate(archiveInPage, { maxBytes: 12e6, maxOne: 2e6, pageUrl: page.url(), when: new Date().toISOString().slice(0, 10) }); fs.writeFileSync(path.join(dir, 'archive.html'), a.html); data.archive = { file: 'archive.html', bytes: a.bytes, embedded: a.embedded, linked: a.linked }; } catch (e) { data.archive = { error: String(e.message).split('\n')[0].slice(0, 100) }; }
+    }
     data.responsive = {};
     const homeUrl = page.url(); // some sites redirect when the window is resized (e.g. to an m. site): measurements taken there are not this page's
     const jumped = async (name) => { if (page.url() === homeUrl) return false; data.responsiveSkipped = _t`頁面在視窗縮到「${name}」寬度時自己跳轉到別的網址，手機／平板的量測與截圖略過`; delete data.responsive[name]; await page.setViewportSize({ width: 1440, height: 900 }).catch(() => {}); await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {}); return true; };
@@ -527,7 +548,10 @@ while (pages.length < maxPages) {
         } catch (e) { console.log(_t('   (互動探索略過：') + String(e.message).split('\n')[0] + ')'); }
       } }
     if (data._ariaText) fs.writeFileSync(path.join(dir, 'aria.yml'), sanitizeDoc(data._ariaText));
+    data.behaviors = await collectBehaviors(page, { auth: !!auth }).catch(() => null); // fingerprinting hooks + a harmless typing probe (never submits)
     delete data._ariaText;
+    if (data._markdown) { try { fs.writeFileSync(path.join(dir, 'content.md'), sanitizeDoc(renderPageMarkdown(data, data._markdown, BANNER)) + '\n'); data.contentWords = data._markdown.words; } catch {} }
+    delete data._markdown;
     fs.writeFileSync(path.join(dir, 'page.json'), JSON.stringify(data, null, 2));
     data.slug = slugOf(url);
     pages.push(data);
@@ -608,6 +632,11 @@ const site = {
   pages: pages.map((p) => ({ responsive: p.responsive || null, privacy: p.privacy || null, states: p.states || null, network: p.network || null, aria: p.aria || null, deep: p.deep || null, emptyPage: !!p.emptyPage, emptyDiag: p.emptyDiag || null, slug: p.slug, url: p.url, title: p.title, status: p.status, blocked: p.blocked, h1: p.content.headings.filter((h) => h.level === 1).map((h) => h.text), docHeight: p.layout.docHeight, mobileOverflow: p.layout.mobileOverflow })),
 };
 fs.writeFileSync(path.join(outDir, 'site.json'), JSON.stringify(site, null, 2));
+if (extractRules) { // one row per page, one column per rule
+  const rows = pages.map((p) => ({ url: p.url, extract: p.extract || {} }));
+  fs.writeFileSync(path.join(outDir, 'extractions.json'), JSON.stringify({ rules: extractRules.map(({ name, css, regex, attr, in: where }) => ({ name, css, regex, attr, in: where })), rows }, null, 2));
+  fs.writeFileSync(path.join(outDir, 'extractions.csv'), toCsv(extractRules, rows));
+}
 
 // markdown report
 const list = (a) => a.map((x) => `\`${x.value}\` (${x.count})`).join(', ') || '—';

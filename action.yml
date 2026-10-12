@@ -17,6 +17,8 @@ inputs:
 outputs:
   score: { description: 'Health score 0-100', value: '${{ steps.run.outputs.score }}' }
   verdict: { description: 'pass, conditional or fail', value: '${{ steps.run.outputs.verdict }}' }
+  sarif-file: { description: 'Path of the SARIF 2.1.0 results (upload with github/codeql-action/upload-sarif)', value: '${{ steps.run.outputs.sarif-file }}' }
+  junit-file: { description: 'Path of the JUnit XML results', value: '${{ steps.run.outputs.junit-file }}' }
 runs:
   using: composite
   steps:

@@ -213,6 +213,7 @@ AI 只能讀文字和圖片。所以：
 | `motion.md`、`health.md` | 動態與健檢 |
 | `DECISIONS.md` | **持續更新**的決策紀錄、待確認問題、假設、擷取紀錄（誰在何時用什麼身分讀了哪些頁面） |
 | `CLAUDE.md` | 給在此資料夾工作的 AI：怎麼讀、不能做什麼、每個決策都要記錄 |
+| `content/` | 每一頁的可讀文字，依網頁順序輸出成 Markdown（`content/INDEX.md` 是索引）。連結寫成「文字 (網址)」、圖片寫成 `[image: 說明]`，檔案不會出現可點擊或追蹤用的元素 |
 | `tokens/`、`media/` | css／W3C／Tokens Studio／Tailwind（v3 設定檔與 v4 `@theme`，色彩為 OKLCH）／`DESIGN.md`（給 AI 工具先讀的設計規則）／色票 SVG；區塊裁切圖、影格序列圖、品牌素材 |
 
 整包可獨立搬移：文件中引用的每個檔案都在包內（有測試保證）。
@@ -235,6 +236,32 @@ AI 只能讀文字和圖片。所以：
 索引與爬取 25%・頁面 SEO 20%・連結 10%・效能 15%・行動版 10%・安全與傳輸 10%・結構化資料與社群 5%・AI 爬蟲友善度 5%（加 `--a11y` 時多一類「無障礙」權重 10，其他類別等比例縮小）。評分有遞減效果，且出現「嚴重」問題（全站被擋、全站 noindex、無 HTTPS、憑證過期）時總分上限 55。**分數是相對指標，不是 Google 的評分**；只分析本次爬取的頁面（抽樣）；效能為實驗室數據。
 
 健檢報告最上面有**驗收結論**（通過／有條件通過／不通過）。給自動化用：`site-explorer explore <網址> --fail-on high`，有「高」以上問題時以結束代碼 4 結束。再跑一次同一個網站，報告會列出「新出現／已修復」的問題。
+
+**本機偏移基準**：`site-explorer explore <網址> --approve` 把這次的設計 token（色彩、字型、間距…）和健檢結果存成基準（預設 `<輸出資料夾>/baseline.json`，可用 `--baseline <檔案>` 指定，方便放進版本控制）；之後 `site-explorer explore <網址> --compare` 會和基準比較，設計 token 有任何變動、健檢分數掉超過 `--max-drop`（預設 5 分），或出現 `--fail-on-new`（預設 high）以上的新問題，就以結束代碼 4 結束，並寫出 `drift.md`。設計 token 是逐項精確比對；想接受新的樣子，確認後再跑一次 `--approve`。
+
+**技術堆疊**：每次探索會寫出 `techstack.md/json`——依據腳本網址、回應標頭、Cookie、generator 標籤與全域變數辨識約 55 種技術（CMS、框架、函式庫、主機／CDN、分析），附證據與信心；不靠外觀猜測。
+
+**效能預算與歷次紀錄**：`--budget <檔案.json>`（例：`{"lcpMs": 2500, "totalKB": {"max": 1500, "level": "warn"}}`）。指標有 ttfbMs、fcpMs、lcpMs、loadMs、cls、totalKB、requests、thirdPartyRequests、renderBlockingScripts、domNodes。超標的 `fail` 項目以結束代碼 4 結束；每次結果存進 `<輸出資料夾>/perf-history.json`（最近 60 筆），報告為各站資料夾的 `performance.md/json`。
+
+**追蹤行為檢查**：`tracking-behaviors.md/json`——不只列追蹤碼，而是看頁面做了什麼：有沒有錄製訪客操作的服務（Hotjar、Clarity、FullStory…）、有沒有讀 canvas／WebGL／音訊指紋或大量量測字型、輸入的文字是否被送到別的網站（只在一般文字框輸入隨機字串並清掉，不送出；有密碼欄的表單、疑似付款欄位與登入狀態一律不測）。命中是「值得查」的線索，不是濫用的證據。
+
+**整頁視覺回歸**：`--approve` 同時把桌機／平板／手機的整頁截圖存到基準檔旁的 `<基準檔名>-visual/`；`--compare` 逐張逐像素比對（任一色版差超過 16/255 算不同），每張容許 `--visual-threshold`（預設 0.5%）的像素不同，超過就以結束代碼 4 結束，寫出 `visual.md` 與 `visual-diff/*.png`（變動處標紅）。`--no-visual` 可略過。這比的是整頁畫面，動態內容（輪播、廣告、時間）會造成差異，請以門檻調整。
+
+**頁面封存**：`--archive` 為每頁另存 `pages/<頁面>/archive.html`——一個離線也打得開的單一 HTML（CSS 與圖片內嵌到大小上限，腳本、iframe、事件屬性全部移除並加上 Content-Security-Policy），像 SingleFile 的簡化版。預設不開，因為檔案較大；超過大小上限的資源會保留為網址（離線時載不出來）。
+
+**安全標頭與 TLS 評等**：每次探索寫出 `security.md/json`——類似 Mozilla Observatory／SSL Labs 的設定檢查：CSP 強度、HSTS、nosniff、防嵌入、Referrer-Policy、登入類 Cookie 旗標、外部腳本的 integrity，以及伺服器接受哪些 TLS 版本、憑證效期／網域／信任／金鑰長度，各項附分數影響與修正方式，給 A+～F 評等。這是公開資訊的設定檢查，不是漏洞掃描；評等用來比較不同次的結果，不是認證。
+
+**CI 輸出（SARIF／JUnit）**：`--sarif <檔案>`、`--junit <檔案>` 把健檢問題、效能預算超標、安全評等扣分、TLS 問題與（有做比對時的）視覺差異輸出成 SARIF 2.1.0（GitHub code scanning 等）與 JUnit XML（Jenkins、GitLab、CircleCI、Azure DevOps）。GitHub Action 每次都會產生 `results.sarif`／`results.xml`，路徑在輸出 `sarif-file`／`junit-file`，可用 `github/codeql-action/upload-sarif` 上傳。
+
+**Figma 匯入檔**：每次探索在 `figma/` 寫出每頁一個圖層化 SVG（真實位置、大小、填色、圓角與文字），拖進 Figma 即可編輯；設計變數用 Tokens Studio 匯入 `design-bundle/tokens.studio.json`。這是依實測元素（最多 240 個）生成的版面草稿，不是逐像素複製：文字只取前 50 字、圖片為灰色佔位。
+
+**HTML 有效性**：健檢會檢查伺服器送出的原始 HTML——標籤沒關或順序錯、多餘結束標籤、id／屬性重複、連結或按鈕巢狀、`<p>` 內放區塊元素、清單／表格父元素錯誤、已廢棄元素、缺 doctype、charset 太晚。這是保守的檢查（只報確定有問題的），不是完整的 W3C 驗證器。
+
+**自訂擷取規則**：`--extract rules.json`，例：`{"price": {"css": ".price"}, "sku": {"css": "[itemprop=sku]", "attr": "content"}, "order": {"regex": "order-(\\d+)"}}`。css 規則在渲染後的頁面執行（最多 50 筆），regex 規則對可見文字（或加 `"in": "html"` 對 HTML）執行；結果輸出 `extractions.csv/json`，每頁一列。規則檔會先嚴格檢查（規則名稱、數量、可能造成當機的 regex 會被拒絕）。
+
+**驗證遮罩**：`verify` 可用 `--ignore <選擇器>`（可重複）排除動態區域（廣告、時間、輪播），元素加上 `data-verify-ignore` 也會被排除；`--min-section <0-100>` 讓任何單一區塊低於門檻就判定未通過。
+
+**逐頁 Markdown**：每頁的可讀文字依網頁順序輸出成 `content/<頁面>.md`（含 `INDEX.md`）；連結寫成「文字 (網址)」，不會出現可點擊或追蹤用的元素。
 
 ### 追蹤碼、Cookie、結構化資料、手機／平板、改版前後
 

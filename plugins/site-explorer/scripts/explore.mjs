@@ -40,14 +40,22 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
   --motion-pages 5     3D／動畫擷取的頁數上限（含起始頁；1 = 只擷取起始頁）
   --headed             顯示瀏覽器視窗（可親手點「進入」；對防機器人／整頁 3D 網站較有效）
   --open | --no-open   完成後是否自動開啟儀表板  --no-standalone  儀表板不內嵌圖片
+  --approve            把這次的設計 token 與健檢結果存成基準（baseline.json；可用 --baseline <檔案> 指定位置）
+  --extract <規則.json> 自訂擷取規則：用 CSS 選擇器或 regex 從每頁抽出你要的資料（價格、SKU…），輸出 extractions.csv/json
+  --sarif <檔案>       另外輸出 SARIF 2.1.0（GitHub code scanning 等工具可讀）
+  --junit <檔案>       另外輸出 JUnit XML（Jenkins、GitLab、CircleCI、Azure DevOps 可讀）
+  --archive            每頁另存一個離線可開的單一 HTML（archive.html：CSS 與圖片內嵌、移除腳本；檔案較大）
+  --visual-threshold P 整頁畫面比對：每張截圖容許 P% 的像素不同（預設 0.5）；--no-visual 不存也不比整頁畫面
+  --compare            與基準比較，偏移超過容許範圍就以結束代碼 4 結束（--max-drop 5 容許掉幾分；--fail-on-new high 出現這個等級以上的新問題就失敗）
+  --budget f.json      效能預算（例如 {"totalKB":1500,"lcpMs":{"max":2500,"level":"warn"}}）；超標的項目等級是 fail 時以結束代碼 4 結束
   --fail-on high       健檢有「高」以上問題時，以結束代碼 4 結束（可填 critical／high／medium／low；給自動化／CI 用）
 結束代碼：0 成功；1 失敗或參數錯誤；4 健檢未達 --fail-on 門檻`;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 { // a misspelled flag must fail loudly: "--fial-on high" silently turning a CI gate off is worse than an error
-  const KNOWN = new Set(['--a11y', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang']); // (--lang=xx is normalised below)
+  const KNOWN = new Set(['--a11y', '--archive', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
   const unknown = args.filter((a) => a.startsWith('--') && !KNOWN.has(a) && !/^--lang=/.test(a));
   if (unknown.length) { const near = (u) => [...KNOWN].find((k) => k.length > 3 && (k.startsWith(u) || u.startsWith(k) || [...u].filter((c) => k.includes(c)).length >= k.length - 2 && Math.abs(k.length - u.length) <= 2)); console.error(_t`不認得的選項：${unknown.join(' ')}${near(unknown[0]) ? _t`（是不是 ${near(unknown[0])}？）` : ''}\n執行 site-explorer explore --help 看全部選項。`); process.exit(1); }
-  if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
+  if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold', '--sarif', '--junit', '--extract'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
 }
 if (!url) {
   const flagsWithValue = new Set(['--max-pages', '--out', '--wait', '--motion-pages', '--fail-on', '--storage-state', '--framework']);
@@ -61,9 +69,19 @@ const noDb = args.includes('--no-db') || !!stateFile; // logged-in content must 
 const framework = opt('framework', null);
 if (framework && !['react', 'vue', 'astro', 'shadcn', 'all'].includes(framework)) { console.error(_t('--framework 需要 react／vue／astro／shadcn／all 其中之一')); process.exit(1); }
 if (framework && args.includes('--no-handoff')) { console.error(_t('--framework 需要交接包，不能和 --no-handoff 一起用。')); process.exit(1); }
+const BANNER_DRIFT = () => ''; // drift.md is built from whitelisted values only
 const failOn = opt('fail-on', null);
 if (failOn && args.includes('--no-health')) { console.error(_t('--fail-on 需要健檢，不能和 --no-health 一起用。')); process.exit(1); }
 if (failOn && !['critical', 'high', 'medium', 'low'].includes(failOn)) { console.error(_t('--fail-on 需要 critical／high／medium／low 其中之一')); process.exit(1); }
+const approveFlag = args.includes('--approve'), compareFlag = args.includes('--compare');
+if (approveFlag && compareFlag) { console.error(_t('--approve 和 --compare 不能一起用：先 --compare 確認沒問題，再另外 --approve。')); process.exit(1); }
+if ((approveFlag || compareFlag) && args.includes('--no-health')) { console.error(_t('--approve／--compare 需要健檢，不能和 --no-health 一起用。')); process.exit(1); }
+const visualThresholdOpt = Number(opt('visual-threshold', '0.5')); if (!(visualThresholdOpt >= 0 && visualThresholdOpt <= 100)) { console.error(_t('--visual-threshold 必須是 0–100 的數字（百分比）')); process.exit(1); }
+if (opt('extract', null)) { try { const rf = path.resolve(opt('extract', null)); (await import('./custom-extract.mjs')).parseRules(fs.readFileSync(rf, 'utf8')); } catch (e) { console.error(_t`--extract 規則檔有問題：` + String(e.code === 'ENOENT' ? _t('找不到檔案') : e.message).split('\n')[0]); process.exit(1); } }
+const maxDropOpt = Number(opt('max-drop', '5')); if (!(maxDropOpt >= 0 && maxDropOpt <= 100)) { console.error(_t('--max-drop 必須是 0–100 的數字')); process.exit(1); }
+const failOnNewOpt = opt('fail-on-new', 'high'); if (!['critical', 'high', 'medium', 'low'].includes(failOnNewOpt)) { console.error(_t('--fail-on-new 需要 critical／high／medium／low 其中之一')); process.exit(1); }
+const budgetFile = opt('budget', null); let budgetCfg = null;
+if (budgetFile) { try { const { parseBudget } = await import('./perf-budget.mjs'); budgetCfg = parseBudget(fs.readFileSync(path.resolve(budgetFile), 'utf8')); } catch (e) { console.error(_t`預算檔無法使用：${String(e.code === 'ENOENT' ? _t('找不到檔案') : e.message).split('\n')[0]}`); process.exit(1); } }
 const urlsGiven = findUrls(args).filter((u) => { try { return sameSite(u, url); } catch { return false; } }).length; // only URLs the crawler will accept (same site as the first) raise the limits
 const maxPages = Math.max(intOpt(args, 'max-pages', 6, { min: 1, max: 500 }), urlsGiven), waitMs = intOpt(args, 'wait', 4000, { min: 0, max: 60000 });
 
@@ -76,7 +94,7 @@ const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
 const siteDir = path.join(siteRoot, host), motionDir = path.join(motionRoot, host);
 const steps = [];
-const total = 7 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
+const total = 12 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
 let n = 0;
 
 let current = null; // the stage that is running: Ctrl-C / SIGTERM (CI timeout, MCP kill) must stop it too, not leave a browser crawling
@@ -105,17 +123,22 @@ if (checks.some((c) => c.level === 'fail')) {
 
 { // results of stages that do not run this time must not be shown as if they were fresh (an old health score, a11y report, verify result or changes.md)
   const rm = (f) => { try { fs.rmSync(f, { recursive: true, force: true }); } catch {} };
-  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); // a failed re-run must not report the previous run's pages
+  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'techstack.json')); rm(path.join(siteDir, 'tracking-behaviors.json')); rm(path.join(siteDir, 'security.json')); rm(path.join(siteDir, 'figma')); rm(path.join(siteDir, 'extractions.json')); rm(path.join(siteDir, 'extractions.csv')); rm(path.join(siteDir, 'security.md')); rm(path.join(siteDir, 'tracking-behaviors.md')); rm(path.join(siteDir, 'performance.json')); rm(path.join(siteDir, 'performance.md')); rm(path.join(siteDir, 'techstack.md')); // a failed re-run must not report the previous run's pages
   if (args.includes('--no-health')) { rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); }
   if (!args.includes('--a11y')) rm(path.join(siteDir, 'a11y.json'));
   if (!args.includes('--verify')) rm(path.join(out, 'handoff', 'verify'));
 }
-const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
+const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--archive') ? ['--archive'] : []), ...(opt('extract', null) ? ['--extract', path.resolve(opt('extract', null))] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
 const crawlOk = crawlRan && (() => { try { return (JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []).length > 0; } catch { return false; } })(); // a crawl that exits 0 but saved no page is a failure
 if (crawlOk) await run(_t('整理設計包（tokens、Tailwind、W3C）'), 'export-design.mjs', [siteDir]);
 let healthOk = false;
 if (crawlOk && args.includes('--a11y')) await run(_t('無障礙檢查（axe-core）'), 'a11y.mjs', ['--site', siteDir, ...authArgs, ...(args.includes('--max-pages') ? ['--max-pages', String(maxPages)] : [])]);
 if (crawlOk && !args.includes('--no-health')) healthOk = await run(_t('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）'), 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
+if (crawlOk) await run(_t('技術堆疊（CMS、框架、函式庫、主機／CDN）'), 'techstack.mjs', ['--site', siteDir]);
+if (crawlOk) await run(_t('Figma 匯入檔（版面草稿 SVG）'), 'figma-export.mjs', ['--site', siteDir]);
+if (crawlOk) await run(_t('安全標頭與 TLS 評等'), 'security-grade.mjs', ['--site', siteDir]);
+if (crawlOk) await run(_t('追蹤行為（錄製、指紋、輸入外流）'), 'tracking-behaviors.mjs', ['--site', siteDir]);
+if (crawlOk) await run(_t('效能預算與歷次紀錄'), 'perf-budget.mjs', ['--site', siteDir, ...(budgetFile ? ['--budget', path.resolve(budgetFile)] : [])]);
 let motionOk = false;
 if (!crawlOk && !args.includes('--no-motion')) console.log(_t`\n沒有任何頁面被爬取，略過其餘階段。請檢查網址有沒有打錯、網路是否正常，或執行：site-explorer doctor ${url}`);
 else if (!args.includes('--no-motion')) motionOk = await run(_t('擷取 3D／動畫畫格'), 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])]);
@@ -211,7 +234,54 @@ if ((crawlOk || motionOk) && fs.existsSync(dash)) { // after a failed run an old
 let failCode = 0;
 if (failOn && !healthOk) { failCode = 1; console.error(_t`--fail-on ${failOn} 需要這次健檢成功，但健檢${args.includes('--no-health') ? _t('被 --no-health 略過') : _t('沒有完成')}；為避免用舊結果誤判，以結束代碼 1 結束。`); }
 try { const hj = path.join(siteDir, 'health.json'); if (healthOk && fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(_t`驗收結論：${h.verdict?.label ?? '—'}`); if (failOn) { const rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }; if (h.issues.some((i) => rank[i.severity] <= rank[failOn])) { failCode = 4; console.error(_t`健檢有 ${failOn} 以上的問題，依 --fail-on ${failOn} 以結束代碼 4 結束。`); } } } } catch {}
+if (budgetCfg && crawlOk) { try { const pj = JSON.parse(fs.readFileSync(path.join(siteDir, 'performance.json'), 'utf8')); if (pj.result?.failed) { failCode = failCode || 4; console.error(_t`效能預算有 ${pj.result.violations.filter((v) => v.level === 'fail').length} 項超標，以結束代碼 4 結束（見 performance.md）。`); } } catch { failCode = failCode || 1; console.error(_t('--budget 需要效能檢查成功，但沒有拿到結果。')); } }
+let drift = null;
+if (approveFlag || compareFlag) {
+  try {
+    const { makeBaseline, parseBaseline, compareBaseline, renderDriftMd } = await import('./baseline.mjs');
+    const { requireExtension } = await import('./safe-out.mjs');
+    const bf = approveFlag ? requireExtension(opt('baseline', path.join(out, 'baseline.json')), /\.json$/i, '*.json') : path.resolve(opt('baseline', path.join(out, 'baseline.json')));
+    if (!crawlOk || !healthOk) throw new Error(_t('這次探索或健檢沒有完成，不能建立或比較基準。'));
+    const tokens = JSON.parse(fs.readFileSync(path.join(siteDir, 'design-bundle', 'tokens.json'), 'utf8'));
+    const health = JSON.parse(fs.readFileSync(path.join(siteDir, 'health.json'), 'utf8'));
+    const siteJ = JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8'));
+    const cur = makeBaseline({ tokens, health, url, pages: (siteJ.pages || []).length });
+    if (approveFlag) {
+      fs.mkdirSync(path.dirname(bf), { recursive: true }); fs.writeFileSync(bf, JSON.stringify(cur, null, 2) + '\n'); console.log(_t`✔ 已把這次的結果存成基準：${bf}`);
+      if (args.includes('--no-visual')) { const { removeVisualBaseline, visualDirFor } = await import('./visual-regression.mjs'); removeVisualBaseline(visualDirFor(bf)); } // a stale visual baseline must not outlive the approval it belonged to
+      else { const { saveVisualBaseline, visualDirFor } = await import('./visual-regression.mjs'); const n = saveVisualBaseline(siteDir, visualDirFor(bf)); console.log(_t`✔ 已存下 ${n} 張整頁截圖作為視覺基準：${visualDirFor(bf)}`); }
+    }
+    else {
+      if (!fs.existsSync(bf)) throw new Error(_t`找不到基準檔 ${bf}。請先用 --approve 建立。`);
+      const base = parseBaseline(fs.readFileSync(bf, 'utf8'));
+      drift = compareBaseline(base, cur, { maxDrop: maxDropOpt, failOnNew: failOnNewOpt });
+      fs.writeFileSync(path.join(out, 'drift.md'), BANNER_DRIFT() + renderDriftMd(base, cur, drift) + '\n');
+      console.log(drift.failed ? _t`✖ 與基準相比偏移過大：\n  - ${drift.reasons.join('\n  - ')}` : _t('✔ 與基準相比在容許範圍內'));
+      console.log(_t`   詳情：${path.join(out, 'drift.md')}`);
+      const vdir = (await import('./visual-regression.mjs')).visualDirFor(bf);
+      if (!args.includes('--no-visual') && fs.existsSync(path.join(vdir, 'index.json'))) {
+        const { compareVisual, renderVisualMd } = await import('./visual-regression.mjs'); const { launchBrowser } = await import('./launch.mjs');
+        const br = await launchBrowser();
+        try {
+          const pg = await br.newPage(); const vr = await compareVisual(pg, { siteDir, baseDir: vdir, outDir: out, threshold: visualThresholdOpt });
+          fs.writeFileSync(path.join(out, 'visual.md'), renderVisualMd(vr)); drift.visual = vr;
+          console.log(vr.failed ? _t`✖ 整頁畫面和基準不同：\n  - ${vr.reasons.join('\n  - ')}` : _t('✔ 整頁畫面都在容許範圍內')); console.log(_t`   詳情：${path.join(out, 'visual.md')}`);
+          if (vr.failed) { drift.failed = true; drift.reasons.push(...vr.reasons); }
+        } finally { await br.close(); }
+      } else if (!args.includes('--no-visual')) console.log(_t('（這份基準沒有視覺基準；用 --approve 重新建立即可啟用整頁畫面比對。）'));
+      if (drift.failed) { failCode = 4; console.error(_t('偏移超過容許範圍，以結束代碼 4 結束。')); }
+    }
+  } catch (e) { failCode = 1; console.error('✖ ' + String(e.message).split('\n')[0]); }
+}
+if (crawlOk && (opt('sarif', null) || opt('junit', null))) {
+  try {
+    const { toSarif, toJunit } = await import('./ci-formats.mjs'); const { requireExtension } = await import('./safe-out.mjs');
+    const vis = drift?.visual || null;
+    if (opt('sarif', null)) { const f = requireExtension(opt('sarif', null), /\.(sarif|json)$/i, '*.sarif'); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(toSarif(siteDir, { visual: vis }), null, 2) + '\n'); console.log(_t`SARIF 結果：${f}`); }
+    if (opt('junit', null)) { const f = requireExtension(opt('junit', null), /\.xml$/i, '*.xml'); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, toJunit(siteDir, { visual: vis })); console.log(_t`JUnit 結果：${f}`); }
+  } catch (e) { failCode = failCode || 1; console.error('✖ ' + String(e.message).split('\n')[0]); }
+}
 if ((crawlOk || motionOk) && fs.existsSync(dash)) console.log(_t('\n👉 下一步：先雙擊 dashboard.html 看總覽；要交給 AI 或工程師，就把 handoff 資料夾整個給對方。'));
 if (fs.existsSync(path.join(siteDir, 'report.md')) && fs.readFileSync(path.join(siteDir, 'report.md'), 'utf8').includes(_t('被擋住'))) console.log(_t('\n⚠️ 部分頁面被擋住，結果可能不完整（見儀表板或 report.md）。'));
-if (JSON_MODE) { __jsonDone = true; const { buildSummary } = await import('./summary.mjs'); process.stdout.write(JSON.stringify({ ok: !!(crawlOk || motionOk) && failCode === 0, exitCode: crawlOk || motionOk ? failCode : 1, ...buildSummary({ out, host, steps, url, fresh: !!(crawlOk || motionOk) }), runId }, null, 2) + '\n'); }
+if (JSON_MODE) { __jsonDone = true; const { buildSummary } = await import('./summary.mjs'); process.stdout.write(JSON.stringify({ ok: !!(crawlOk || motionOk) && failCode === 0, exitCode: crawlOk || motionOk ? failCode : 1, ...buildSummary({ out, host, steps, url, fresh: !!(crawlOk || motionOk) }), drift: drift ? { failed: drift.failed, reasons: drift.reasons, scoreDelta: drift.scoreDelta, tokenChanges: drift.tokenChanges, newIssues: drift.newIssues } : null, runId }, null, 2) + '\n'); }
 process.exit(crawlOk || motionOk ? failCode : 1);
