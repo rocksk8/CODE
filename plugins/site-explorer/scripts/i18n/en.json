@@ -2642,5 +2642,11 @@
 "沒有 Cache-Control": "no Cache-Control",
 "瀏覽器不知道要預留多少空間，圖片載入時版面會跳動（CLS）。": "The browser does not know how much space to reserve, so the layout jumps when images load (CLS).",
 "畫面下方的圖片加上 loading=\"lazy\"。": "Add loading=\"lazy\" to images below the fold.",
-"首屏的主視覺圖片不要用 loading=\"lazy\"，並可加上 fetchpriority=\"high\"。": "Do not use loading=\"lazy\" on the main above-the-fold image; consider fetchpriority=\"high\"."
+"首屏的主視覺圖片不要用 loading=\"lazy\"，並可加上 fetchpriority=\"high\"。": "Do not use loading=\"lazy\" on the main above-the-fold image; consider fetchpriority=\"high\".",
+"下載瀏覽器（約 150 MB）": "Download a browser (about 150 MB)",
+"找不到可用的瀏覽器（Chrome／Edge／Chromium）。按下面的按鈕下載一份，之後就能開始探索（只需要一次）。": "No usable browser (Chrome / Edge / Chromium) was found. Press the button below to download one; after that you can start exploring (needed only once).",
+"最該先處理的 3 件事": "The 3 things to fix first",
+"步驟": "Step",
+"沒有發現需要立刻處理的問題。": "Nothing that needs immediate attention was found.",
+"結果資料夾": "Results folder"
 }

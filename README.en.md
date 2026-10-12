@@ -19,7 +19,9 @@ One command turns any public website into a handoff package that AI and engineer
 ```bash
 npm i -g git+https://github.com/rocksk8/CODE.git
 site-explorer setup
-site-explorer https://example.com
+site-explorer ui                          # no command line: a graphical page in your browser (type an address, watch progress, copy the 3 things to fix first)
+site-explorer check https://example.com   # fastest: know what to fix first within minutes
+site-explorer https://example.com         # full: design, 3D / animation, health check, handoff package
 ```
 
 You get a folder: double-click `dashboard.html` for the overview; give the whole `handoff/` folder to an AI and paste the prompt from `PROMPT.md` — it can start building pages and motion without you writing any briefing.

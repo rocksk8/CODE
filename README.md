@@ -19,7 +19,9 @@
 ```bash
 npm i -g git+https://github.com/rocksk8/CODE.git
 site-explorer setup
-site-explorer https://example.com
+site-explorer ui                          # 不想打指令：開啟圖形介面（瀏覽器裡輸入網址、看進度、複製「最該先處理的 3 件事」）
+site-explorer check https://example.com   # 最快：幾分鐘內知道最該先修什麼
+site-explorer https://example.com         # 完整：設計、3D／動畫、健檢、交接包
 ```
 
 跑完會得到一個資料夾：雙擊 `dashboard.html` 看總覽；把 `handoff/` 整包丟給 AI，再貼上 `PROMPT.md` 裡的提示，它就能開始做頁面與動態——不用你寫一行說明。
