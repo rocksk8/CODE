@@ -175,7 +175,6 @@ if (motionDir && has(path.join(motionDir, 'pages.json'))) { // other pages' 3D/m
     }
   } catch {}
 }
-copy(path.join(siteDir, 'ai-signs.md'), path.join(out, 'ai-signs.md'));
 if (health) { copy(path.join(siteDir, 'health.md'), path.join(out, 'health.md')); copy(path.join(siteDir, 'health.json'), path.join(out, 'health.json')); }
 
 // ------------------------------------------------------------------ unknowns: be explicit about what this capture cannot tell you

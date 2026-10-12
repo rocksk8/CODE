@@ -84,7 +84,7 @@ const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
 const siteRoot = path.join(out, 'site'), motionRoot = path.join(out, 'motion');
 const siteDir = path.join(siteRoot, host), motionDir = path.join(motionRoot, host);
 const steps = [];
-const total = 8 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
+const total = 7 - ['--no-motion', '--no-health', '--no-handoff'].filter((f) => args.includes(f)).length - (noDb ? 1 : 0) + (args.includes('--a11y') ? 1 : 0) + (framework ? 1 : 0) + (args.includes('--verify') && !args.includes('--no-handoff') ? 1 : 0);
 let n = 0;
 
 let current = null; // the stage that is running: Ctrl-C / SIGTERM (CI timeout, MCP kill) must stop it too, not leave a browser crawling
@@ -113,7 +113,7 @@ if (checks.some((c) => c.level === 'fail')) {
 
 { // results of stages that do not run this time must not be shown as if they were fresh (an old health score, a11y report, verify result or changes.md)
   const rm = (f) => { try { fs.rmSync(f, { recursive: true, force: true }); } catch {} };
-  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'ai-signs.json')); rm(path.join(siteDir, 'ai-signs.md')); // a failed re-run must not report the previous run's pages
+  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); // a failed re-run must not report the previous run's pages
   if (args.includes('--no-health')) { rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); }
   if (!args.includes('--a11y')) rm(path.join(siteDir, 'a11y.json'));
   if (!args.includes('--verify')) rm(path.join(out, 'handoff', 'verify'));
@@ -124,7 +124,6 @@ if (crawlOk) await run(_t('整理設計包（tokens、Tailwind、W3C）'), 'expo
 let healthOk = false;
 if (crawlOk && args.includes('--a11y')) await run(_t('無障礙檢查（axe-core）'), 'a11y.mjs', ['--site', siteDir, ...authArgs, ...(args.includes('--max-pages') ? ['--max-pages', String(maxPages)] : [])]);
 if (crawlOk && !args.includes('--no-health')) healthOk = await run(_t('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）'), 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
-if (crawlOk) await run(_t('AI 製作跡象（只列證據，不下判斷）'), 'ai-signs.mjs', ['--site', siteDir]);
 let motionOk = false;
 if (!crawlOk && !args.includes('--no-motion')) console.log(_t`\n沒有任何頁面被爬取，略過其餘階段。請檢查網址有沒有打錯、網路是否正常，或執行：site-explorer doctor ${url}`);
 else if (!args.includes('--no-motion')) motionOk = await run(_t('擷取 3D／動畫畫格'), 'capture-3d.mjs', [url, '--out', motionRoot, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])]);
