@@ -2625,5 +2625,22 @@
 "{} 頁，爬蟲與訪客看到的內容一致": "{} pages: crawlers and visitors see the same content",
 "爬蟲看到的內容": "What crawlers see",
 "看 crawler-view.md：哪些文字要靠 JavaScript、哪些爬蟲被擋、資料與畫面是否一致。": "See crawler-view.md: which text needs JavaScript, which crawlers are blocked, and whether data and page agree.",
-"爬蟲看到的 vs 訪客看到的（原始 HTML、不同爬蟲身分、結構化資料、canonical）": "Crawler view vs visitor view (raw HTML, crawler identities, structured data, canonical)"
+"爬蟲看到的 vs 訪客看到的（原始 HTML、不同爬蟲身分、結構化資料、canonical）": "Crawler view vs visitor view (raw HTML, crawler identities, structured data, canonical)",
+"HTTP/1.1 一次只能處理少量並行請求，資源多的頁面載入較慢。": "HTTP/1.1 handles only a few requests in parallel, so pages with many resources load more slowly.",
+"{} / {} 個靜態檔案沒有有效的瀏覽器快取": "{} of {} static files have no effective browser cache",
+"{} 個靜態檔案有快取設定": "{} static files have a cache policy",
+"{} 個頁面有圖片沒有指定寬高": "{} pages have images without width and height",
+"{} 個頁面有多張遠在畫面下方的圖片一開始就載入": "{} pages load several far-below-the-fold images immediately",
+"{} 個頁面的最大內容圖片被設成延遲載入": "{} pages lazy-load their largest image",
+"{} 個頁面的資源主要走 HTTP/1.1": "{} pages load most resources over HTTP/1.1",
+"和首屏內容搶頻寬，拖慢 LCP。": "They compete with above-the-fold content for bandwidth and slow down LCP.",
+"回訪的使用者每次都要重新下載這些檔案，浪費頻寬、拖慢第二次載入。": "Returning visitors download these files again every time, wasting bandwidth and slowing the second load.",
+"在 <img> 加上 width 與 height 屬性（或 CSS aspect-ratio）。": "Add width and height attributes to <img> (or a CSS aspect-ratio).",
+"在伺服器或 CDN 啟用 HTTP/2（或 HTTP/3）。": "Enable HTTP/2 (or HTTP/3) on the server or CDN.",
+"對帶雜湊或版本的 CSS／JS／圖片／字型設定 Cache-Control: public, max-age=31536000, immutable。": "For hashed or versioned CSS / JS / images / fonts set Cache-Control: public, max-age=31536000, immutable.",
+"最大的首屏圖片被延後載入，LCP 會明顯變慢。": "The largest above-the-fold image is loaded late, so LCP is clearly slower.",
+"沒有 Cache-Control": "no Cache-Control",
+"瀏覽器不知道要預留多少空間，圖片載入時版面會跳動（CLS）。": "The browser does not know how much space to reserve, so the layout jumps when images load (CLS).",
+"畫面下方的圖片加上 loading=\"lazy\"。": "Add loading=\"lazy\" to images below the fold.",
+"首屏的主視覺圖片不要用 loading=\"lazy\"，並可加上 fetchpriority=\"high\"。": "Do not use loading=\"lazy\" on the main above-the-fold image; consider fetchpriority=\"high\"."
 }
