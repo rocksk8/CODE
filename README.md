@@ -24,6 +24,8 @@ site-explorer check https://example.com   # 最快：幾分鐘內知道最該先
 site-explorer https://example.com         # 完整：設計、3D／動畫、健檢、交接包
 ```
 
+**跑太久、吃太多資源時**：每個階段有時間上限（爬取 30 分鐘、3D 25 分鐘、其他 10～20 分鐘；整個探索 120 分鐘），超過會印出「⏱ 超時通知」並停止該階段、繼續其他階段；可用的記憶體剩不到 256 MB（或 4%）時印出「🧠 記憶體不足通知」並停止該階段，避免整台電腦卡死；CPU 長時間滿載會印出「🔥」提醒；超過 90 秒沒有新訊息會印出「⏳ 仍在執行」。可用環境變數 `SITE_EXPLORER_STAGE_MINUTES`、`SITE_EXPLORER_MAX_MINUTES` 調整。**Windows 的終端機若中文變亂碼**，先執行 `chcp 65001`，或加 `--lang en`。
+
 跑完會得到一個資料夾：雙擊 `dashboard.html` 看總覽；把 `handoff/` 整包丟給 AI，再貼上 `PROMPT.md` 裡的提示，它就能開始做頁面與動態——不用你寫一行說明。
 
 ## 它做什麼

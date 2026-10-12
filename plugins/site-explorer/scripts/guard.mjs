@@ -1,0 +1,50 @@
+// Safety nets for long runs: a time limit per stage, a quiet-for-too-long heartbeat, a low-memory stop and a CPU-saturation notice.
+// Used by explore.mjs (each stage is a child process) and the graphical interface. Pure helpers are exported so they can be tested.
+import os from 'node:os';
+import { spawn } from 'node:child_process';
+
+const MIN = 60000;
+/** Default time limit (ms) of one stage; SITE_EXPLORER_STAGE_LIMIT_MS overrides everything (tests, CI), SITE_EXPLORER_STAGE_MINUTES scales the defaults. */
+export function stageLimitMs(script, env = process.env) {
+  const forced = Number(env.SITE_EXPLORER_STAGE_LIMIT_MS); if (Number.isFinite(forced) && forced > 0) return forced;
+  const base = /^crawl\.mjs$/.test(script) ? 30 : /^capture-3d\.mjs$/.test(script) ? 25 : /^(a11y|verify|frameworks)\.mjs$/.test(script) ? 20 : /^health-check\.mjs$/.test(script) ? 15 : 10;
+  const scale = Number(env.SITE_EXPLORER_STAGE_MINUTES); const mins = Number.isFinite(scale) && scale > 0 ? Math.max(1, base * scale / 10) : base;
+  return Math.round(mins * MIN);
+}
+/** Overall limit of one whole run (ms); stages that have not started when it is over are skipped. */
+export function runLimitMs(env = process.env) { const m = Number(env.SITE_EXPLORER_MAX_MINUTES); return (Number.isFinite(m) && m > 0 ? m : 120) * MIN; }
+/** Memory is "low" when what is still available is under 256 MB or under 4 % of the total. */
+export function isLowMemory(availableBytes, totalBytes) { return Number.isFinite(availableBytes) && Number.isFinite(totalBytes) && totalBytes > 0 && availableBytes < Math.max(256 * 1048576, totalBytes * 0.04); }
+export function memorySnapshot() {
+  let total = os.totalmem(), avail = os.freemem();
+  try { const c = process.constrainedMemory?.(); if (c && c > 0 && c < total) total = c; } catch {}
+  try { const a = process.availableMemory?.(); if (a && a > 0) avail = Math.min(avail, a); } catch {}
+  return { total, avail };
+}
+/** Stop a child process and what it started (the browser). */
+export function killTree(child) {
+  if (!child || child.exitCode != null) return;
+  try { if (process.platform === 'win32') spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }).on('error', () => {}); else child.kill('SIGKILL'); } catch { try { child.kill(); } catch {} }
+}
+/**
+ * Watch one child process. Calls notify(kind, text) for 'quiet' (no output for a while), 'cpu' (machine saturated) and, when it has to act,
+ * 'timeout' / 'memory' (after killing the child). Returns stop().
+ */
+export function watchChild(child, { limitMs, notify, quietMs = 90000, tickMs = 5000, lang = 'zh', getLastOutputAt = null, memoryReader = memorySnapshot, loadReader = () => os.loadavg()[0], cores = (os.cpus() || []).length || 1 } = {}) {
+  const t0 = Date.now(); let lowStreak = 0, quietSaid = 0, cpuStreak = 0, cpuSaid = false, stopped = false;
+  const L = (zh, en) => (lang === 'en' ? en : zh);
+  const timer = setInterval(() => {
+    if (stopped) return;
+    const ran = Date.now() - t0;
+    if (limitMs && ran > limitMs) { stopped = true; clearInterval(timer); killTree(child); notify('timeout', L(`⏱ 超時通知：這個階段已執行超過 ${Math.round(limitMs / MIN)} 分鐘，已停止它並繼續下一階段。`, `⏱ Timeout notice: this stage ran longer than ${Math.round(limitMs / MIN)} minutes; it was stopped and the next stage continues.`)); return; }
+    const m = memoryReader(); lowStreak = isLowMemory(m.avail, m.total) ? lowStreak + 1 : 0;
+    if (lowStreak >= 3) { stopped = true; clearInterval(timer); killTree(child); notify('memory', L(`🧠 記憶體不足通知：可用記憶體只剩 ${Math.round(m.avail / 1048576)} MB，為了避免整台電腦卡死，已停止這個階段。請關閉其他程式，或減少頁數（--max-pages）後再試。`, `🧠 Low-memory notice: only ${Math.round(m.avail / 1048576)} MB is available; to keep the computer from freezing this stage was stopped. Close other programs or use fewer pages (--max-pages) and try again.`)); return; }
+    const quiet = Date.now() - (getLastOutputAt ? getLastOutputAt() : t0);
+    if (quiet > quietMs && Date.now() - quietSaid > quietMs) { quietSaid = Date.now(); notify('quiet', L(`⏳ 仍在執行：已 ${Math.round(quiet / 1000)} 秒沒有新訊息（已跑 ${Math.round(ran / MIN)} 分鐘，上限 ${Math.round((limitMs || 0) / MIN)} 分鐘）。網站很重時這是正常的。`, `⏳ Still running: no new output for ${Math.round(quiet / 1000)} s (${Math.round(ran / MIN)} min in, limit ${Math.round((limitMs || 0) / MIN)} min). Normal on a heavy site.`)); }
+    let load = 0; try { load = loadReader(); } catch {}
+    cpuStreak = load > cores * 1.5 ? cpuStreak + 1 : 0;
+    if (cpuStreak >= 6 && !cpuSaid) { cpuSaid = true; notify('cpu', L('🔥 CPU 負載很高：電腦可能變慢，這個階段會花比較久；可以關閉其他程式。', '🔥 CPU load is high: the computer may feel slow and this stage will take longer; closing other programs helps.')); }
+  }, tickMs);
+  timer.unref?.();
+  return () => { stopped = true; clearInterval(timer); };
+}

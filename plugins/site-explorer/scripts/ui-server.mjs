@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { _t, LANG } from './i18n.mjs';
 import { normalizeUrl } from './args.mjs';
 import { isMain } from './util.mjs';
+import { watchChild, runLimitMs } from './guard.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const bin = path.join(here, '..', 'bin', 'site-explorer.mjs');
@@ -124,6 +125,7 @@ export function startUi({ port = 0, baseDir = path.resolve(process.env.SITE_EXPL
         current = { id, url: built.url, mode: built.mode, child, log: '', exit: null };
         const add = (d) => { current.log = (current.log + String(d).replace(/\x1b\[[0-9;]*m/g, '')).slice(-60000); };
         child.stdout.on('data', add); child.stderr.on('data', add);
+        const stopW = watchChild(child, { limitMs: runLimitMs() + 5 * 60000, lang: body && body.lang === 'en' ? 'en' : 'zh', notify: (k, t) => add('\n' + t + '\n') }); child.on('close', stopW); child.on('error', stopW);
         const done = (code) => { if (current && current.id === id && current.exit == null) { current.exit = code ?? -1; meta.exit = current.exit; save(); } };
         child.on('close', done); child.on('error', (e) => { add(String(e.message)); done(-1); });
         json(res, 200, { id });

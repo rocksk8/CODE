@@ -2658,5 +2658,7 @@
 "⚠️ 這一頁很慢（或結構很大），動態擷取在時間預算（{} 秒）內提前結束，已保留完成的部分。": "⚠️ This page is slow (or very large); motion capture ended early within its time budget ({} s) and kept what was finished.",
 "捲動取樣…": "Sampling while scrolling…",
 "略過目標 {}/{}（時間預算用完）：{}": "Skipped target {}/{} (time budget used up): {}",
-"目標 {}/{}：{}": "Target {}/{}: {}"
+"目標 {}/{}：{}": "Target {}/{}: {}",
+"\n⚠️ 本次執行的超時／資源通知：": "\n⚠️ Timeout / resource notices of this run:",
+"⏱ 超時通知：整個探索已超過 {} 分鐘，略過這個階段。": "⏱ Timeout notice: the whole exploration ran longer than {} minutes; this stage is skipped."
 }

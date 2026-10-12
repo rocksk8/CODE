@@ -4,6 +4,7 @@
 import { _t, LANG } from './i18n.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
+import { stageLimitMs, runLimitMs, watchChild } from './guard.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -163,14 +164,18 @@ let n = 0;
 
 let current = null; // the stage that is running: Ctrl-C / SIGTERM (CI timeout, MCP kill) must stop it too, not leave a browser crawling
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { current?.kill('SIGTERM'); } catch {} process.exit(sig === 'SIGINT' ? 130 : 143); });
+const RUN_T0 = Date.now(), RUN_LIMIT = runLimitMs(); const notices = [];
 function run(label, script, a) {
   return new Promise((resolve) => {
     const t0 = Date.now();
     console.log(`\n[${++n}/${total}] ${label}`);
+    if (Date.now() - RUN_T0 > RUN_LIMIT) { const m = _t`⏱ 超時通知：整個探索已超過 ${Math.round(RUN_LIMIT / 60000)} 分鐘，略過這個階段。`; console.log('   ' + m); notices.push(m); steps.push({ label, ok: false, s: '0.0' }); return resolve(false); }
     const p = spawn(process.execPath, [path.join(here, script), ...a], { env: { ...process.env, SITE_EXPLORER_LANG: LANG } });
     current = p;
-    let tail = '';
-    const onData = (d) => { tail = (tail + d).slice(-4000); for (const l of String(d).split('\n').map(stripControl)) if (l.trim() && !/ExperimentalWarning|trace-warnings|agent-proxy|android\.clients|For details: curl/.test(l)) console.log('   ' + l); };
+    let tail = '', lastOut = Date.now();
+    const stopWatch = watchChild(p, { limitMs: stageLimitMs(script), lang: LANG, getLastOutputAt: () => lastOut, notify: (kind, text) => { console.log('   ' + text); if (kind === 'timeout' || kind === 'memory') notices.push(text); } });
+    p.on('close', stopWatch); p.on('error', stopWatch);
+    const onData = (d) => { lastOut = Date.now(); tail = (tail + d).slice(-4000); for (const l of String(d).split('\n').map(stripControl)) if (l.trim() && !/ExperimentalWarning|trace-warnings|agent-proxy|android\.clients|For details: curl/.test(l)) console.log('   ' + l); };
     p.stdout.on('data', onData); p.stderr.on('data', onData);
     p.on('close', (code) => { const s = ((Date.now() - t0) / 1000).toFixed(1); steps.push({ label, ok: code === 0, s }); console.log(code === 0 ? `   ✔ ${s}s` : _t`   ✖ 失敗（${s}s）— 其他階段會繼續`); resolve(code === 0); });
   });
@@ -231,7 +236,7 @@ if (!args.includes('--no-motion') && crawlOk) {
   const captureOne = async (p) => {
     const dest = path.join(motionRoot, '_pages', p.slug), t0 = Date.now();
     console.log(_t`   3D／動畫 [${++done}/${extra.length}]：${p.url}`);
-    const ok = await new Promise((resolve) => { const c = spawn(process.execPath, [path.join(here, 'capture-3d.mjs'), p.url, '--out', dest, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])], { env: process.env, stdio: 'ignore' }); const kill = setTimeout(() => { try { c.kill(); } catch {} }, PAGE_LIMIT_MS); c.on('close', (code) => { clearTimeout(kill); resolve(code === 0); }); c.on('error', () => { clearTimeout(kill); resolve(false); }); });
+    const ok = await new Promise((resolve) => { const c = spawn(process.execPath, [path.join(here, 'capture-3d.mjs'), p.url, '--out', dest, '--wait', String(waitMs), ...authArgs, ...(args.includes('--headed') ? ['--headed'] : [])], { env: process.env, stdio: 'ignore' }); const stopW = watchChild(c, { limitMs: PAGE_LIMIT_MS, lang: LANG, quietMs: 1e9, notify: (k, t) => { console.log('     ' + t); if (k === 'timeout' || k === 'memory') notices.push(t); } }); c.on('close', (code) => { stopW(); resolve(code === 0); }); c.on('error', () => { stopW(); resolve(false); }); });
     const hostDir = path.join(dest, new URL(p.url).host.replace(/[^a-z0-9.-]/gi, '_'));
     if (ok) { addEntry(p.url, p.slug, p.title, hostDir); console.log(`     ✔ ${p.slug} ${((Date.now() - t0) / 1000).toFixed(1)}s`); } else console.log(_t`     ✖ 略過 ${p.slug}（失敗、逾時或被 robots.txt 擋住）`);
   };
@@ -287,6 +292,7 @@ else await run(_t('產生圖形化儀表板'), 'build-report.mjs', dashArgs());
 
 const failed = steps.filter((s) => !s.ok);
 console.log(_t`\n完成：${steps.length - failed.length}/${steps.length} 階段成功${failed.length ? _t('，失敗：') + failed.map((f) => f.label).join(_t('、')) : ''}`);
+if (notices.length) console.log(_t('\n⚠️ 本次執行的超時／資源通知：') + '\n' + [...new Set(notices)].map((x) => '  - ' + x).join('\n'));
 try { const hj = path.join(siteDir, 'health.json'); if (healthOk && fs.existsSync(hj)) { const h = JSON.parse(fs.readFileSync(hj, 'utf8')); console.log(_t`健檢：${h.score}/100（${h.grade}）— 嚴重 ${h.severity.critical}・高 ${h.severity.high}・中 ${h.severity.medium}　詳見 ${path.join(siteDir, 'health.md')}`); } } catch {}
 if (!args.includes('--no-motion')) { // always say what happened to 3D / animation, so its absence from the summary never looks like the feature vanished
   try {
