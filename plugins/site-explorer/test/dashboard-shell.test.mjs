@@ -38,3 +38,23 @@ test('dashboard: logo, grouped sidebar with icons, page title and description pe
     } finally { await br.close(); }
   } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('dashboard: history tab draws a health-score trend once the database holds two runs of the same site', async (t) => {
+  let have = true; try { const { launchBrowser } = await import('../scripts/launch.mjs'); await (await launchBrowser()).close(); } catch { have = false; }
+  if (!have) return t.skip('no browser');
+  const site = http.createServer((q, r) => { if (q.url === '/robots.txt') { r.statusCode = 404; return r.end(); } r.setHeader('content-type', 'text/html; charset=utf-8'); r.end('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Trend test</title></head><body><h1>Hello</h1><p>Words.</p></body></html>'); });
+  await new Promise((r) => site.listen(0, '127.0.0.1', r)); const url = `http://127.0.0.1:${site.address().port}/`; const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'se-trend-'));
+  const run = (out) => new Promise((resolve) => { const p = spawn(process.execPath, [path.join(root, 'bin', 'site-explorer.mjs'), 'explore', url, '--no-open', '--no-motion', '--no-link-check', '--max-pages', '1', '--lang', 'en', '--out', out], { env: { ...process.env, SITE_EXPLORER_DB: path.join(tmp, 'x.db') } }); let o = ''; p.stdout.on('data', (d) => (o += d)); p.stderr.on('data', (d) => (o += d)); p.on('close', (status) => resolve({ status, o })); });
+  try {
+    const a = await run(path.join(tmp, 'a')); assert.equal(a.status, 0, a.o); const b = await run(path.join(tmp, 'b')); assert.equal(b.status, 0, b.o);
+    const dash = path.join(tmp, 'b', 'dashboard.html');
+    const { launchBrowser } = await import('../scripts/launch.mjs'); const br = await launchBrowser();
+    try {
+      const pg = await (await br.newContext()).newPage(); const errs = []; pg.on('pageerror', (e) => errs.push(e.message)); await pg.goto('file://' + dash);
+      await pg.locator('#tabs button', { hasText: /History/i }).first().click();
+      assert.ok(await pg.locator('#s-history .trend svg path.tl').count() >= 1, 'trend line drawn');
+      assert.match(await pg.locator('#s-history .trend .tn').textContent(), /Compared with the previous run/);
+      assert.deepEqual(errs, []);
+    } finally { await br.close(); }
+  } finally { site.close(); fs.rmSync(tmp, { recursive: true, force: true }); }
+});

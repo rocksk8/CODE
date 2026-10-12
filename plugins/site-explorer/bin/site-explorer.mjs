@@ -13,9 +13,11 @@ const HELP = _t`site-explorer ${version} — 探索網站：設計、內容、�
 
 用法
   site-explorer <網址> [選項]            一鍵探索（可省略 https://），產生儀表板與交接包
+  site-explorer check <網址>             最簡單：快速檢查（最多 8 頁、不擷取 3D），印出最該先處理的 3 件事
   site-explorer <子指令> [參數]
 
 常用
+  check    <網址>   快速檢查：最少的等待，結果在儀表板與 top-fixes.md
   explore  <網址>   一鍵：爬取 → 設計包 → 健檢 → 3D → 資料庫 → 儀表板 → 交接包
   health   <網址>   網站健檢（SEO、爬蟲索引、連結、效能、行動版、安全、AI 爬蟲）
   handoff  <網址>   同 explore，重點是交接包（handoff/）
@@ -58,6 +60,7 @@ const [cmd, ...rest] = argv;
 const looksLikeUrl = (s) => !!s && !s.startsWith('-') && !!normalizeUrl(s); // exactly what the explorer itself accepts (IPv6, IDN, ?query hosts too)
 
 const ROUTES = {
+  check: (a) => [script('explore.mjs'), [...a, '--no-motion', '--no-handoff', ...(a.includes('--max-pages') ? [] : ['--max-pages', '8'])]],
   explore: (a) => [script('explore.mjs'), a], handoff: (a) => [script('explore.mjs'), a],
   health: (a) => (a.some(looksLikeUrl) ? [script('explore.mjs'), [...a, '--no-motion']] : [script('health-check.mjs'), a]),
   motion: (a) => [script('capture-3d.mjs'), a], crawl: (a) => [script('crawl.mjs'), a], design: (a) => [script('export-design.mjs'), a],

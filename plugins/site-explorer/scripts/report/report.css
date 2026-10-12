@@ -132,3 +132,5 @@ nav .grp{padding:0 6px 0 10px;white-space:nowrap;align-self:center;line-height:1
 main{grid-row:3;grid-column:1;padding:16px 14px 48px}footer.foot{grid-row:4}}
 @media(max-width:520px){header .sub{display:none}header .logo{height:30px}}
 @media print{header,nav,footer.foot,.toast{display:none}body{display:block}main{padding:0}section{display:block!important;break-inside:avoid;margin-bottom:18px}.pagehead{display:none}}
+
+.trend{display:flex;gap:18px;align-items:center;flex-wrap:wrap}.trend svg{flex:1 1 360px;max-width:640px;height:auto}.trend .tl{fill:none;stroke:var(--acc);stroke-width:2.5}.trend .pt{fill:var(--card);stroke:var(--acc);stroke-width:2.5}.trend .gl{stroke:var(--line);stroke-dasharray:3 3}.trend .ax,.trend .lb{font-size:11px;fill:var(--mute)}.trend .lb{fill:var(--ink);font-weight:600}.tn b{font-size:30px}.tn b.up{color:#067647}.tn b.down{color:#b42318}

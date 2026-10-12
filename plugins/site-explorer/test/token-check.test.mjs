@@ -58,6 +58,7 @@ test('explore --tokens writes token-check.md; --max-off-token exits 4 when excee
   try {
     const a = await go(['--tokens', tf], 'a'); assert.equal(a.status, 0, a.out); assert.match(a.out, /Design-system conformance/);
     const siteDir = path.join(dir, 'a', 'site', fs.readdirSync(path.join(dir, 'a', 'site'))[0]); const j = JSON.parse(fs.readFileSync(path.join(siteDir, 'token-check.json'), 'utf8')); assert.ok(j.offPct > 0 && j.colors.off.some((o) => o.value === '#14b8a6'), JSON.stringify(j.colors)); assert.match(fs.readFileSync(path.join(siteDir, 'token-check.md'), 'utf8'), /14b8a6/);
+    const dashHtml = fs.readFileSync(path.join(dir, 'a', 'dashboard.html'), 'utf8'); assert.match(dashHtml, /"tokenCheck":\{/, 'the dashboard carries the conformance result'); assert.match(dashHtml, /Design-system conformance/, 'and has the card for it');
     const b = await go(['--tokens', tf, '--max-off-token', '1'], 'b'); assert.equal(b.status, 4, b.out);
     const c = await go(['--tokens', tf, '--max-off-token', '100'], 'c'); assert.equal(c.status, 0, c.out);
     for (const [extra, re] of [[['--tokens', path.join(dir, 'missing.json')], /--tokens/], [['--tokens', path.join(dir, 'x.json')], /--tokens/], [['--max-off-token', '5'], /--tokens/], [['--tokens', tf, '--max-off-token', '150'], /0/]]) { if (extra[1].endsWith('x.json')) fs.writeFileSync(extra[1], '{"nothing":true}'); const r = await go(extra, 'd'); assert.equal(r.status, 1, extra.join(' ') + '\n' + r.out); assert.match(r.out, re); }
