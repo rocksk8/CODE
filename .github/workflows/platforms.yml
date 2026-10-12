@@ -28,3 +28,8 @@ jobs:
       - name: Which tests failed (the log is long; this prints only the failures)
         if: failure()
         run: grep -n -E "^\s*not ok" -A14 test.log | head -150
+      - name: Where does a crawl spend its time on this runner? (diagnostic)
+        if: always()
+        working-directory: .
+        continue-on-error: true
+        run: node .github/diag/crawl-timing.mjs

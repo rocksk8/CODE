@@ -121,6 +121,6 @@ test('PR comment: regression-gate reasons are shown even without fail-on / min-h
 
 test('ci-run: the process language follows the action input before any banner text is built', async () => {
   const { spawnSync } = await import('node:child_process');
-  const r = spawnSync(process.execPath, ['--input-type=module', '-e', "await import('./scripts/ci-run.mjs'); const m = await import('./scripts/untrusted.mjs'); console.log(/[\\u3400-\\u9fff]/.test(m.BANNER) ? 'ZH' : 'EN')"], { cwd: new URL('..', import.meta.url).pathname, env: { ...process.env, INPUT_LANG: 'en', SITE_EXPLORER_LANG: '' }, encoding: 'utf8' });
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', "await import('./scripts/ci-run.mjs'); const m = await import('./scripts/untrusted.mjs'); console.log(/[\\u3400-\\u9fff]/.test(m.BANNER) ? 'ZH' : 'EN')"], { cwd: fileURLToPath(new URL('..', import.meta.url)), env: { ...process.env, INPUT_LANG: 'en', SITE_EXPLORER_LANG: '' }, encoding: 'utf8' });
   assert.equal(r.stdout.trim(), 'EN', r.stderr);
 });

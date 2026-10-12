@@ -27,7 +27,7 @@ test('loadAuthState: clear errors for missing, broken and foreign files; warns a
   assert.throws(() => loadAuthState(tmp), /不是一般檔案/);
   const ok = loadAuthState(write('ok.json', { cookies: [{ name: 'sid', value: SECRET, domain: '127.0.0.1', path: '/', expires: -1 }], origins: [] }));
   assert.deepEqual(ok.warnings, []); assert.ok(ok.cookieKeys.has('sid|127.0.0.1'));
-  assert.match(loadAuthState(write('open.json', { cookies: [] }, 0o644)).warnings.join(), /chmod 600/);
+  if (process.platform !== 'win32') assert.match(loadAuthState(write('open.json', { cookies: [] }, 0o644)).warnings.join(), /chmod 600/); // Windows has no POSIX permission bits
   assert.match(loadAuthState(write('old.json', { cookies: [{ name: 'a', value: 'b', domain: 'x.test', path: '/', expires: 1000 }] })).warnings.join(), /過期/);
   assert.ok(!JSON.stringify(ok).includes(SECRET), 'the loaded handle never carries cookie values');
 });

@@ -1,6 +1,7 @@
 // Regressions from the security audit (each reproduced before the fix).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 
 test('SSRF guard: single-label and private-suffix names are internal; public names are not', async () => {
   const { isInternalHost, resolvesInternal } = await import('../scripts/util.mjs');
@@ -112,7 +113,7 @@ test('handoff: a planted DECISIONS.md symlink is dropped, never read or written 
 test('history export / compare --md refuse file names that do not look like what they write', async () => {
   const { spawnSync } = await import('node:child_process'); const path = await import('node:path'); const fs = await import('node:fs'), os = await import('node:os');
   const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'se-exp-')), 'precious.cfg');
-  const r = spawnSync(process.execPath, [new URL('../bin/site-explorer.mjs', import.meta.url).pathname, 'history', 'export', '--out', f], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [fileURLToPath(new URL('../bin/site-explorer.mjs', import.meta.url)), 'history', 'export', '--out', f], { encoding: 'utf8' });
   assert.notEqual(r.status, 0); assert.equal(fs.existsSync(f), false);
 });
 
