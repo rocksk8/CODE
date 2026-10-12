@@ -1,14 +1,15 @@
 # site-explorer — test and inspection report
 
-Generated 2026-10-11 for version 0.4.0 (main plus the pull requests listed at the end). This report only states what was actually run or checked; anything that could not be checked is listed under **Not verified**.
+Generated 2026-10-12 for version 0.4.0 (main at the squash commit of pull request #32, plus the pull requests listed at the end). This report only states what was actually run or checked; anything that could not be checked is listed under **Not verified**.
 
 ## 1. Automated tests
 
 | Item | Result |
 |---|---|
-| Test files | 28 files (`plugins/site-explorer/test/*.test.mjs`, run with `npm test`) |
-| Tests (Node 22, local, with a real Chromium) | 201 tests: 200 pass, 0 fail, 1 skipped (the opt-in framework build test, run only on CI Node 22) |
-| Tests on CI (GitHub Actions) | Node 20 and Node 22 matrix plus a Docker image build, green on every merged pull request (#21–#28); two jobs failed once on timing and passed on a single re-run (see section 4) |
+| Test files | 40 files (`plugins/site-explorer/test/*.test.mjs`, run with `npm test`) |
+| Tests (Node 22, local, with a real Chromium) | 247 tests before the last audit fixes: 246 pass, 0 fail, 1 skipped (the opt-in framework build test, run only on CI Node 22) |
+| Tests (Node 20, local, merged main) | 258 tests: 253 pass, 0 fail, 5 skipped (the history-database tests, which need Node ≥ 22.13) |
+| Tests on CI (GitHub Actions) | Node 20 and Node 22 matrix plus a Docker image build, green on every merged pull request (#21–#32); two jobs failed once on timing and passed on a single re-run (see section 4) |
 | Node 20 specifics | no `node:sqlite`: history database and `changes.md` are skipped there by design; everything else runs |
 | Browser | Chromium via Playwright 1.64.0 (pinned); axe-core 4.14.0 (pinned) |
 
@@ -25,8 +26,9 @@ Besides the test suite, fresh read-only reviewers (separate agents with no knowl
 | 3 | Regression review of rounds 1–2 (7); docs-vs-behaviour review (9) | 16 | fixed: trailing-dot hosts, private-resolving start hosts, long tags in word counts, stale results after a failed run, destructive-link rule, docs wording |
 | 4 | Regression review of round 3 plus three realistic fixture sites (marketing site, SPA, cookie banner + delete button) | 8 | fixed, including one high-severity regression introduced by round 3 itself (a widened regex could hang the crawler on a hostile page); replaced by a linear tag scanner |
 | 5 | Regression review of the remaining-audit-items and new-format PRs; claims in this report and the comparison checked against the code | 7 | fixed: regression gates silently passing when the baseline failed, gate reasons missing from the PR comment, invalid `DESIGN.md` front matter when site text tripped the injection filter, Chinese banner in an English Action run, MCP `out_dir` escaping through a symlink, wrong font fallbacks in the Tailwind v4 theme, stale test count |
+| 6 | Adversarial review of the newest features (tracking behaviour, visual regression, page archive, security grading, SARIF/JUnit, Figma, HTML validity, custom extraction, tech stack, performance budgets) | 16 + 9 minor | fixed in the same pull request: two high (a regex that could freeze the crawler on a hostile page; CSS text that could turn the offline archive into active content), plus a visual-baseline folder that could be deleted, a keystroke probe that could type into a sensitive field, CSP / Referrer-Policy grading errors, budgets passing on unmeasured metrics, regex rules without a time limit, false positives in the HTML and technology checks; each with a regression test |
 
-Rounds 3, 4 and 5 each found real problems *in the previous round's fixes*, which is why the loop was repeated rather than stopped after the first round.
+Rounds 3, 4, 5 and 6 each found real problems *in the previous round's fixes*, which is why the loop was repeated rather than stopped after the first round.
 
 ## 3. Safety properties that are tested
 
@@ -61,4 +63,4 @@ These could not be exercised in the build environment, so they are untested here
 
 ## 7. Pull requests behind this report
 
-#21 framework outputs · #22 English output · #23 review rounds 1–2 · #24 security fixes · #25 `--json` early failures and help · #26 round-3 fixes · #27 Chinese console lines · #28 round-4 fixes · #29 remaining audit items · #30 Tailwind v4 `@theme`, `DESIGN.md`, OKLCH, Action regression gates, this report and the comparison document · #31 `DESIGN.md` weights · #32 round-5 fixes.
+#21 framework outputs · #22 English output · #23 review rounds 1–2 · #24 security fixes · #25 `--json` early failures and help · #26 round-3 fixes · #27 Chinese console lines · #28 round-4 fixes · #29 remaining audit items · #30 Tailwind v4 `@theme` · #31 DESIGN.md weight fix · #32 drift baseline, Markdown export, technology stack, performance budgets, tracking behaviour, verify masks, whole-page visual regression, page archive, security/TLS grading, SARIF/JUnit, Figma export, HTML validity, custom extraction rules and the round-6 fixes, `DESIGN.md`, OKLCH, Action regression gates, this report and the comparison document · #31 `DESIGN.md` weights · #32 round-5 fixes.
