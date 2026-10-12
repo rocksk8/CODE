@@ -265,6 +265,8 @@ AI 只能讀文字和圖片。所以：
 
 **畫面情境與審核**：`--scenarios 情境.json` 定義「先點、懸停、捲動、打字…再截圖」的畫面（例如選單展開、下拉選單），`--hide '.clock'` 隱藏一直在變的區塊；它們和整頁截圖一起存進基準、一起比對。比對有差異時產生 `visual-review.html`——逐張拖曳滑桿比較改版前後，並附上「核准這張」的指令；`--approve-visual home:mobile,scenario:menu-open`（或 `all`）只把指定的截圖更新為新基準。情境只在網站自己的來源上執行、所有非 GET 請求都會被擋下、不能按 Enter。
 
+**最該先處理的 3 件事**：每次探索結束時，主控台、儀表板總覽最上方，和 `site/<網站>/top-fixes.md` 都會列出依「影響大小 × 影響頁數」排出的前 3 項問題（來自健檢、安全設定、無障礙），每項附一段可以直接貼給 AI 或工程師的修正指令。完整清單仍在 `health.md`。
+
 **HAR 網路紀錄**：`--har` 每頁另存 `network.har`（HAR 1.2：每個請求的網址、狀態、大小與時間，可用瀏覽器開發者工具的 Network 面板或任何 HAR 檢視器開啟）。不含回應內容與 Cookie；Authorization、Cookie、API 金鑰、`--header` 給的標頭，以及網址裡名稱看起來像密鑰的參數值（token、key、session、sig、code 等；也包含 Referer 與 Location 標頭裡的網址）都會換成 `[redacted]`；登入狀態的探索不錄。
 
 **WARC 與 Figma**：`--warc` 每頁另存 `archive.warc.gz`（WARC 1.1，不含 Cookie 與驗證標頭，登入狀態不錄；已用獨立的 warcio 讀取驗證，尚未用 ReplayWeb.page 實際重播過）。Figma 資料夾除了 SVG，還有 `*.figma.json` 與 `plugin/`（一個小型 Figma 外掛）：在 Figma 桌面版匯入 `plugin/manifest.json`，選 `*.figma.json`，每頁會變成帶 auto layout 的巢狀 Frame、完整文字與圖片。這個外掛只在模擬的 Figma 介面上測過，還沒有在真正的 Figma 裡驗證。
