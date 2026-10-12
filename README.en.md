@@ -244,6 +244,14 @@ The report opens with a **verdict** (pass / conditional / fail). For automation:
 
 **Local drift baseline.** `site-explorer explore <url> --approve` stores this run's design tokens (colours, fonts, spacing…) and health result as a baseline (default `<out>/baseline.json`; choose a path with `--baseline <file>` to keep it in version control). Later, `site-explorer explore <url> --compare` compares with it and exits with code 4 — writing `drift.md` — when any design token changed, the health score dropped by more than `--max-drop` (default 5), or a new issue at `--fail-on-new` (default high) or worse appeared. Tokens are compared exactly; to accept a new look, review it and run `--approve` again.
 
+**Technology stack.** Every exploration writes `techstack.md/json`: about 55 technologies (CMS, frameworks, libraries, hosting/CDN, analytics) recognised from script URLs, response headers, cookies, the generator tag and page globals, each with evidence and confidence — never guessed from visual style.
+
+**Performance budgets and run history.** `--budget <file.json>` (e.g. `{"lcpMs": 2500, "totalKB": {"max": 1500, "level": "warn"}}`). Metrics: ttfbMs, fcpMs, lcpMs, loadMs, cls, totalKB, requests, thirdPartyRequests, renderBlockingScripts, domNodes. A violated `fail`-level budget exits with code 4; every result is appended to `<out>/perf-history.json` (last 60 runs); the report is `performance.md/json` in each site folder.
+
+**Tracking behaviour check.** `tracking-behaviors.md/json` goes beyond listing trackers: does the page use a session-recording service (Hotjar, Clarity, FullStory…), read canvas / WebGL / audio fingerprints or probe fonts heavily, and is typed text sent to another site? (The probe types a random string into one ordinary text box and clears it — it never submits; forms with a password field, payment-looking fields and logged-in sessions are never probed.) A hit is a reason to look, not proof of misuse.
+
+**Verify masks.** `verify` accepts `--ignore <selector>` (repeatable) to exclude dynamic regions (ads, clocks, carousels); elements marked `data-verify-ignore` are excluded too; `--min-section <0-100>` fails the run when any single section scores below the threshold.
+
 **Per-page Markdown.** The readable text of every page is written in document order to `content/<page>.md` (plus `INDEX.md`); links are written as `text (url)`, so the files never contain a clickable or tracking element.
 
 ### Trackers, cookies, structured data, tablet/phone, before/after

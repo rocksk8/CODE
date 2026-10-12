@@ -7,6 +7,8 @@ import { isAllowed, groupFor } from './robots.mjs';
 import { extractDesignerInPage } from './designer-extract.mjs';
 import { extractSeoInPage, extractMobileInPage } from './seo-extract.mjs';
 import { extractMarkdownInPage, renderPageMarkdown } from './page-markdown.mjs';
+import { extractTechInPage } from './techstack.mjs';
+import { fingerprintHooks, collectBehaviors } from './tracking-behaviors.mjs';
 import { BANNER, sanitizeDoc } from './untrusted.mjs';
 import { readCapped, readCappedBuffer, mayFetch, guardInternal, gfetch, isInternalHost, resolvesInternal, stripMarkup, tagList, attrValue } from './util.mjs';
 import { parseSitemap } from './health-check.mjs';
@@ -321,7 +323,7 @@ async function fetchRaw(u) {
     };
   } catch (e) { return { error: String(e.message).slice(0, 100) }; }
 }
-const pickHeaders = (h = {}) => Object.fromEntries(['content-type', 'x-robots-tag', 'cache-control', 'content-encoding', 'strict-transport-security', 'content-security-policy', 'x-content-type-options', 'x-frame-options', 'referrer-policy', 'permissions-policy', 'server', 'x-powered-by', 'link', 'last-modified', 'etag', 'vary', 'age', 'cf-cache-status', 'x-cache'].filter((k) => h[k] !== undefined).map((k) => [k, k === 'content-security-policy' ? String(h[k]).slice(0, 200) : h[k]]));
+const pickHeaders = (h = {}) => Object.fromEntries(['content-type', 'x-robots-tag', 'cache-control', 'content-encoding', 'strict-transport-security', 'content-security-policy', 'x-content-type-options', 'x-frame-options', 'referrer-policy', 'permissions-policy', 'server', 'x-powered-by', 'link', 'last-modified', 'etag', 'vary', 'age', 'cf-cache-status', 'x-cache', 'via', 'x-served-by', 'cf-ray', 'x-vercel-id', 'x-nf-request-id', 'x-amz-cf-id', 'x-github-request-id', 'x-shopify-stage', 'x-wix-request-id', 'x-drupal-cache', 'x-generator', 'x-pingback', 'x-aspnet-version', 'x-akamai-transformed', 'x-fastly-request-id', 'x-turbo-charged-by', 'x-litespeed-cache', 'platform', 'x-ghost-cache-status'].filter((k) => h[k] !== undefined).map((k) => [k, k === 'content-security-policy' ? String(h[k]).slice(0, 200) : h[k]]));
 
 // Pages a script-built or 3D site hides from the live DOM: ask the places crawlers ask (raw HTML links, sitemap.xml, the home page).
 async function discoverMore(fromUrl) {
@@ -368,7 +370,8 @@ const authFile = opt('storage-state', null);
 let auth = null;
 if (authFile) { try { auth = loadAuthState(authFile); } catch (e) { console.error(e.message); await browser.close(); process.exit(1); } for (const w of auth.warnings) console.error('⚠️  ' + w); console.error(_t('🔐 以登入狀態探索：輸出（截圖、文字、儀表板）可能含個人資料，請勿公開分享。已略過登出、刪除、取消等會改變資料的連結。')); }
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA, ...(auth ? { storageState: auth.file } : {}) });
-await guardInternal(ctx, startUrl); // a public site (or a redirect from it) cannot make the browser read localhost / the LAN
+await guardInternal(ctx, startUrl);
+await ctx.addInitScript(fingerprintHooks).catch(() => {}); // passive recorders for tracking-behaviors.mjs (canvas / WebGL / audio / font probing) // a public site (or a redirect from it) cannot make the browser read localhost / the LAN
 const stripHash = (u) => { const x = new URL(u); x.hash = ''; return x.href; };
 const queue = [[stripHash(startUrl), 0]], seen = new Set([norm(startUrl)]), pages = [], headers = {};
 for (const extra of findUrls(args).slice(1)) { try { if (!sameSite(extra, origin) || seen.has(norm(extra))) continue; seen.add(norm(extra)); queue.push([stripHash(extra), 0]); } catch {} } // extra URLs given on the command line are crawled too (script-built sites hide them from each other)
@@ -435,6 +438,7 @@ while (pages.length < maxPages) {
     const aria = await ariaTree(page);
     data.aria = aria ? { lines: aria.lines, headings: aria.headings, links: aria.links, buttons: aria.buttons, images: aria.images, landmarks: aria.landmarks, head: aria.text.split('\n').slice(0, 40).join('\n').slice(0, 3500) } : null;
     data._ariaText = aria?.text || null; // written to aria.yml below, not kept in page.json
+    data.tech = await page.evaluate(extractTechInPage).catch(() => null); // globals / DOM markers for techstack.mjs
     data._markdown = await page.evaluate(extractMarkdownInPage).catch(() => null); // written to content.md below (document order, one file per page)
     data.emptyPage = !contentReady;
     if (data.emptyPage) { // say WHY, from what the page actually contains
@@ -529,6 +533,7 @@ while (pages.length < maxPages) {
         } catch (e) { console.log(_t('   (互動探索略過：') + String(e.message).split('\n')[0] + ')'); }
       } }
     if (data._ariaText) fs.writeFileSync(path.join(dir, 'aria.yml'), sanitizeDoc(data._ariaText));
+    data.behaviors = await collectBehaviors(page, { auth: !!auth }).catch(() => null); // fingerprinting hooks + a harmless typing probe (never submits)
     delete data._ariaText;
     if (data._markdown) { try { fs.writeFileSync(path.join(dir, 'content.md'), sanitizeDoc(renderPageMarkdown(data, data._markdown, BANNER)) + '\n'); data.contentWords = data._markdown.words; } catch {} }
     delete data._markdown;

@@ -13,7 +13,7 @@ import { normalizeFlags, VALUE_FLAGS } from './args.mjs';
 import { isInside } from './safe-out.mjs';
 import { clean } from './untrusted.mjs';
 
-const __n = normalizeFlags(process.argv.slice(2), new Set([...VALUE_FLAGS, '--page', '--min-score', '--out']));
+const __n = normalizeFlags(process.argv.slice(2), new Set([...VALUE_FLAGS, '--page', '--min-score', '--out', '--ignore', '--min-section']));
 if (__n.error && isMain(import.meta.url)) { console.error(__n.error); process.exit(1); }
 const args = __n.args;
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : d; };
@@ -31,7 +31,7 @@ export function declaredSections(html, starterDir, handoffDir) {
 }
 
 /** Runs inside the browser: compares two PNGs (as data URLs) on a canvas and draws original | rebuilt | difference. */
-const compareInBrowser = async ({ a, b, W = 48 }) => {
+const compareInBrowser = async ({ a, b, W = 48, masks = [] }) => {
   const load = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('image')); i.src = src; });
   const [A, B] = await Promise.all([load(a), load(b)]);
   const sample = (img, w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d', { willReadFrequently: true }); g.imageSmoothingQuality = 'high'; g.drawImage(img, 0, 0, w, h); return g.getImageData(0, 0, w, h).data; };
@@ -39,12 +39,17 @@ const compareInBrowser = async ({ a, b, W = 48 }) => {
   let lum = 0, col = 0, ma = [0, 0, 0], mb = [0, 0, 0]; const cells = W * H;
   const L = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
   const heat = new Float32Array(cells);
+  // cells whose centre lies inside an ignored region (fractions of the section: [x0,y0,x1,y1]) count for nothing, on both images
+  const masked = new Uint8Array(cells); let kept = 0;
+  for (let k = 0; k < cells; k++) { const cx = ((k % W) + 0.5) / W, cy = (Math.floor(k / W) + 0.5) / H; masked[k] = masks.some((m) => cx >= m[0] && cx <= m[2] && cy >= m[1] && cy <= m[3]) ? 1 : 0; if (!masked[k]) kept++; }
+  const n = Math.max(kept, 1);
   for (let k = 0; k < cells; k++) {
+    if (masked[k]) continue;
     const i = k * 4; const dl = Math.abs(L(pa, i) - L(pb, i)) / 255; lum += dl; heat[k] = dl;
     col += (Math.abs(pa[i] - pb[i]) + Math.abs(pa[i + 1] - pb[i + 1]) + Math.abs(pa[i + 2] - pb[i + 2])) / 765;
     for (let c = 0; c < 3; c++) { ma[c] += pa[i + c]; mb[c] += pb[i + c]; }
   }
-  const mean = (m) => m.map((v) => v / cells);
+  const mean = (m) => m.map((v) => v / n);
   const meanDist = mean(ma).reduce((s, v, c) => s + Math.abs(v - mean(mb)[c]), 0) / 765;
   // Draw the evidence: original | rebuilt (both scaled to the same height) | difference heat-map.
   const th = 360, tw = Math.round(th * Math.max(A.width / A.height, B.width / B.height, 1.2)); const cw = Math.min(tw, 640);
@@ -54,7 +59,7 @@ const compareInBrowser = async ({ a, b, W = 48 }) => {
   fit(A, 0); fit(B, cw + 10);
   const cellW = cw / W, cellH = th / H;
   for (let k = 0; k < cells; k++) { const v = Math.min(1, heat[k] * 2.2); g.fillStyle = `rgba(${Math.round(255 * v)},${Math.round(80 * (1 - v))},${Math.round(60 * (1 - v))},${0.15 + 0.85 * v})`; g.fillRect(2 * cw + 20 + (k % W) * cellW, 2 + Math.floor(k / W) * cellH, cellW + 0.5, cellH + 0.5); }
-  return { lum: lum / cells, col: col / cells, meanDist, refW: A.width, refH: A.height, diff: out.toDataURL('image/png') };
+  return { lum: lum / n, col: col / n, meanDist, maskedCells: cells - kept, refW: A.width, refH: A.height, diff: out.toDataURL('image/png') };
 };
 
 /** Turns raw differences into 0–100 scores. Layout dominates: placeholder text and photos can never match pixel for pixel. */
@@ -69,7 +74,11 @@ export function scoreSection({ lum, col, meanDist, refH, gotH }) {
 
 const grade = (s) => (s >= 85 ? _t('很像') : s >= 70 ? _t('接近') : s >= 50 ? _t('有落差') : _t('差很多'));
 
-export async function verifyHandoff(handoffDir, { page: only, outDir, minScore = 0 } = {}) {
+/** A CSS selector list given by the user (not by a website). Elements marked data-verify-ignore are always ignored. */
+const cleanSelector = (sel) => { const t = String(sel || '').trim(); if (!t) return ''; if (t.length > 300) throw new Error(_t('--ignore 需要一個 CSS 選擇器（例如 ".carousel, #clock"）')); return t; };
+
+export async function verifyHandoff(handoffDir, { page: only, outDir, minScore = 0, ignore = '', minSection = 0 } = {}) {
+  const userSel = cleanSelector(ignore); const ignoreSel = ['[data-verify-ignore]', userSel].filter(Boolean).join(', ');
   const starterDir = path.join(handoffDir, 'starter');
   if (!fs.existsSync(starterDir)) throw new Error(_t`找不到 ${starterDir}。請先產生交接包（site-explorer <網址>）。`);
   const files = fs.readdirSync(starterDir).filter((f) => /\.html$/i.test(f)).sort();
@@ -98,14 +107,16 @@ export async function verifyHandoff(handoffDir, { page: only, outDir, minScore =
         if (!d.ref || !(await loc.count())) { row.status = d.ref ? _t('重建頁面少了這個區塊') : _t('沒有參考圖'); sections.push(row); continue; }
         const got = await loc.screenshot({ timeout: 10000 }).catch(() => null);
         if (!got) { row.status = _t('無法截圖'); sections.push(row); continue; }
+        const masks = await loc.evaluate((el, sel) => { let nodes = []; try { nodes = [...el.querySelectorAll(sel)]; } catch { return null; } const r = el.getBoundingClientRect(); if (!r.width || !r.height) return []; return nodes.map((n) => n.getBoundingClientRect()).filter((b) => b.width > 0 && b.height > 0).map((b) => [Math.max(0, (b.left - r.left) / r.width), Math.max(0, (b.top - r.top) / r.height), Math.min(1, (b.right - r.left) / r.width), Math.min(1, (b.bottom - r.top) / r.height)]).slice(0, 60); }, ignoreSel).catch(() => []);
+        if (masks === null) throw new Error(_t('--ignore 不是有效的 CSS 選擇器：') + userSel);
         const refBuf = fs.readFileSync(d.ref);
-        const r = await cmp.evaluate(compareInBrowser, { a: 'data:image/png;base64,' + refBuf.toString('base64'), b: 'data:image/png;base64,' + got.toString('base64') }).catch(() => null);
+        const r = await cmp.evaluate(compareInBrowser, { a: 'data:image/png;base64,' + refBuf.toString('base64'), b: 'data:image/png;base64,' + got.toString('base64'), masks }).catch(() => null);
         if (!r) { row.status = _t('參考圖無法讀取（不是有效的 PNG）'); sections.push(row); continue; }
         const gotH = (await loc.boundingBox())?.height ?? 0;
         const s = scoreSection({ ...r, refH: r.refH, gotH: Math.round(gotH * (r.refW / 1440)) || r.refH });
         const diffFile = path.join('diff', `${slug}-${String(d.index).padStart(2, '0')}-${d.name}.png`);
         fs.writeFileSync(path.join(outDir, diffFile), Buffer.from(r.diff.split(',')[1], 'base64'));
-        Object.assign(row, s, { refHeight: r.refH, gotHeight: Math.round(gotH), grade: grade(s.score), diff: diffFile.split(path.sep).join('/'), status: 'ok', weight: r.refH });
+        Object.assign(row, s, { ignoredRegions: masks.length, ignoredCells: r.maskedCells || 0, refHeight: r.refH, gotHeight: Math.round(gotH), grade: grade(s.score), diff: diffFile.split(path.sep).join('/'), status: 'ok', weight: r.refH });
         sections.push(row);
       }
       await pg.close();
@@ -118,7 +129,8 @@ export async function verifyHandoff(handoffDir, { page: only, outDir, minScore =
   if (!pages.some((p) => p.sections.length)) throw new Error(_t('starter 頁面裡找不到可比對的區塊（缺少「reference image」註解），沒有東西可驗證。'));
   const scored = pages.filter((p) => p.sections.length);
   const overall = scored.length ? Math.round(scored.reduce((t, p) => t + p.score, 0) / scored.length) : 0;
-  const result = { schemaVersion: 1, overall, grade: grade(overall), minScore, passed: overall >= minScore && scored.length > 0 && scored.every((p) => !p.missing), pages };
+  const below = minSection > 0 ? pages.flatMap((p) => p.sections.filter((x) => x.status === 'ok' && x.score < minSection).map((x) => ({ page: p.page, name: x.name, score: x.score }))) : [];
+  const result = { schemaVersion: 1, overall, grade: grade(overall), minScore, minSection, ignore: userSel || null, sectionsBelow: below, passed: overall >= minScore && scored.length > 0 && scored.every((p) => !p.missing) && below.length === 0, pages };
   fs.writeFileSync(path.join(outDir, 'verify.json'), JSON.stringify(result, null, 2));
   fs.writeFileSync(path.join(outDir, 'verify.md'), renderMd(result));
   return { ...result, outDir };
@@ -132,20 +144,23 @@ export function renderMd(r) {
     for (const s of p.sections) L.push(s.status === 'ok' ? _t`| ${s.index} | ${clean(s.name)} | ${s.score}（${s.grade}） | ${s.layout} | ${s.colour} | ${s.refHeight}→${s.gotHeight}px | [${path.basename(s.diff)}](${s.diff}) |` : `| ${s.index} | ${clean(s.name)} | — | | | | ${s.status} |`);
     L.push('');
   }
+  if (r.sectionsBelow?.length) { L.push(_t`## 低於單區塊門檻 ${r.minSection} 的區塊`, '', ...r.sectionsBelow.map((x) => `- ${clean(x.page)} / ${clean(x.name)}: ${x.score}`), ''); }
+  if (r.ignore) L.push(_t`> 已忽略的區域（--ignore）：\`${clean(r.ignore, 120)}\`；標了 data-verify-ignore 的元素也一律忽略。`, '');
   const worst = r.pages.flatMap((p) => p.sections.filter((s) => s.status === 'ok').map((s) => ({ ...s, page: p.page }))).sort((a, b) => a.score - b.score).slice(0, 3).filter((s) => s.score < 85);
   if (worst.length) { L.push(_t('## 先修這幾個'), ''); for (const s of worst) L.push(_t`- ${clean(s.page)} 的「${clean(s.name)}」（${s.score}）：${s.height < 85 ? _t`高度差 ${s.refHeight}→${s.gotHeight}px；` : ''}${s.colour < 70 ? _t('顏色偏離；') : ''}${s.layout < 70 ? _t('明暗結構不同；') : ''}看 ${s.diff}`); L.push(''); }
   return L.join('\n');
 }
 
 if (isMain(import.meta.url)) {
-  const dir = args.find((a, i) => !a.startsWith('--') && !['--page', '--min-score', '--out'].includes(args[i - 1]));
-  if (!dir) { console.error(_t('用法：site-explorer verify <交接包資料夾（handoff）> [--page home] [--min-score N] [--out <資料夾>] [--json]\n  --min-score N   門檻（0–100）；總分低於它就以結束代碼 2 結束。不加就不設門檻\n  分數衡量版面（區塊高度、明暗結構、顏色），不比對文字與照片')); process.exit(1); }
+  const dir = args.find((a, i) => !a.startsWith('--') && !['--page', '--min-score', '--out', '--ignore', '--min-section'].includes(args[i - 1]));
+  if (!dir) { console.error(_t('用法：site-explorer verify <交接包資料夾（handoff）> [--page home] [--min-score N] [--min-section N] [--ignore <CSS 選擇器>] [--out <資料夾>] [--json]\n  --min-score N     門檻（0–100）；總分低於它就以結束代碼 2 結束。不加就不設門檻\n  --min-section N   單一區塊門檻：任何區塊低於它也以結束代碼 2 結束\n  --ignore SEL      比對時忽略重建頁面裡符合這個 CSS 選擇器的區域（輪播、時鐘、廣告…）；標了 data-verify-ignore 的元素也一律忽略\n  分數衡量版面（區塊高度、明暗結構、顏色），不比對文字與照片')); process.exit(1); }
   const min = Number(opt('min-score', 0));
   if (!Number.isFinite(min) || min < 0 || min > 100) { console.error(_t('--min-score 必須是 0–100 的數字')); process.exit(1); }
   try {
-    const r = await verifyHandoff(path.resolve(dir), { page: opt('page'), outDir: opt('out') && path.resolve(opt('out')), minScore: min });
-    if (args.includes('--json')) { process.stdout.write(JSON.stringify({ ok: r.passed || !min, ...r }, null, 2) + '\n'); console.error(_t`已寫入 ${r.outDir}`); }
+    const minSec = Number(opt('min-section', 0)); if (!Number.isFinite(minSec) || minSec < 0 || minSec > 100) { console.error(_t('--min-section 必須是 0–100 的數字')); process.exit(1); }
+    const r = await verifyHandoff(path.resolve(dir), { page: opt('page'), outDir: opt('out') && path.resolve(opt('out')), minScore: min, ignore: opt('ignore', ''), minSection: minSec });
+    if (args.includes('--json')) { process.stdout.write(JSON.stringify({ ok: r.passed || (!min && !minSec), ...r }, null, 2) + '\n'); console.error(_t`已寫入 ${r.outDir}`); }
     else { console.log(renderMd(r)); console.log(_t`\n已寫入 ${r.outDir}/verify.md、verify.json 與 diff/`); }
-    process.exit(r.passed || !min ? 0 : 2);
+    process.exit(r.passed || (!min && !minSec) ? 0 : 2);
   } catch (e) { console.error('✖ ' + e.message); process.exit(1); }
 }

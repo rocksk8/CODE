@@ -103,3 +103,27 @@ test('explore --verify: a real run verifies its own starter and the dashboard sh
     } finally { await b.close(); }
   } finally { server.close(); }
 });
+
+test('verify --ignore / data-verify-ignore: ignored areas stop counting; --min-section fails on a single weak section (CLI exit 2)', async (t) => {
+  if (!haveBrowser || !fs.existsSync(demo)) return t.skip('no browser or demo');
+  const d = copyDemo('mask');
+  const base = await verifyHandoff(d, {});
+  const cta0 = base.pages[0].sections.find((s) => s.name === 'cta').score;
+  fs.appendFileSync(path.join(d, 'starter', 'styles.css'), '\n.sec--cta *{background:#ff00aa !important;color:#00ff66 !important}\n');
+  const wrecked = await verifyHandoff(d, {});
+  const cta1 = wrecked.pages[0].sections.find((s) => s.name === 'cta');
+  assert.ok(cta1.score < cta0 - 3, `wrecked cta ${cta1.score} vs ${cta0}`);
+  assert.equal(cta1.ignoredRegions, 0);
+  const ign = await verifyHandoff(d, { ignore: '.sec--cta *' });
+  const cta2 = ign.pages[0].sections.find((s) => s.name === 'cta');
+  assert.ok(cta2.ignoredRegions > 0 && cta2.score > cta1.score, `ignored ${cta2.score} vs wrecked ${cta1.score}`);
+  assert.equal(ign.ignore, '.sec--cta *');
+  // the same effect without a flag: mark the elements in the starter itself
+  const f = path.join(d, 'starter', 'index.html'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/(<section[^>]*sec--cta[^>]*>\s*<[a-z0-9]+)/, '$1 data-verify-ignore'));
+  const viaAttr = await verifyHandoff(d, {}); assert.ok(viaAttr.pages[0].sections.find((s) => s.name === 'cta').ignoredRegions > 0);
+  // per-section threshold
+  const strict = await verifyHandoff(d, { minSection: 100 }); assert.equal(strict.passed, false); assert.ok(strict.sectionsBelow.length > 0);
+  const bin = path.join(root, 'bin', 'site-explorer.mjs');
+  const cli = spawnSync(process.execPath, [bin, 'verify', d, '--min-section', '100', '--lang', 'en'], { encoding: 'utf8' }); assert.equal(cli.status, 2, cli.stderr);
+  const bad = spawnSync(process.execPath, [bin, 'verify', d, '--min-section', 'x'], { encoding: 'utf8' }); assert.equal(bad.status, 1);
+});
