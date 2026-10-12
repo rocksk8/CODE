@@ -24,7 +24,7 @@ before(async () => {
   await run('crawl.mjs', [`http://127.0.0.1:${server.address().port}/`, '--max-pages', '1', '--no-screenshots', '--out', path.join(tmp, 'site')]);
   siteDir = path.join(tmp, 'site', `127.0.0.1_${server.address().port}`);
 });
-after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 const skip = (t) => (!haveBrowser ? (t.skip('no browser'), true) : false);
 
 test('handoff refuses a folder that holds someone else\'s files — and leaves them untouched', async (t) => {

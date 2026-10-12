@@ -22,5 +22,5 @@ test('check <url>: one command, quick (no 3D capture, no handoff), prints what t
     const res = await new Promise((resolve) => { const p = spawn(process.execPath, [bin, 'check', url, '--max-pages', '2', '--no-open', '--no-db', '--lang', 'en', '--out', dir], { env: process.env }); let o = ''; p.stdout.on('data', (d) => (o += d)); p.stderr.on('data', (d) => (o += d)); p.on('close', (status) => resolve({ status, out: o })); });
     assert.equal(res.status, 0, res.out); assert.match(res.out, /Fix these first/); assert.ok(!fs.existsSync(path.join(dir, 'motion')), 'no 3D capture'); assert.ok(!fs.existsSync(path.join(dir, 'handoff')), 'no handoff'); assert.ok(fs.existsSync(path.join(dir, 'dashboard.html')));
     const sd = path.join(dir, 'site', fs.readdirSync(path.join(dir, 'site'))[0]); assert.equal(JSON.parse(fs.readFileSync(path.join(sd, 'site.json'), 'utf8')).pages.length, 2); assert.ok(fs.existsSync(path.join(sd, 'top-fixes.md')));
-  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

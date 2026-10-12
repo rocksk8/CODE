@@ -23,5 +23,5 @@ test('default run captures motion for every crawled page (7 animated pages > the
     const pg = pagesOf('all'); assert.equal(pg.length, N + 1, 'start page + every linked page: ' + pg.map((p) => p.slug).join(',')); assert.equal(pg[0].slug, '(start)'); assert.equal(new Set(pg.map((p) => p.slug)).size, pg.length);
     assert.ok(pg.every((p) => p.targets > 0), 'each captured page found its animation'); assert.match(a.out, /3D \/ animation \[\d+\/\d+\]/);
     const b = await go(['--motion-pages', '3'], 'capped'); assert.equal(b.status, 0, b.out); assert.equal(pagesOf('capped').length, 3);
-  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

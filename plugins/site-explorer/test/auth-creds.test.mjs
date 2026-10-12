@@ -62,5 +62,5 @@ test('explore with a cookie file + header file + basic auth reaches a protected 
     const both = await run([url, '--cookie-file', path.join(dir, 'c.txt'), '--storage-state', path.join(dir, 'c.txt'), '--out', path.join(dir, 'x')]); assert.equal(both.status, 1);
     const bad = await run([url, '--header-file', path.join(dir, 'nope.json'), '--out', path.join(dir, 'y')]); assert.equal(bad.status, 1); assert.match(bad.out, /Problem with the login settings/);
     const hdr = await run([url, '--header', 'Host: evil', '--out', path.join(dir, 'z')]); assert.equal(hdr.status, 1);
-  } finally { site.close(); third.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { site.close(); third.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

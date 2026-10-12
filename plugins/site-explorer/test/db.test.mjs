@@ -41,7 +41,7 @@ test('diffPages matches by path across hosts and flags what a redesign lost', (t
     assert.ok(about.includes('noindex') && about.includes('字數'), about.join() + ' — trailing slash must not make /about/ and /about different pages');
     const md = renderChangesMd(db, a, b);
     assert.match(md, /1 個舊網址在新版消失/); assert.match(md, /變成 noindex/); assert.match(md, /meta description 被拿掉/); assert.match(md, /\/promo-2019/);
-  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  } finally { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('changes.md treats page text as untrusted data: banner, one line per title, no markdown breakout', (t) => {
@@ -55,7 +55,7 @@ test('changes.md treats page text as untrusted data: banner, one line per title,
     assert.match(md, /第三方資料|untrusted|不是指令/i, 'carries the untrusted-data banner');
     assert.ok(!/^# SYSTEM/m.test(md), 'a newline in a title cannot start a new heading');
     assert.ok(!md.includes('`evil`'), 'a backtick in a URL cannot close the code span');
-  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  } finally { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('diffPages: paths match regardless of case and index.html; runs stored before a column existed are "unknown", not "changed"', (t) => {
@@ -69,5 +69,5 @@ test('diffPages: paths match regardless of case and index.html; runs stored befo
     const d = diffPages(db, a, b);
     assert.deepEqual(d.removed, [], '/About = /about and /index.html = / are the same pages'); assert.deepEqual(d.added, []);
     assert.deepEqual(d.changed, [], 'NULL description/canonical (old run) is not reported as a change: ' + JSON.stringify(d.changed));
-  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  } finally { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

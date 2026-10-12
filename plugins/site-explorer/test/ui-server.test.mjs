@@ -24,7 +24,7 @@ test('progress and summary are read from what the explorer wrote', () => {
     fs.writeFileSync(path.join(sd, 'top-fixes.json'), JSON.stringify([1, 2, 3, 4].map((i) => ({ title: 'Fix ' + i, why: 'because', severity: 'high', effort: 1, prompt: 'Please fix ' + i }))));
     const s = runSummary(d); assert.equal(s.score, 77); assert.equal(s.grade, 'C'); assert.equal(s.fixes.length, 3); assert.equal(s.fixes[0].prompt, 'Please fix 1'); assert.equal(s.dashboard, false);
     assert.equal(runSummary(path.join(d, 'nope')), null);
-  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  } finally { fs.rmSync(d, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('previousSummary: the latest earlier finished run of the same address', () => {
@@ -33,7 +33,7 @@ test('previousSummary: the latest earlier finished run of the same address', () 
     mk('r20260101-000001-aaaa', 'https://a.com/', 0, 60); mk('r20260101-000002-bbbb', 'https://b.com/', 0, 99); mk('r20260101-000003-cccc', 'https://a.com/', 1, 10); mk('r20260101-000004-dddd', 'https://a.com/', 0, 70); mk('r20260101-000005-eeee', 'https://a.com/', 0, 75);
     assert.equal(previousSummary(base, 'r20260101-000005-eeee', 'https://a.com/').score, 70, 'skips other sites and failed runs');
     assert.equal(previousSummary(base, 'r20260101-000001-aaaa', 'https://a.com/'), null);
-  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+  } finally { fs.rmSync(base, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 const get = (port, p, { headers = {}, method = 'GET', body } = {}) => new Promise((resolve, reject) => { const r = http.request({ host: '127.0.0.1', port, path: p, method, headers }, (res) => { let b = ''; res.on('data', (d) => (b += d)); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: b })); }); r.on('error', reject); if (body) r.write(body); r.end(); });
@@ -55,7 +55,7 @@ test('ui server: secret address, host check, JSON-only POST, safe file serving',
     const raw = await new Promise((resolve) => { const s = net.connect(ui.port, '127.0.0.1', () => s.write(`GET /runs/${id}/../secret.txt?k=${ui.token} HTTP/1.1\r\nHost: 127.0.0.1:${ui.port}\r\nConnection: close\r\n\r\n`)); let d = ''; s.on('data', (x) => (d += x)); s.on('close', () => resolve(d)); });
     assert.doesNotMatch(raw, /top secret/);
     const list = JSON.parse((await get(ui.port, '/api/runs?k=' + ui.token)).body); assert.equal(list.runs[0].id, id); assert.equal(list.runs[0].dashboard, true);
-  } finally { ui.stop(); fs.rmSync(base, { recursive: true, force: true }); }
+  } finally { ui.stop(); fs.rmSync(base, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('ui server: a real quick check runs from the form, one at a time, and the report opens from the page without script errors', async (t) => {
@@ -78,5 +78,5 @@ test('ui server: a real quick check runs from the form, one at a time, and the r
     await pg.bringToFront(); assert.ok(await pg.locator('#sum').isVisible(), 'a finished run shows its result on the same page'); assert.match(await pg.locator('#sum .score').textContent(), /\d/); assert.ok((await pg.locator('#sum .fix').count()) >= 1, 'top fixes with a copy button'); assert.ok(await pg.locator('#envbar').isHidden(), 'a working browser shows no warning');
     await pg.reload(); assert.equal(await pg.inputValue('#url'), target, 'the last address is remembered');
     await pg.setViewportSize({ width: 390, height: 800 }); assert.ok(await pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no sideways scrolling on a phone');
-  } finally { await br.close(); ui.stop(); site.close(); fs.rmSync(base, { recursive: true, force: true }); }
+  } finally { await br.close(); ui.stop(); site.close(); fs.rmSync(base, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

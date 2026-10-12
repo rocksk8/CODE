@@ -38,7 +38,7 @@ before(async () => {
   base = `http://127.0.0.1:${server.address().port}/`;
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'se-test-'));
 });
-after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 
 const env = () => ({ ...process.env, SITE_EXPLORER_DB: path.join(tmp, 'test.db') });
 // async on purpose: the fixture server lives in this process and must keep serving while the child runs

@@ -42,7 +42,7 @@ before(async () => {
   A = J('a', pa, 'site.json'); B = J('b', pb, 'site.json'); HA = J('a', pa, 'health.json'); HB = J('b', pb, 'health.json');
   globalThis.__privDirs = [path.join(tmp, 'a', `127.0.0.1_${pa}`)];
 });
-after(() => { withBanner?.close(); without?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { withBanner?.close(); without?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 const skip = (t) => (!haveBrowser ? (t.skip('no browser'), true) : false);
 
 test('classifyUrls names the service, ignores a plain facebook link, and analyzeCookies keeps flags but never values', () => {
@@ -140,7 +140,7 @@ test('consent: late banner found, GTM that only loads after Accept is tagged "af
     assert.equal(trap.site.privacy.consentBanner, false, '<body class="cookie-consent-enabled"> is not a banner');
     const cmp = await crawl('cmp', '/cmp');
     assert.equal(cmp.site.privacy.hasCmpVendor, true); assert.ok(!cmp.health.issues.some((i) => i.id === 'trackers-no-banner'), 'a CMP is loaded: do not claim there is no consent tool'); assert.ok(cmp.health.issues.some((i) => i.id === 'trackers-present'));
-  } finally { srv.close(); fs.rmSync(d, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(d, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('pinterest-style path rules: a product photo on pinimg.com is not a tag', () => {

@@ -14,7 +14,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repo = path.join(root, '..', '..');
 let tmp, haveBrowser = true;
 before(async () => { try { (await launchBrowser()).close(); } catch { haveBrowser = false; } tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'se-action-')); });
-after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+after(() => fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }));
 
 const health = (score, counts, extra = {}) => ({ score, grade: score >= 80 ? 'B' : 'C', verdict: counts.critical ? 'fail' : counts.high ? 'conditional' : 'pass', verdictLabel: 'x', issueCounts: { critical: 0, high: 0, medium: 0, low: 0, ...counts }, topIssues: [], ...extra });
 

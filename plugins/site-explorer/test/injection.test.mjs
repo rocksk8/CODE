@@ -47,7 +47,7 @@ before(async () => {
   await new Promise((res) => { const p = spawn(process.execPath, [path.join(root, 'scripts', 'explore.mjs'), `http://127.0.0.1:${port}/`, '--max-pages', '1', '--no-motion', '--no-db', '--out', tmp], { env: process.env }); p.on('close', res); p.stdout.resume(); p.stderr.resume(); });
   H = path.join(tmp, 'handoff');
 });
-after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 const skip = (t) => (!haveBrowser ? (t.skip('no browser'), true) : false);
 const rd = (f) => fs.readFileSync(path.join(H, f), 'utf8');
 

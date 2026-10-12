@@ -64,7 +64,7 @@ test('verdict: a good grade with missing basics is "warn", not green', () => {
     assert.equal(computeVerdicts(dir).find((v) => v.id === 'security').status, 'warn');
     fs.writeFileSync(path.join(dir, 'security.json'), JSON.stringify({ headers: null, tls: { grade: 'A' } }));
     assert.equal(computeVerdicts(dir).find((v) => v.id === 'security').status, 'ok');
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('html validity: <a name> is a valid fragment target and text fragments (#:~:) are not broken links', () => {
@@ -89,7 +89,7 @@ test('removeVisualBaseline in dry mode only checks; a foreign folder is still re
   try {
     fs.writeFileSync(path.join(d, 'index.json'), JSON.stringify({ schema: 1 })); removeVisualBaseline(d, true); assert.ok(fs.existsSync(d));
     fs.rmSync(path.join(d, 'index.json')); fs.writeFileSync(path.join(d, 'mine.txt'), 'x'); assert.throws(() => removeVisualBaseline(d, true));
-  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  } finally { fs.rmSync(d, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('tech rules: 100 custom rules over 20 pages stay fast (one shared sandbox)', () => {
@@ -136,7 +136,7 @@ test('explore --har writes pages/<slug>/network.har with real entries and no sec
     fs.mkdirSync(path.join(dir, 'visual-diff'), { recursive: true }); for (const f of ['visual.json', 'visual.md', 'visual-review.html']) fs.writeFileSync(path.join(dir, f), 'stale');
     const again = await go([]); assert.equal(again.status, 0, again.out);
     for (const f of ['visual.json', 'visual.md', 'visual-review.html', 'visual-diff']) assert.ok(!fs.existsSync(path.join(dir, f)), 'stale ' + f + ' was left');
-  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 // ---- round 8
@@ -176,7 +176,7 @@ test('security grade: several CSP policies grade the best; frame-ancestors https
   const fa = gradeHeaders({ 'content-security-policy': "default-src 'self'; frame-ancestors https://*", 'strict-transport-security': 'max-age=63072000' }, { https: true });
   assert.ok(fa.tests.find((x) => x.id === 'framing').points < 0);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'se-v8-'));
-  try { fs.writeFileSync(path.join(dir, 'security.json'), JSON.stringify({ headers: { grade: 'A', tests: [{ name: 'nosniff', points: -5 }] }, tls: null })); assert.equal(computeVerdicts(dir).find((v) => v.id === 'security').status, 'ok'); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  try { fs.writeFileSync(path.join(dir, 'security.json'), JSON.stringify({ headers: { grade: 'A', tests: [{ name: 'nosniff', points: -5 }] }, tls: null })); assert.equal(computeVerdicts(dir).find((v) => v.id === 'security').status, 'ok'); } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('--approve-visual keeps the review files so the other changes can still be approved; custom tech rules see late URLs', async (t) => {
@@ -191,5 +191,5 @@ test('--approve-visual keeps the review files so the other changes can still be 
     for (const f of ['visual.json', 'visual.md', 'visual-review.html']) fs.writeFileSync(path.join(dir, f), 'keep'); fs.mkdirSync(path.join(dir, 'visual-diff'), { recursive: true });
     await go(['--approve-visual', 'nonexistent:mobile']);
     for (const f of ['visual.json', 'visual.md', 'visual-review.html', 'visual-diff']) assert.ok(fs.existsSync(path.join(dir, f)), f + ' was deleted by --approve-visual');
-  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

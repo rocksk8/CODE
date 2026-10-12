@@ -52,7 +52,7 @@ test('end to end: script-only text, a blocked AI bot, a different answer for Goo
     // a site that is fine reports nothing
     fs.writeFileSync(path.join(dir, 'site.json'), JSON.stringify({ pages: [{ slug: 'x', url: `http://127.0.0.1:${port}/de`, status: 200 }] })); fs.mkdirSync(path.join(dir, 'pages', 'x'), { recursive: true }); fs.writeFileSync(path.join(dir, 'pages', 'x', 'page.html'), pages['/de']());
     const clean = await runCrawlerView(dir, { delayMs: 0 }); assert.deepEqual(clean.issues, []);
-  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('explore runs the crawler view by default (and --no-crawler-view skips it); a script-built page is reported', async (t) => {
@@ -75,5 +75,5 @@ test('explore runs the crawler view by default (and --no-crawler-view skips it);
     } finally { await br.close(); }
     const b = await go(['--no-crawler-view'], 'b'); assert.equal(b.status, 0, b.o);
     const sb = path.join(dir, 'b', 'site', fs.readdirSync(path.join(dir, 'b', 'site'))[0]); assert.ok(!fs.existsSync(path.join(sb, 'crawler-view.json')));
-  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

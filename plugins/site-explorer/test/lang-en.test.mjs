@@ -14,7 +14,7 @@ const bin = path.join(root, 'bin', 'site-explorer.mjs');
 const CJK = /[　-〿一-鿿＀-￯]+/g;
 let tmp, haveBrowser = true;
 before(async () => { try { (await launchBrowser()).close(); } catch { haveBrowser = false; } tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'se-en-')); });
-after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+after(() => fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }));
 const cjkIn = (text) => [...new Set((text.match(CJK) || []))];
 
 test('--help, errors and usage texts are English with --lang en and Chinese by default', () => {

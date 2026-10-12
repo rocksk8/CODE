@@ -46,7 +46,7 @@ test('explore --extract writes extractions.csv/json with one row per page; a bad
     fs.writeFileSync(rules, '{"a":{"regex":"(a+)+$"}}');
     const bad = await run([url, '--extract', rules, '--out', path.join(dir, 'o2')]); assert.equal(bad.status, 1); assert.match(bad.out, /could hang/); assert.ok(!fs.existsSync(path.join(dir, 'o2', 'site')));
     const missing = await run([url, '--extract', path.join(dir, 'nope.json'), '--out', path.join(dir, 'o3')]); assert.equal(missing.status, 1); assert.match(missing.out, /file not found/);
-  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('regexes that slip past the screening are stopped by the time limit; __proto__ is not a rule name', () => {

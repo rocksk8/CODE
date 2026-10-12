@@ -43,5 +43,5 @@ test('scenario click is captured and compared; --hide stops a changing clock fro
     const bogus = await run([url, '--approve-visual', 'nothing-like-this', '--baseline', bf, '--out', out]); assert.match(bogus.out, /No matching screenshots/);
     const bad2 = await run([url, '--scenarios', path.join(dir, 'nope.json'), '--out', path.join(dir, 'o2')]); assert.equal(bad2.status, 1); assert.match(bad2.out, /file not found/);
     const bad3 = await run([url, '--hide', 'a{b}', '--out', path.join(dir, 'o3')]); assert.equal(bad3.status, 1);
-  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

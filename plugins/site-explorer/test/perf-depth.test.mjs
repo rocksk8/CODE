@@ -46,5 +46,5 @@ test('health: the new performance findings appear for a page that earns them, an
     for (const want of ['cache-policy', 'img-no-dimensions', 'img-offscreen-eager', 'lcp-lazy']) assert.ok(ia.includes(want), want + ' in ' + ia.join(','));
     const b = await go(base + '/good', 'b'); assert.equal(b.status, 0, b.o); const ib = issues('b');
     for (const no of ['cache-policy', 'img-no-dimensions', 'img-offscreen-eager', 'lcp-lazy', 'http1']) assert.ok(!ib.includes(no), no + ' should not be reported: ' + ib.join(','));
-  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

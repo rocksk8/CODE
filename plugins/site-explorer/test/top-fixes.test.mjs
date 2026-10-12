@@ -27,7 +27,7 @@ test('top fixes: ranked by severity and breadth, at most 3, each with a paste-re
     assert.ok(!computeTopFixes(d, 10).some((t) => /Just a note|nosniff|Minor/.test(t.title) && t.id !== 'health:low-wide'), 'info items and small gaps are not listed');
     const md = renderTopFixesMd(top); assert.match(md, /## 1\. Site is noindex/); assert.match(md, /```text/);
     assert.match(renderTopFixesConsole(top), /1\. \[/);
-  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  } finally { fs.rmSync(d, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('top fixes: nothing to report gives an empty list and a friendly file; hostile text is bounded', () => {
@@ -36,7 +36,7 @@ test('top fixes: nothing to report gives an empty list and a friendly file; host
     const t = computeTopFixes(d)[0]; assert.ok(t.title.length <= 200 && t.why.length <= 320 && t.fix.length <= 320);
     assert.match(fixPrompt({ title: 'a```b', why: '', fix: '', scope: '' }), /a/);
     assert.ok(!renderTopFixesMd([{ ...t, prompt: 'p```q' }]).includes('p```q'), 'a fence inside the prompt cannot break out of the code block');
-  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  } finally { fs.rmSync(d, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
   assert.deepEqual(computeTopFixes('/nonexistent-folder'), []);
   assert.match(renderTopFixesMd([]), /沒有發現|Nothing/);
 });
@@ -52,5 +52,5 @@ test('top fixes: how hard a fix is counts - a quick fix outranks an equally impo
     const md = renderTopFixesMd(top); assert.match(md, /\| # \|/); assert.ok(md.indexOf('No meta description') < md.indexOf('Content needs JavaScript'));
     assert.match(renderTopFixesConsole(top), /1\. \[.*No meta description/);
     assert.equal(effortOf('never-heard-of-it'), 2);
-  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  } finally { fs.rmSync(d, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

@@ -36,7 +36,7 @@ test('dashboard: logo, grouped sidebar with icons, page title and description pe
       assert.ok(await mp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no horizontal scrolling on a phone');
       assert.deepEqual(errs, []);
     } finally { await br.close(); }
-  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { site.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
 
 test('dashboard: history tab draws a health-score trend once the database holds two runs of the same site', async (t) => {
@@ -57,5 +57,5 @@ test('dashboard: history tab draws a health-score trend once the database holds 
       assert.match(await pg.locator('#s-history .trend .tn').textContent(), /Compared with the previous run/);
       assert.deepEqual(errs, []);
     } finally { await br.close(); }
-  } finally { site.close(); fs.rmSync(tmp, { recursive: true, force: true }); }
+  } finally { site.close(); fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });

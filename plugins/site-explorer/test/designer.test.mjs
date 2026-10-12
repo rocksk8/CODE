@@ -34,7 +34,7 @@ before(async () => {
     await run('export-design.mjs', [siteDir]);
   }
 });
-after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 
 const page = () => JSON.parse(fs.readFileSync(path.join(siteDir, 'pages', 'home', 'page.json'), 'utf8')).designer;
 const site = () => JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8'));

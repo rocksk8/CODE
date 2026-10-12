@@ -51,7 +51,7 @@ before(async () => {
     const r = await run('build-handoff.mjs', ['--site', path.join(tmp, 'c', host), '--motion', path.join(tmp, 'm', host), '--out', path.join(tmp, 'h2')]); assert.equal(r.status, 0, r.out); H2 = path.join(tmp, 'h2');
   }
 });
-after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { server?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 const skip = (t, three = false) => (!haveBrowser ? (t.skip('no browser'), true) : three && !haveThree ? (t.skip('three not installed'), true) : false);
 
 test('package has every document, and nothing references a file that is not inside it', (t) => {

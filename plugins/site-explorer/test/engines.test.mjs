@@ -29,7 +29,7 @@ for (const engine of ['firefox', 'webkit']) {
       assert.ok(fs.existsSync(path.join(site, 'health.json')) && fs.existsSync(path.join(dir, 'o', 'dashboard.html')));
       const pj = JSON.parse(fs.readFileSync(path.join(site, 'pages', 'home', 'page.json'), 'utf8')); assert.ok(pj.content.headings.length >= 1 && pj.layout.docHeight > 100);
       const bad = await run([url, '--browser', engine, '--throttle', 'mobile', '--out', path.join(dir, 'x')]); assert.equal(bad.status, 1);
-    } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+    } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
   });
 }
 

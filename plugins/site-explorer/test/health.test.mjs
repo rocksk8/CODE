@@ -40,7 +40,7 @@ before(async () => {
   await run('health-check.mjs', ['--site', dirOf('c', pn), '--no-link-check']);
   globalThis.__paths = { soft: dirOf('b', ps), noindex: dirOf('c', pn) };
 });
-after(() => { hard?.close(); soft?.close(); noindexAll?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { hard?.close(); soft?.close(); noindexAll?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 const skip = (t) => (!haveBrowser ? (t.skip('no browser'), true) : false);
 
 test('finds the planted indexability problems', (t) => {

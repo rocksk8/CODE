@@ -84,6 +84,6 @@ test('the Figma plugin code builds frames, text and images against a mocked Figm
 
 test('writeFigmaJson writes <slug>.figma.json; the plugin manifest is valid JSON with the files it needs', () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'se-fj-'));
-  try { assert.equal(writeFigmaJson({ title: 'T', url: 'https://x.test/', layout: { docWidth: 1440, docHeight: 1000, tree } }, 'home', d), true); const j = JSON.parse(fs.readFileSync(path.join(d, 'home.figma.json'), 'utf8')); assert.equal(j.root.h, 1000); assert.equal(writeFigmaJson({ layout: {} }, 'x', d), false); } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  try { assert.equal(writeFigmaJson({ title: 'T', url: 'https://x.test/', layout: { docWidth: 1440, docHeight: 1000, tree } }, 'home', d), true); const j = JSON.parse(fs.readFileSync(path.join(d, 'home.figma.json'), 'utf8')); assert.equal(j.root.h, 1000); assert.equal(writeFigmaJson({ layout: {} }, 'x', d), false); } finally { fs.rmSync(d, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
   assert.equal(PLUGIN_MANIFEST.main, 'code.js'); assert.equal(PLUGIN_MANIFEST.ui, 'ui.html');
 });

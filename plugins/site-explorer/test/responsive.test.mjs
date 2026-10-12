@@ -39,7 +39,7 @@ before(async () => {
   for (const [n, port] of [['b', pb], ['g', pg]]) await run('health-check.mjs', ['--site', path.join(tmp, n, `127.0.0.1_${port}`), '--no-link-check']);
   B = J('b', pb, 'pages/home/page.json'); G = J('g', pg, 'pages/home/page.json'); HB = J('b', pb, 'health.json'); HG = J('g', pg, 'health.json');
 });
-after(() => { bad?.close(); good?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); });
+after(() => { bad?.close(); good?.close(); if (tmp) fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); });
 const skip = (t) => (!haveBrowser ? (t.skip('no browser'), true) : false);
 
 test('responsiveFindings is quiet for a sane page and loud for a broken one (pure function)', () => {
@@ -77,5 +77,5 @@ test('pre-mortem: a hamburger built from a <div> counts as a menu, and a page th
     const B = JSON.parse(fs.readFileSync(path.join(dirB, 'pages', site.pages[0].slug, 'page.json'), 'utf8'));
     assert.match(B.responsiveSkipped || '', /自己跳轉/); assert.ok(B.responsive.desktop && !B.responsive.mobile && !B.responsive.tablet, 'only the measurements taken at the real address are kept');
     assert.ok(site.pages[0].url.endsWith('/r'), 'the page is still recorded under its own address');
-  } finally { srv.close(); fs.rmSync(d, { recursive: true, force: true }); }
+  } finally { srv.close(); fs.rmSync(d, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
