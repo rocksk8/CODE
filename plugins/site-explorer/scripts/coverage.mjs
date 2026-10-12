@@ -1,0 +1,9 @@
+// Unused JavaScript / CSS from Chromium's coverage data.
+export function usedBytes(len, ranges) { const m = new Uint8Array(len); for (const r of ranges) m.fill(r.count > 0 ? 1 : 0, Math.max(0, r.startOffset), Math.min(len, r.endOffset)); let u = 0; for (let i = 0; i < len; i++) u += m[i]; return u; }
+export function summarizeCoverage(js, css, host) {
+  const rows = [];
+  for (const e of js || []) { const len = (e.source || '').length; if (!e.url || !/^https?:/.test(e.url) || !len || len > 8e6) continue; const ranges = (e.functions || []).flatMap((f) => f.ranges || []).sort((a, b) => a.startOffset - b.startOffset || (b.endOffset - b.startOffset) - (a.endOffset - a.startOffset)); rows.push({ kind: 'js', url: e.url.split(/[?#]/)[0].slice(0, 160), bytes: len, unused: len - usedBytes(len, ranges), own: (() => { try { return new URL(e.url).hostname.replace(/^www\./, '') === host; } catch { return false; } })() }); }
+  for (const e of css || []) { const len = (e.text || '').length; if (!e.url || !/^https?:/.test(e.url) || !len || len > 8e6) continue; const m = new Uint8Array(len); for (const r of e.ranges || []) m.fill(1, Math.max(0, r.start), Math.min(len, r.end)); let u = 0; for (let i = 0; i < len; i++) u += m[i]; rows.push({ kind: 'css', url: e.url.split(/[?#]/)[0].slice(0, 160), bytes: len, unused: len - u, own: (() => { try { return new URL(e.url).hostname.replace(/^www\./, '') === host; } catch { return false; } })() }); }
+  const sum = (k) => { const r = rows.filter((x) => x.kind === k); const bytes = r.reduce((n, x) => n + x.bytes, 0), unused = r.reduce((n, x) => n + x.unused, 0); return { files: r.length, bytes, unused, top: r.sort((a, b) => b.unused - a.unused).slice(0, 3).map((x) => ({ url: x.url, bytes: x.bytes, unused: x.unused })) }; };
+  return { js: sum('js'), css: sum('css') };
+}
