@@ -22,6 +22,7 @@ const BUDGET = intOpt(args, 'budget-ms', 170000, { min: 1000, max: 1800000 }), T
 const timeLeft = () => BUDGET - (Date.now() - T0); let shotMs = 0, shots = 0, truncated = false;
 const slowMachine = () => shots >= 2 && shotMs / shots > 1500;
 const say = (m) => console.log('   ' + m);
+const mark = (label) => console.log('   [t+' + ((Date.now() - T0) / 1000).toFixed(1) + 's] ' + label);
 const blockedBy = await robotsBlocks(url);
 if (blockedBy) { console.error(_t`robots.txt 不允許存取此頁面（Disallow: ${blockedBy}），已依網站設定停止。`); process.exit(3); }
 const host = new URL(url).host.replace(/[^a-z0-9.-]/gi, '_');
@@ -49,6 +50,7 @@ const browser = await launchBrowser({
   headless: !args.includes('--headed'),
   args: args.includes('--headed') ? ['--ignore-gpu-blocklist', '--enable-webgl'] : ['--use-angle=swiftshader', '--use-gl=angle', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'], // headed: let Chromium use the real GPU
 });
+mark('browser started');
 let wantVideo = !args.includes('--no-video');
 const authFile = (() => { const i = args.indexOf('--storage-state'); return i >= 0 ? args[i + 1] : null; })();
 let auth = null; if (authFile) { try { auth = loadAuthState(authFile); } catch (e) { console.error(e.message); await browser.close(); process.exit(1); } }
@@ -125,6 +127,7 @@ const detected = await page.evaluate(() => {
   for (const [k, re] of [['three', /three(\.module)?(\.min)?\.js|three@/i], ['gsap', /gsap/i], ['babylon', /babylon/i], ['spline', /spline/i], ['rive', /rive/i], ['lottie', /lottie|bodymovin/i], ['r3f', /react-three/i], ['theatre', /theatre/i]]) if (re.test(scripts)) libs[k + 'Script'] = true;
   return { targets, keyframes: keyframes.slice(0, 20), libs, contexts: W.contexts || [], shaders: W.shaders || [], rafCount: W.rafCount || 0, docHeight: document.documentElement.scrollHeight };
 });
+mark('page opened and scanned');
 console.log(_t`偵測到 ${detected.targets.length} 個目標；函式庫：${Object.entries(detected.libs).filter(([, v]) => v).map(([k]) => k).join(', ') || _t('無')}`);
 
 // prioritise real 3D over generic css-animation
@@ -175,6 +178,7 @@ for (const t of targets) {
   } catch (e) { t.error = e.message.split('\n')[0]; }
 }
 
+mark('per-target frames done');
 // 4. scroll-driven sequence: viewport frames while scrolling the whole page, plus each target's own appearance while in view
 const scrollDir = path.join(out, 'frames', 'scroll'); fs.mkdirSync(scrollDir, { recursive: true });
 const steps = Math.min(slowMachine() || timeLeft() < BUDGET * 0.4 ? 6 : 16, Math.max(4, Math.ceil(detected.docHeight / 700))), scrollHashes = [], scrollBufs = [], perTarget = Object.fromEntries(targets.map((t) => [t.id, []]));
@@ -194,6 +198,7 @@ for (let i = 0; i <= steps; i++) {
 }
 for (const t of targets) { const h = perTarget[t.id]; t.scrollSamples = h.length; t.scrollUnique = new Set(h).size; t.scrollDriven = h.length >= 3 && new Set(h).size >= 3 && !t.animatesOnItsOwn; }
 
+mark('scroll sampling done');
 // 5. AI layer: numbers, language, filmstrips
 const b64 = (arr) => arr.map((b) => b.toString('base64'));
 const ap = await browser.newPage(); await ap.setContent('<!doctype html><html></html>');
@@ -217,9 +222,11 @@ for (const t of targets) {
 }
 const scrollFilmstrip = (await buildFilmstrip(browser, [{ label: _t('捲動位置'), files: scrollBufs }], path.join(scrollDir, 'filmstrip.png'), _t('整頁捲動序列（由上到下）'))) ? 'frames/scroll/filmstrip.png' : null;
 
+mark('analysis done');
 // ---- finish: video, report, contact sheet ----
 const video = wantVideo ? await page.video()?.path() : null;
 await ctx.close(); await browser.close();
+mark('browser closed (video finalised)');
 let videoFile = null;
 if (video && fs.existsSync(video)) { videoFile = path.join(out, 'recording.webm'); fs.renameSync(video, videoFile); fs.rmSync(path.join(out, 'video'), { recursive: true, force: true }); }
 
