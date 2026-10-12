@@ -3,11 +3,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const probe = (env, args = []) => spawnSync(process.execPath, ['--input-type=module', '-e', `
-  import { _t, LANG, htmlLang } from ${JSON.stringify(path.join(root, 'scripts', 'i18n.mjs'))};
+  import { _t, LANG, htmlLang } from ${JSON.stringify(pathToFileURL(path.join(root, 'scripts', 'i18n.mjs')).href)};
   console.log(JSON.stringify({ LANG, htmlLang: htmlLang(), plain: _t('一段不存在的測試字串'), tagged: _t\`共 \${3} 頁，\${'x'} 個\` }));`, ...args], { env: { ...process.env, ...env }, encoding: 'utf8' });
 
 test('zh is the default and _t is the identity (plain and tagged)', () => {

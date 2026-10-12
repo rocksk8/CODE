@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repo = path.join(root, '..', '..');
@@ -70,7 +70,7 @@ test('CLI scripts still run when reached through a symlink (npm link, /tmp -> /p
 });
 
 test('Node version guard explains itself instead of a cryptic dependency error', async () => {
-  const r = await run(tmp, ['-e', `import('${path.join(root, 'scripts', 'util.mjs').split(path.sep).join('/')}').then(m => m.assertNode(999))`]);
+  const r = await run(tmp, ['-e', `import('${pathToFileURL(path.join(root, 'scripts', 'util.mjs')).href}').then(m => m.assertNode(999))`]);
   assert.equal(r.status, 1); assert.match(r.out, /需要 Node\.js 999 以上/); assert.match(r.out, /nodejs\.org/);
 });
 
@@ -96,7 +96,7 @@ test('first run installs pinned dependencies ONCE into ~/.site-explorer/deps; th
 
 test('two first runs at the same time: one installs, the other waits, both succeed', async () => {
   const home = path.join(tmp, 'home2'), env = { SITE_EXPLORER_HOME: home };
-  const launch = path.join(fresh, 'scripts', 'launch.mjs').split(path.sep).join('/');
+  const launch = pathToFileURL(path.join(fresh, 'scripts', 'launch.mjs')).href;
   const go = () => run(fresh, ['-e', `import('${launch}').then((m) => m.loadPlaywright()).then(() => console.log('READY'))`], env); // non-quiet: prints a message only when it installs
   const [a, b] = await Promise.all([go(), go()]);
   assert.match(a.out, /READY/, a.out); assert.match(b.out, /READY/, b.out);
@@ -115,9 +115,10 @@ test('setup without a browser and without a terminal asks for consent instead of
 test('npm package: ships only what the CLI needs, is small, and the unpacked tarball runs', async () => {
   const { spawnSync } = await import('node:child_process');
   const dest = path.join(tmp, 'pack'); fs.mkdirSync(dest);
-  const packed = spawnSync('npm', ['pack', '--json', '--pack-destination', dest, '--ignore-scripts'], { cwd: repo, encoding: 'utf8', shell: process.platform === 'win32' });
+  const packed = spawnSync('npm', ['pack', '--json', '--ignore-scripts'], { cwd: repo, encoding: 'utf8', shell: process.platform === 'win32' }); // packs into the repo folder; moved right away (the --pack-destination option is not understood the same way by every npm)
   assert.equal(packed.status, 0, packed.stderr);
   const info = JSON.parse(packed.stdout)[0];
+  fs.renameSync(path.join(repo, info.filename), path.join(dest, info.filename));
   const paths = info.files.map((f) => f.path);
   for (const must of ['package.json', 'README.md', 'LICENSE', 'plugins/site-explorer/bin/site-explorer.mjs', 'plugins/site-explorer/package.json', 'plugins/site-explorer/scripts/verify.mjs', 'plugins/site-explorer/scripts/report/report-client.js']) assert.ok(paths.includes(must), 'missing from package: ' + must);
   assert.ok(!paths.some((p) => /(^|\/)(test|docs|node_modules|tools)\//.test(p) || /\.env|\.pem|\.db$/.test(p)), 'tests, docs, tools or secrets leaked into the package');
