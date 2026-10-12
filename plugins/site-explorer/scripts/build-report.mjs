@@ -64,6 +64,7 @@ if (siteDir && exists(path.join(siteDir, 'site.json'))) {
   }
   // the newer checks: raw results for their own tabs, plus one plain-language verdict each for the overview
   data.verdicts = computeVerdicts(siteDir, outDir);
+  data.topFixes = (() => { try { return readJSON(path.join(siteDir, 'top-fixes.json')); } catch { return []; } })();
   for (const [k, f] of [['tech', 'techstack.json'], ['perf', 'performance.json'], ['security', 'security.json'], ['privacy', 'tracking-behaviors.json'], ['extract', 'extractions.json']]) { try { const j = readJSON(path.join(siteDir, f)); if (j) data.checks[k] = j; } catch {} }
   try { data.checks.visual = readJSON(path.join(outDir, 'visual.json')); if (data.checks.visual) for (const r of data.checks.visual.rows || []) { r.diff = r.diff && exists(path.join(outDir, r.diff)) ? ref(path.join(outDir, r.diff)) : null; const cur = r.viewport === 'scenario' ? path.join(siteDir, 'scenarios', String(r.slug).replace(/[^a-z0-9_-]/g, '') + '.png') : path.join(siteDir, 'pages', String(r.slug).replace(/[^A-Za-z0-9._-]/g, ''), r.viewport + '.png'); r.now = exists(cur) ? ref(cur) : null; } } catch {}
   data.checks.visualReview = exists(path.join(outDir, 'visual-review.html')) ? 'visual-review.html' : null;

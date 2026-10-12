@@ -182,7 +182,7 @@ if (checks.some((c) => c.level === 'fail')) {
 
 { // results of stages that do not run this time must not be shown as if they were fresh (an old health score, a11y report, verify result or changes.md)
   const rm = (f) => { try { fs.rmSync(f, { recursive: true, force: true }); } catch {} };
-  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'techstack.json')); rm(path.join(siteDir, 'tracking-behaviors.json')); rm(path.join(siteDir, 'security.json')); rm(path.join(siteDir, 'figma')); rm(path.join(siteDir, 'scenarios')); rm(path.join(siteDir, 'extractions.json')); rm(path.join(siteDir, 'extractions.csv')); rm(path.join(siteDir, 'security.md')); rm(path.join(siteDir, 'tracking-behaviors.md')); rm(path.join(siteDir, 'performance.json')); rm(path.join(siteDir, 'performance.md')); rm(path.join(siteDir, 'techstack.md')); // a failed re-run must not report the previous run's pages
+  rm(path.join(siteDir, 'changes.md')); rm(path.join(siteDir, 'site.json')); rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); rm(path.join(siteDir, 'techstack.json')); rm(path.join(siteDir, 'tracking-behaviors.json')); rm(path.join(siteDir, 'security.json')); rm(path.join(siteDir, 'figma')); rm(path.join(siteDir, 'scenarios')); rm(path.join(siteDir, 'extractions.json')); rm(path.join(siteDir, 'extractions.csv')); rm(path.join(siteDir, 'security.md')); rm(path.join(siteDir, 'tracking-behaviors.md')); rm(path.join(siteDir, 'performance.json')); rm(path.join(siteDir, 'performance.md')); rm(path.join(siteDir, 'top-fixes.json')); rm(path.join(siteDir, 'top-fixes.md')); rm(path.join(siteDir, 'techstack.md')); // a failed re-run must not report the previous run's pages
   if (args.includes('--no-health')) { rm(path.join(siteDir, 'health.json')); rm(path.join(siteDir, 'health.md')); }
   if (!args.includes('--a11y')) rm(path.join(siteDir, 'a11y.json'));
   if (!compareFlag && !opt('approve-visual', null)) for (const f of ['visual.json', 'visual.md', 'visual-review.html', 'visual-diff', 'drift.md']) rm(path.join(out, f)); // a comparison from an earlier run must not be shown as this run's result
@@ -261,6 +261,7 @@ try {
     _t('## 重新產生'), '```bash', _t('site-explorer <網址> --out ') + JSON.stringify(path.relative(process.cwd(), out) || '.'), '```', '',
     _t('工具說明與安裝：https://github.com/rocksk8/code'), ''].join('\n'));
 } catch {}
+if (crawlOk) { try { const { computeTopFixes, renderTopFixesConsole, renderTopFixesMd } = await import('./top-fixes.mjs'); const tf = computeTopFixes(siteDir); fs.writeFileSync(path.join(siteDir, 'top-fixes.json'), JSON.stringify(tf, null, 2)); fs.writeFileSync(path.join(siteDir, 'top-fixes.md'), renderTopFixesMd(tf) + '\n'); if (!JSON_MODE) { const b = renderTopFixesConsole(tf); if (b) console.log(b); } } catch {} }
 let handoffOk = false;
 const handoffDir = path.join(out, 'handoff');
 if ((crawlOk || motionOk) && crawlOk && !args.includes('--no-handoff')) handoffOk = await run(_t('產生交接包（AI 簡報、完整規格、決策紀錄、圖片）'), 'build-handoff.mjs', ['--site', siteDir, ...(motionOk ? ['--motion', motionDir] : []), '--out', handoffDir]);
