@@ -64,3 +64,19 @@ test('a budget on a metric that was never measured is reported, and a fail-level
   const fail = evaluateBudget(rows, { lcpMs: { max: 2500, level: 'fail' }, ttfbMs: { max: 800, level: 'fail' } }); assert.equal(fail.failed, true);
   assert.deepEqual(evaluateBudget(rows, { ttfbMs: { max: 800, level: 'fail' } }).unmeasured, []);
 });
+
+test('total blocking time is measured, --perf-runs takes the median of repeated cold loads, --throttle mobile slows the load, bad values are rejected', async (t) => {
+  let have = true; try { const { launchBrowser } = await import('../scripts/launch.mjs'); await (await launchBrowser()).close(); } catch { have = false; }
+  if (!have) return t.skip('no browser');
+  const srv = http.createServer((q, r) => { if (q.url === '/robots.txt') { r.statusCode = 404; return r.end(); } r.setHeader('content-type', 'text/html; charset=utf-8'); r.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Blocking time test page</title><meta name="description" content="A page whose script blocks the main thread so that total blocking time can be measured."></head><body><h1>Busy page</h1><p>${'Words to make the page real content. '.repeat(10)}</p><script>setTimeout(function(){var t=Date.now();while(Date.now()-t<400){}},50)</script></body></html>`); });
+  await new Promise((res) => srv.listen(0, '127.0.0.1', res)); const url = `http://127.0.0.1:${srv.address().port}/`;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'se-tbt-'));
+  try {
+    const a = await run([url, '--perf-runs', '2', '--out', path.join(dir, 'a')]); assert.equal(a.status, 0, a.out);
+    const site = (o) => path.join(dir, o, 'site', fs.readdirSync(path.join(dir, o, 'site'))[0]);
+    const pa = JSON.parse(fs.readFileSync(path.join(site('a'), 'pages', 'home', 'page.json'), 'utf8')); assert.equal(pa.seo.perfRuns, 2); assert.ok(pa.seo.perf.tbtMs > 100, 'tbt ' + pa.seo.perf.tbtMs);
+    const b = await run([url, '--throttle', 'mobile', '--out', path.join(dir, 'b')]); assert.equal(b.status, 0, b.out);
+    const pb = JSON.parse(fs.readFileSync(path.join(site('b'), 'pages', 'home', 'page.json'), 'utf8')); assert.equal(pb.seo.perfThrottled, true); assert.ok(pb.seo.perf.loadMs >= pa.seo.perf.loadMs + 80, `throttled load ${pb.seo.perf.loadMs} vs ${pa.seo.perf.loadMs}`);
+    for (const bad of [['--perf-runs', '0'], ['--perf-runs', 'x'], ['--throttle', 'slow']]) { const r = await run([url, ...bad, '--out', path.join(dir, 'c')]); assert.equal(r.status, 1, bad.join(' ')); }
+  } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});

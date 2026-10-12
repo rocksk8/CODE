@@ -8,6 +8,7 @@
   const GL = {
     LCP: _t('最大內容繪製：頁面上最大的圖或文字出現所花的時間。Google 建議 2.5 秒內。'),
     CLS: _t('版面位移：載入時畫面跳動的程度。Google 建議 0.1 以下，數字越小越穩。'),
+    TBT: _t('總阻塞時間：頁面載入後主執行緒被長任務卡住的時間總和，越短越順。Google 建議 200 毫秒內。'),
     TTFB: _t('伺服器回應時間：按下連結到收到第一個位元組。Google 建議 0.8 秒內。'),
     FCP: _t('首次內容繪製：畫面第一次出現東西的時間。Google 建議 1.8 秒內。'),
     CSP: _t('內容安全政策：告訴瀏覽器只能載入哪些來源的腳本，能擋掉大部分被植入的惡意腳本。'),
@@ -51,10 +52,11 @@
   (function () {
     const d = CK.perf, s = sec('perf'); if (!d || !s) return;
     const m = d.medians || {};
-    const rate = (k, v) => { const T = { lcpMs: [2500, 4000], cls: [0.1, 0.25], ttfbMs: [800, 1800], fcpMs: [1800, 3000] }[k]; return !T || !Number.isFinite(v) ? '' : v <= T[0] ? 'ok' : v <= T[1] ? 'warn' : 'bad'; };
+    const rate = (k, v) => { const T = { lcpMs: [2500, 4000], cls: [0.1, 0.25], ttfbMs: [800, 1800], fcpMs: [1800, 3000], tbtMs: [200, 600] }[k]; return !T || !Number.isFinite(v) ? '' : v <= T[0] ? 'ok' : v <= T[1] ? 'warn' : 'bad'; };
     const sec_ = (v) => (Number.isFinite(v) ? (v / 1000).toFixed(2) + ' ' + _t('秒') : '—');
     const cards = [
       ['lcpMs', gl('LCP'), sec_(m.lcpMs), _t('主要內容多快出現')], ['fcpMs', gl('FCP'), sec_(m.fcpMs), _t('畫面多快開始有東西')], ['ttfbMs', gl('TTFB'), sec_(m.ttfbMs), _t('伺服器多快回應')],
+      ['tbtMs', gl('TBT'), Number.isFinite(m.tbtMs) ? m.tbtMs + ' ' + _t('毫秒') : '—', _t('頁面會不會卡頓')],
       ['cls', gl('CLS'), Number.isFinite(m.cls) ? String(m.cls) : '—', _t('載入時畫面會不會跳動')], ['loadMs', _t('完全載入'), sec_(m.loadMs), _t('所有資源載入完成')],
       ['totalKB', _t('頁面大小'), Number.isFinite(m.totalKB) ? m.totalKB + ' KB' : '—', _t('越小越快、越省流量')], ['requests', _t('請求數'), m.requests ?? '—', _t('載入了幾個檔案')],
       ['thirdPartyRequests', _t('第三方網域數'), m.thirdPartyRequests ?? '—', _t('有幾個外部網站參與載入')], ['renderBlockingScripts', _t('擋住畫面的腳本'), m.renderBlockingScripts ?? '—', _t('越少越好')], ['domNodes', _t('頁面元素數'), m.domNodes ?? '—', _t('太多會讓手機變慢')],
@@ -70,7 +72,7 @@
   // ---------- privacy ----------
   (function () {
     const d = CK.privacy, s = sec('privacy'); if (!d || !s) return;
-    const KIND = { canvas: _t('讀取畫了文字的 canvas（canvas 指紋）'), webgl: _t('讀取顯示卡型號（WebGL 指紋）'), audio: _t('使用離線音訊運算（音訊指紋）'), fonts: _t('大量量測文字寬度（字型探測）') };
+    const KIND = { canvas: _t('讀取畫了文字的 canvas（canvas 指紋）'), webgl: _t('讀取顯示卡型號（WebGL 指紋）'), audio: _t('使用離線音訊運算（音訊指紋）'), fonts: _t('大量量測文字寬度（字型探測）'), keys: _t('監聽整頁的鍵盤事件（鍵盤記錄手法）') };
     const PARTY = { 'first-party': _t('同網站'), 'third-party': _t('第三方'), unknown: _t('來源不明') };
     let h = banner(V('privacy'));
     h += '<div class="card"><h3>' + _t('錄製訪客操作／熱點圖的服務') + '</h3>' + ((d.replay || []).length ? d.replay.map((r) => '<p><b>' + esc(r.name) + '</b> <span class="hint">' + esc(r.evidence) + '</span></p>').join('') + '<p class="hint">' + _t('這類服務會記錄訪客的滑鼠、點擊與捲動，部分會錄下畫面。通常需要在隱私權政策與同意橫幅中說明。') + '</p>' : '<p class="good">' + _t('沒有發現') + '</p>') + '</div>';
@@ -83,7 +85,7 @@
   // ---------- technology ----------
   (function () {
     const d = CK.tech, s = sec('tech'); if (!d || !s) return;
-    const CAT = { cms: _t('內容管理系統／建站平台'), commerce: _t('電商'), framework: _t('前端／後端框架'), library: _t('函式庫'), animation: _t('動畫／3D'), fonts: _t('字型服務'), server: _t('網頁伺服器'), language: _t('程式語言'), cdn: _t('CDN'), hosting: _t('主機／部署平台') };
+    const CAT = { cms: _t('內容管理系統／建站平台'), commerce: _t('電商'), framework: _t('前端／後端框架'), library: _t('函式庫'), animation: _t('動畫／3D'), fonts: _t('字型服務'), server: _t('網頁伺服器'), language: _t('程式語言'), cdn: _t('CDN'), hosting: _t('主機／部署平台'), service: _t('第三方服務（付款、客服、驗證碼、地圖…）') };
     const CONF = { high: _t('把握高'), medium: _t('把握中'), low: _t('只有一個線索') };
     let h = banner(V('tech'));
     if (!(d.items || []).length) h += '<div class="empty">' + _t('沒有辨識出已知的技術——可能是手寫的網站，或是這份規則還不認得它用的工具。') + '</div>';

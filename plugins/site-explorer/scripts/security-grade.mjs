@@ -80,7 +80,8 @@ function certInfo(host, port, legacy = false) {
     const s = tls.connect({ host, port, servername: host, rejectUnauthorized: false, timeout: 8000, ...(legacy ? { minVersion: 'TLSv1', ciphers: 'ALL:@SECLEVEL=0' } : {}) }, () => {
       const c = s.getPeerCertificate(true); let chain = 0; for (let x = c, seen = new Set(); x && !seen.has(x.fingerprint256) && chain < 10; x = x.issuerCertificate) { seen.add(x.fingerprint256); chain++; }
       const to = c.valid_to ? new Date(c.valid_to) : null; const idErr = tls.checkServerIdentity(host, c);
-      resolve({ ok: true, protocol: s.getProtocol(), cipher: (s.getCipher() || {}).name, validTo: to && to.toISOString().slice(0, 10), daysLeft: to ? Math.floor((to - Date.now()) / 86400000) : null, issuer: clean(c.issuer?.O || c.issuer?.CN || '', 60), bits: c.bits || null, selfSigned: !!c.issuerCertificate && c.issuerCertificate.fingerprint256 === c.fingerprint256, hostnameMatches: !idErr, trusted: s.authorized, authError: s.authorized ? null : clean(String(s.authorizationError || ''), 60), chain });
+      let eph = null; try { eph = s.getEphemeralKeyInfo(); } catch {}
+      resolve({ ok: true, eph: eph && typeof eph === 'object' ? { type: String(eph.type || '').slice(0, 10), name: String(eph.name || '').slice(0, 20), size: Number.isFinite(eph.size) ? eph.size : null } : null, protocol: s.getProtocol(), cipher: (s.getCipher() || {}).name, validTo: to && to.toISOString().slice(0, 10), daysLeft: to ? Math.floor((to - Date.now()) / 86400000) : null, issuer: clean(c.issuer?.O || c.issuer?.CN || '', 60), bits: c.bits || null, selfSigned: !!c.issuerCertificate && c.issuerCertificate.fingerprint256 === c.fingerprint256, hostnameMatches: !idErr, trusted: s.authorized, authError: s.authorized ? null : clean(String(s.authorizationError || ''), 60), chain });
       s.end();
     });
     s.on('error', (e) => resolve({ ok: false, error: clean(String(e.code || e.message), 50) })); s.on('timeout', () => { resolve({ ok: false, error: 'timeout' }); s.destroy(); });
@@ -100,6 +101,14 @@ export function gradeTls(versions, cert) {
   if (cert.selfSigned) t('selfsigned', _t('憑證簽發者'), _t('自簽憑證'), 'F', _t('改用受信任的憑證機構（例如 Let\'s Encrypt）。'));
   else if (!cert.trusted) t('untrusted', _t('憑證信任'), _t`不受信任：${cert.authError || '?'}`, 'F', _t('補上完整的憑證鏈。'));
   else t('trust', _t('憑證信任'), _t`受信任（${cert.issuer}）`);
+  // key exchange and cipher actually negotiated: forward secrecy (a stolen key cannot decrypt recorded traffic), DH size, authenticated encryption
+  const proto = String(cert.protocol || ''), cipher = String(cert.cipher || '');
+  if (proto === 'TLSv1.3') t('keyexchange', _t('金鑰交換'), _t('TLS 1.3：一律具備前向保密'));
+  else if (cert.eph && cert.eph.type === 'DH' && cert.eph.size && cert.eph.size < 2048) t('keyexchange', _t('金鑰交換'), _t`DH 金鑰只有 ${cert.eph.size} 位元`, 'B', _t('改用 ECDHE，或把 DH 參數提高到 2048 位元以上。'));
+  else if (cert.eph && (cert.eph.type === 'ECDH' || cert.eph.type === 'DH')) t('keyexchange', _t('金鑰交換'), _t`具備前向保密（${cert.eph.type} ${cert.eph.name || cert.eph.size || ''}）`);
+  else if (cipher) t('keyexchange', _t('金鑰交換'), _t('沒有前向保密（協商到的加密套件不是 ECDHE／DHE）'), 'B', _t('優先啟用 ECDHE 加密套件。'));
+  if (cipher && proto !== 'TLSv1.3') { if (/GCM|CHACHA20|POLY1305/i.test(cipher)) t('cipher', _t('加密套件'), _t`${clean(cipher, 40)}（認證式加密）`); else t('cipher', _t('加密套件'), _t`${clean(cipher, 40)}（不是認證式加密）`, 'A-', _t('優先使用 AES-GCM 或 ChaCha20-Poly1305。')); }
+  t('weak', _t('過時的加密套件'), _t('未測試：這個環境的加密函式庫不提供 RC4／3DES／匯出級套件，無法主動試探；請用 SSL Labs 補測'));
   if (cert.bits && cert.bits < 2048 && !/^(256|384|521)$/.test(String(cert.bits))) t('keysize', _t('金鑰長度'), _t`${cert.bits} 位元太短`, 'B', _t('改用 2048 位元以上的 RSA 或 ECDSA。'));
   if (versions['TLS 1.0'] || versions['TLS 1.1']) t('legacy', _t('舊版協定'), _t`仍接受 ${['TLS 1.0', 'TLS 1.1'].filter((v) => versions[v]).join(_t('、'))}`, 'B', _t('停用 TLS 1.0 / 1.1。'));
   if (!versions['TLS 1.2'] && !versions['TLS 1.3']) t('modern', _t('現代協定'), _t('不支援 TLS 1.2 或以上'), 'F', _t('啟用 TLS 1.2 與 1.3。'));

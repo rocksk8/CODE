@@ -81,3 +81,17 @@ test('browser: sensitive fields, login pages, focus stealing and a hostile windo
     assert.doesNotThrow(() => analyzeBehaviors([{ url: 'http://x.test/', status: 200, behaviors: e }]));
   } finally { await browser.close(); web.closeAllConnections(); web.close(); }
 });
+
+test('browser: page-wide keyboard listeners are recorded with the script that added them; a third-party one raises the flag, an inline or same-site one does not', async (t) => {
+  let browser; try { browser = await launchBrowser(); } catch { t.skip('no browser'); return; }
+  const other = http.createServer((q, r) => { r.setHeader('content-type', 'text/javascript'); r.setHeader('access-control-allow-origin', '*'); r.end('document.addEventListener("keydown",function(){});window.addEventListener("input",function(){});'); });
+  await new Promise((r) => other.listen(0, '127.0.0.1', r)); const op = other.address().port;
+  const web = http.createServer((q, r) => { r.setHeader('content-type', 'text/html; charset=utf-8'); r.end(q.url === '/own' ? '<script>document.addEventListener("keydown",function(){})</script><input name=q>' : `<input name=q><script src="http://127.0.0.1:${op}/k.js"></script>`); });
+  await new Promise((r) => web.listen(0, 'localhost', r)); const wp = web.address().port;
+  try {
+    const ctx = await browser.newContext(); await ctx.addInitScript(fingerprintHooks); const p = await ctx.newPage();
+    await p.goto(`http://localhost:${wp}/`); const b = await collectBehaviors(p, {}); assert.ok(b.fp.keys.some((k) => k.api === 'keydown' && k.param === 'document' && k.src.includes('/k.js')), JSON.stringify(b.fp.keys));
+    const r = analyzeBehaviors([{ url: `http://localhost:${wp}/`, status: 200, editing: { scripts: [] }, behaviors: b }]); assert.equal(r.flags.keyListenerThirdParty, true); assert.ok(renderBehaviorsMd(r).length > 50);
+    await p.goto(`http://localhost:${wp}/own`); const b2 = await collectBehaviors(p, {}); const r2 = analyzeBehaviors([{ url: `http://localhost:${wp}/own`, status: 200, editing: { scripts: [] }, behaviors: b2 }]); assert.equal(r2.flags.keyListenerThirdParty, false);
+  } finally { await browser.close(); web.closeAllConnections(); other.closeAllConnections(); web.close(); other.close(); }
+});

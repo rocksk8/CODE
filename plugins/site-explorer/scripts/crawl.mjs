@@ -41,6 +41,7 @@ const maxDepth = intOpt(args, 'depth', 2, { min: 0, max: 6 });
 const interactMax = args.includes('--no-interact') ? 0 : intOpt(args, 'interact-pages', 3, { min: 0, max: 30 }); let interactedPages = 0, abProbes = 0; // pages we walk through click/scroll/key states on
 const contentWaitMs = intOpt(args, 'wait', 12000, { min: 0, max: 120000 }); // how long to wait for a script-built page to put something on screen
 const shots = !args.includes('--no-screenshots');
+const perfRuns = intOpt(args, 'perf-runs', 1, { min: 1, max: 7 }); const throttle = opt('throttle', null) === 'mobile';
 let extractRules = null; if (opt('extract', null)) { try { extractRules = parseRules(fs.readFileSync(opt('extract', null), 'utf8')); } catch (e) { console.error(String(e.message).split('\n')[0]); process.exit(1); } }
 let origin = new URL(startUrl).origin; // follows the first redirect (example.com -> www.example.com)
 const host = new URL(startUrl).host.replace(/[^a-z0-9.-]/gi, '_');
@@ -465,6 +466,19 @@ while (pages.length < maxPages) {
     data.status = resp?.status();
     // --- SEO / indexability signals ---
     data.seo = await page.evaluate(extractSeoInPage).catch((e) => { console.log('   (seo data skipped:', e.message.split('\n')[0] + ')'); return null; });
+    if (data.seo?.perf && !auth && (perfRuns > 1 || throttle)) { // repeated (and optionally throttled) cold loads on throwaway pages; the page's numbers become the median of the runs
+      const runs = throttle ? [] : [data.seo.perf];
+      for (let k = 0; k < Math.max(perfRuns, throttle ? 1 : 2) - (throttle ? 0 : 1); k++) {
+        const p2 = await ctx.newPage();
+        try {
+          const cdp = await ctx.newCDPSession(p2); await cdp.send('Network.enable'); await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
+          if (throttle) { await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: (1.6 * 1024 * 1024) / 8, uploadThroughput: (750 * 1024) / 8 }); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 }); }
+          await p2.goto(url, { waitUntil: 'load', timeout: throttle ? 60000 : 30000 }); await p2.waitForTimeout(600);
+          const s2 = await p2.evaluate(extractSeoInPage); if (s2?.perf) runs.push(s2.perf);
+        } catch {} finally { await p2.close().catch(() => {}); }
+      }
+      if (runs.length) { const med = (a) => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; }; const base = runs[0]; const merged = { ...base }; for (const key of ['ttfbMs', 'domContentLoadedMs', 'loadMs', 'fcpMs', 'lcpMs', 'cls', 'tbtMs', 'totalBytes', 'requests']) { const m = med(runs.map((r) => r[key])); if (m != null) merged[key] = m; } data.seo.perf = merged; data.seo.perfRuns = runs.length; data.seo.perfThrottled = throttle; }
+    }
     if (data.seo) {
       const hops = await redirectHops(resp);
       const timing = resp?.request().timing();

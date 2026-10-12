@@ -77,3 +77,14 @@ test('live: a TLS 1.0/1.1-only server is still probed and flagged for legacy pro
     assert.equal(g.versions['TLS 1.2'], false); assert.ok(g.tests.some((x) => x.id === 'legacy'));
   } finally { srv.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('key exchange and cipher: TLS 1.3 and ECDHE pass, small DH and no forward secrecy cap the grade, weak-cipher probing is honestly reported as untested', () => {
+  const cert = { ok: true, daysLeft: 200, validTo: '2030-01-01', hostnameMatches: true, trusted: true, bits: 2048, issuer: 'CA', chain: 3 };
+  const v = { 'TLS 1.2': true, 'TLS 1.3': true };
+  assert.equal(gradeTls(v, { ...cert, protocol: 'TLSv1.3', cipher: 'TLS_AES_256_GCM_SHA384' }).grade, 'A');
+  assert.equal(gradeTls(v, { ...cert, protocol: 'TLSv1.2', cipher: 'ECDHE-RSA-AES128-GCM-SHA256', eph: { type: 'ECDH', name: 'prime256v1', size: 256 } }).grade, 'A');
+  assert.equal(gradeTls(v, { ...cert, protocol: 'TLSv1.2', cipher: 'DHE-RSA-AES128-GCM-SHA256', eph: { type: 'DH', size: 1024 } }).grade, 'B');
+  assert.equal(gradeTls(v, { ...cert, protocol: 'TLSv1.2', cipher: 'AES128-GCM-SHA256', eph: null }).grade, 'B');
+  assert.equal(gradeTls(v, { ...cert, protocol: 'TLSv1.2', cipher: 'ECDHE-RSA-AES128-SHA', eph: { type: 'ECDH', name: 'x', size: 256 } }).grade, 'A-');
+  const g = gradeTls(v, { ...cert, protocol: 'TLSv1.3', cipher: 'TLS_AES_256_GCM_SHA384' }); assert.ok(g.tests.find((x) => x.id === 'weak').result.length > 20 && g.tests.find((x) => x.id === 'weak').cap === null);
+});

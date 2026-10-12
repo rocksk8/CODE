@@ -1,7 +1,7 @@
 // Technology detection: evidence-based, versions when the evidence carries them, nothing from visual style, hostile values stay inert.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectTech, renderTechMd, extractTechInPage } from '../scripts/techstack.mjs';
+import { detectTech, renderTechMd, extractTechInPage, parseTechRules } from '../scripts/techstack.mjs';
 
 const page = (o = {}) => ({ url: 'https://x.test/', status: 200, meta: {}, editing: { scripts: [], stylesheets: [] }, seo: { http: { headers: {} } }, privacy: { cookies: [] }, tech: { globals: {}, markers: [], urls: [] }, ...o });
 const ids = (r) => r.items.map((i) => i.id);
@@ -45,4 +45,21 @@ test('false positives: image paths are not Magento, preact is not React, XSRF-TO
   for (const id of ['magento', 'react', 'laravel', 'vercel', 'github-pages']) assert.ok(!ids(r).includes(id), id);
   const wp = r.items.find((i) => i.id === 'wordpress'); assert.ok(!wp || !wp.version || /^[0-9A-Za-z._+-]+$/.test(wp.version));
   assert.ok(ids(detectTech([page({ editing: { scripts: ['https://x.test/static/version1700/frontend/Magento/luma/en_US/mage/requirejs/mixins.js'], stylesheets: [] } })])).includes('magento'));
+});
+
+test('more built-in rules: payments, captcha, maps, CDNs, hosting, Taiwanese shop platforms', () => {
+  const r = detectTech([page({
+    editing: { scripts: ['https://js.stripe.com/v3/', 'https://www.google.com/recaptcha/api.js', 'https://maps.googleapis.com/maps/api/js?key=x', 'https://cdn.shoplineapp.com/s/x.js', 'https://x.pages.dev/a.js'], stylesheets: [] },
+    seo: { http: { headers: { 'x-served-by': 'cache-tyo123', via: '1.1 varnish', 'x-azure-ref': 'abc', server: 'AmazonS3' } } },
+  })]);
+  for (const id of ['stripe', 'recaptcha', 'google-maps', 'shopline', 'fastly', 'varnish', 'azure-fd', 's3']) assert.ok(ids(r).includes(id), id + ' in ' + ids(r));
+  assert.ok(r.items.length >= 8 && r.items.find((i) => i.id === 'stripe').category === 'service');
+});
+
+test('custom technology rules: strict parsing; they detect; a catastrophic pattern is cut off, not fatal', () => {
+  const rules = parseTechRules(JSON.stringify([{ id: 'acme-cms', name: 'Acme CMS', category: 'cms', url: 'acme-cdn\\.com/v([\\d.]+)/', header: ['x-acme', '.'], cookie: '^acme_' }, { id: 'evil', name: 'Evil', category: 'library', url: '(a|a)*b' }]));
+  const t0 = Date.now();
+  const r = detectTech([page({ editing: { scripts: ['https://acme-cdn.com/v2.3/app.js', 'https://x.test/' + 'a'.repeat(300)], stylesheets: [] }, seo: { http: { headers: { 'x-acme': '1' } } } })], { extraRules: rules });
+  assert.ok(Date.now() - t0 < 3000); const acme = r.items.find((i) => i.id === 'acme-cms'); assert.ok(acme && acme.version === '2.3' && acme.confidence !== 'low'); assert.ok(!ids(r).includes('evil'));
+  for (const bad of ['x', '[]', '[1]', '[{"id":"A","name":"n","category":"cms","url":"x"}]', '[{"id":"a","name":"n","category":"nope","url":"x"}]', '[{"id":"a","name":"n","category":"cms"}]', '[{"id":"a","name":"n","category":"cms","url":"("}]', '[{"id":"a","name":"n","category":"cms","header":["x y","."]}]']) assert.throws(() => parseTechRules(bad), undefined, bad);
 });

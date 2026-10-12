@@ -85,6 +85,8 @@ export async function extractSeoInPage() {
   const nav = performance.getEntriesByType('navigation')[0];
   const lcp = await new Promise((res) => { let v = null; try { new PerformanceObserver((l) => { for (const e of l.getEntries()) v = e; }).observe({ type: 'largest-contentful-paint', buffered: true }); } catch {} setTimeout(() => res(v), 120); });
   const cls = await new Promise((res) => { let s = 0; try { new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) s += e.value; }).observe({ type: 'layout-shift', buffered: true }); } catch {} setTimeout(() => res(s), 120); });
+  // total blocking time: how long the main thread was blocked (long tasks beyond 50 ms) after the first paint — the lab stand-in for "the page feels stuck"
+  const tbt = await new Promise((res) => { let sum = 0, n = 0; const t0 = (performance.getEntriesByType('paint').find((p) => p.name === 'first-contentful-paint') || {}).startTime || 0; try { new PerformanceObserver((l) => { for (const e of l.getEntries()) if (e.startTime >= t0) { sum += Math.max(0, e.duration - 50); n++; } }).observe({ type: 'longtask', buffered: true }); } catch { return res(null); } setTimeout(() => res({ sum: Math.round(sum), n }), 120); });
   const fcp = (performance.getEntriesByType('paint').find((p) => p.name === 'first-contentful-paint') || {}).startTime ?? null;
   const res = performance.getEntriesByType('resource');
   const size = (e) => e.transferSize || e.encodedBodySize || 0;
@@ -95,7 +97,7 @@ export async function extractSeoInPage() {
   const blockingCss = document.querySelectorAll('head link[rel=stylesheet]').length;
   const perf = {
     ttfbMs: nav ? Math.round(nav.responseStart - nav.startTime) : null, domContentLoadedMs: nav ? Math.round(nav.domContentLoadedEventEnd) : null, loadMs: nav ? Math.round(nav.loadEventEnd) : null,
-    fcpMs: fcp != null ? Math.round(fcp) : null, lcpMs: lcp ? Math.round(lcp.startTime) : null, lcpElement: lcp && lcp.element ? lcp.element.tagName.toLowerCase() + (lcp.url ? ' ' + lcp.url.split('/').pop().slice(0, 40) : '') : null, cls: +cls.toFixed(3),
+    fcpMs: fcp != null ? Math.round(fcp) : null, lcpMs: lcp ? Math.round(lcp.startTime) : null, lcpElement: lcp && lcp.element ? lcp.element.tagName.toLowerCase() + (lcp.url ? ' ' + lcp.url.split('/').pop().slice(0, 40) : '') : null, cls: +cls.toFixed(3), tbtMs: tbt ? tbt.sum : null, longTasks: tbt ? tbt.n : null,
     htmlBytes: nav ? (nav.encodedBodySize || nav.decodedBodySize || 0) : 0, requests: res.length + 1, totalBytes: total + (nav ? size(nav) : 0), byType, largest, thirdPartyHosts: [...thirdParty].slice(0, 12), thirdPartyCount: thirdParty.size, renderBlockingScripts: blockingScripts, stylesheetsInHead: blockingCss,
     domNodes: document.getElementsByTagName('*').length,
   };

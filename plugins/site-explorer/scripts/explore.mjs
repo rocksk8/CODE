@@ -50,6 +50,8 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
   --verify             交接包產生後，順便驗證 starter 骨架和原站像不像（逐區塊相似度＋差異圖，結果進儀表板）
   --framework react    交接包之外，另產生 React／Vue／Astro 專案或 shadcn/ui 主題（react|vue|astro|shadcn|all）
   --motion-pages 5     3D／動畫擷取的頁數上限（含起始頁；1 = 只擷取起始頁）
+  --tech-rules <規則.json> 加入你自己的技術辨識規則（辨識公司內部系統或較冷門的工具）
+  --perf-runs 3        速度重複量測次數（取中位數，雜訊較小；預設 1）；--throttle mobile 模擬行動網路與較慢的 CPU
   --archive            每頁另存一個離線可開的單一 HTML（archive.html：CSS 與圖片內嵌、移除腳本；檔案較大）
   --extract <規則.json> 自訂擷取規則：用 CSS 選擇器或 regex 從每頁抽出你要的資料（價格、SKU…），輸出 extractions.csv/json
 
@@ -72,10 +74,10 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
 `;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 { // a misspelled flag must fail loudly: "--fial-on high" silently turning a CI gate off is worse than an error
-  const KNOWN = new Set(['--a11y', '--archive', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
+  const KNOWN = new Set(['--a11y', '--archive', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
   const unknown = args.filter((a) => a.startsWith('--') && !KNOWN.has(a) && !/^--lang=/.test(a));
   if (unknown.length) { const near = (u) => [...KNOWN].find((k) => k.length > 3 && (k.startsWith(u) || u.startsWith(k) || [...u].filter((c) => k.includes(c)).length >= k.length - 2 && Math.abs(k.length - u.length) <= 2)); console.error(_t`不認得的選項：${unknown.join(' ')}${near(unknown[0]) ? _t`（是不是 ${near(unknown[0])}？）` : ''}\n執行 site-explorer explore --help 看全部選項。`); process.exit(1); }
-  if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold', '--sarif', '--junit', '--extract'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
+  if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
 }
 if (!url) {
   const flagsWithValue = new Set(['--max-pages', '--out', '--wait', '--motion-pages', '--fail-on', '--storage-state', '--framework']);
@@ -97,7 +99,10 @@ const approveFlag = args.includes('--approve'), compareFlag = args.includes('--c
 if (approveFlag && compareFlag) { console.error(_t('--approve 和 --compare 不能一起用：先 --compare 確認沒問題，再另外 --approve。')); process.exit(1); }
 if ((approveFlag || compareFlag) && args.includes('--no-health')) { console.error(_t('--approve／--compare 需要健檢，不能和 --no-health 一起用。')); process.exit(1); }
 const visualThresholdOpt = Number(opt('visual-threshold', '0.5')); if (!(visualThresholdOpt >= 0 && visualThresholdOpt <= 100)) { console.error(_t('--visual-threshold 必須是 0–100 的數字（百分比）')); process.exit(1); }
+if (opt('tech-rules', null)) { try { (await import('./techstack.mjs')).parseTechRules(fs.readFileSync(path.resolve(opt('tech-rules', null)), 'utf8')); } catch (e) { console.error(_t`--tech-rules 規則檔有問題：` + String(e.code === 'ENOENT' ? _t('找不到檔案') : e.message).split('\n')[0]); process.exit(1); } }
 if (opt('extract', null)) { try { const rf = path.resolve(opt('extract', null)); (await import('./custom-extract.mjs')).parseRules(fs.readFileSync(rf, 'utf8')); } catch (e) { console.error(_t`--extract 規則檔有問題：` + String(e.code === 'ENOENT' ? _t('找不到檔案') : e.message).split('\n')[0]); process.exit(1); } }
+if (opt('throttle', null) && opt('throttle') !== 'mobile') { console.error(_t('--throttle 目前只支援 mobile。')); process.exit(1); }
+if (opt('perf-runs', null) && !(Number.isInteger(Number(opt('perf-runs'))) && Number(opt('perf-runs')) >= 1 && Number(opt('perf-runs')) <= 7)) { console.error(_t('--perf-runs 必須是 1 到 7 的整數。')); process.exit(1); }
 const maxDropOpt = Number(opt('max-drop', '5')); if (!(maxDropOpt >= 0 && maxDropOpt <= 100)) { console.error(_t('--max-drop 必須是 0–100 的數字')); process.exit(1); }
 const failOnNewOpt = opt('fail-on-new', 'high'); if (!['critical', 'high', 'medium', 'low'].includes(failOnNewOpt)) { console.error(_t('--fail-on-new 需要 critical／high／medium／low 其中之一')); process.exit(1); }
 const budgetFile = opt('budget', null); let budgetCfg = null;
@@ -148,13 +153,13 @@ if (checks.some((c) => c.level === 'fail')) {
   if (!args.includes('--a11y')) rm(path.join(siteDir, 'a11y.json'));
   if (!args.includes('--verify')) rm(path.join(out, 'handoff', 'verify'));
 }
-const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--archive') ? ['--archive'] : []), ...(opt('extract', null) ? ['--extract', path.resolve(opt('extract', null))] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
+const crawlRan = await run(_t('爬取頁面、設計、內容、排版'), 'crawl.mjs', [...findUrls(args), '--max-pages', String(maxPages), '--out', siteRoot, ...authArgs, ...(args.includes('--headed') ? ['--headed'] : []), ...(args.includes('--archive') ? ['--archive'] : []), ...(opt('perf-runs', null) ? ['--perf-runs', opt('perf-runs')] : []), ...(opt('throttle', null) ? ['--throttle', opt('throttle')] : []), ...(opt('extract', null) ? ['--extract', path.resolve(opt('extract', null))] : []), ...(args.includes('--wait') ? ['--wait', String(Math.max(waitMs, 1000))] : [])]);
 const crawlOk = crawlRan && (() => { try { return (JSON.parse(fs.readFileSync(path.join(siteDir, 'site.json'), 'utf8')).pages || []).length > 0; } catch { return false; } })(); // a crawl that exits 0 but saved no page is a failure
 if (crawlOk) await run(_t('整理設計包（tokens、Tailwind、W3C）'), 'export-design.mjs', [siteDir]);
 let healthOk = false;
 if (crawlOk && args.includes('--a11y')) await run(_t('無障礙檢查（axe-core）'), 'a11y.mjs', ['--site', siteDir, ...authArgs, ...(args.includes('--max-pages') ? ['--max-pages', String(maxPages)] : [])]);
 if (crawlOk && !args.includes('--no-health')) healthOk = await run(_t('SEO／爬蟲索引健檢（robots、sitemap、連結、效能、安全）'), 'health-check.mjs', ['--site', siteDir, ...(args.includes('--no-link-check') ? ['--no-link-check'] : [])]);
-if (crawlOk) await run(_t('技術堆疊（CMS、框架、函式庫、主機／CDN）'), 'techstack.mjs', ['--site', siteDir]);
+if (crawlOk) await run(_t('技術堆疊（CMS、框架、函式庫、主機／CDN）'), 'techstack.mjs', ['--site', siteDir, ...(opt('tech-rules', null) ? ['--rules', path.resolve(opt('tech-rules', null))] : [])]);
 if (crawlOk) await run(_t('Figma 匯入檔（版面草稿 SVG）'), 'figma-export.mjs', ['--site', siteDir]);
 if (crawlOk) await run(_t('安全標頭與 TLS 評等'), 'security-grade.mjs', ['--site', siteDir]);
 if (crawlOk) await run(_t('追蹤行為（錄製、指紋、輸入外流）'), 'tracking-behaviors.mjs', ['--site', siteDir]);

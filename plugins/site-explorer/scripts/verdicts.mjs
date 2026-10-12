@@ -10,7 +10,7 @@ const rd = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch
 const GOOD = new Set(['A+', 'A', 'A-', 'B+']), MID = new Set(['B', 'B-', 'C+', 'C']);
 const gradeStatus = (g) => (!g ? 'info' : GOOD.has(g) ? 'ok' : MID.has(g) ? 'warn' : 'bad');
 const worst = (...s) => (s.includes('bad') ? 'bad' : s.includes('warn') ? 'warn' : s.includes('ok') ? 'ok' : 'info');
-export const CWV = { lcpMs: [2500, 4000], cls: [0.1, 0.25], ttfbMs: [800, 1800], fcpMs: [1800, 3000] }; // Google's published "good" / "poor" boundaries
+export const CWV = { lcpMs: [2500, 4000], cls: [0.1, 0.25], ttfbMs: [800, 1800], fcpMs: [1800, 3000], tbtMs: [200, 600] }; // Google's published "good" / "poor" boundaries
 
 /** siteDir = the crawl folder of one site; outDir = the exploration folder (visual.json lives there). Returns [{ id, title, status, headline, next, tab, file }]. */
 export function computeVerdicts(siteDir, outDir = null) {
@@ -43,8 +43,8 @@ export function computeVerdicts(siteDir, outDir = null) {
   }
   const beh = rd(path.join(siteDir, 'tracking-behaviors.json'));
   if (beh?.flags) {
-    const f = beh.flags; const status = f.keystrokeLeak ? 'bad' : f.replay || f.fingerprintThirdParty ? 'warn' : 'ok';
-    const bits = [f.keystrokeLeak && _t('輸入的文字被送到別的網站'), f.replay && _t`有錄製訪客操作的服務（${(beh.replay || []).map((x) => clean(x.name, 20)).slice(0, 3).join(_t('、'))}）`, f.fingerprintThirdParty && _t('第三方腳本在讀取瀏覽器指紋')].filter(Boolean);
+    const f = beh.flags; const status = f.keystrokeLeak ? 'bad' : f.replay || f.fingerprintThirdParty || f.keyListenerThirdParty ? 'warn' : 'ok';
+    const bits = [f.keystrokeLeak && _t('輸入的文字被送到別的網站'), f.replay && _t`有錄製訪客操作的服務（${(beh.replay || []).map((x) => clean(x.name, 20)).slice(0, 3).join(_t('、'))}）`, f.fingerprintThirdParty && _t('第三方腳本在讀取瀏覽器指紋'), f.keyListenerThirdParty && _t('第三方腳本在監聽整頁的鍵盤事件')].filter(Boolean);
     push({ id: 'privacy', title: _t('隱私與追蹤行為'), status, headline: bits.length ? bits.join(_t('；')) : _t('沒有發現錄製、指紋或輸入外流'), next: bits.length ? _t('這是值得查的線索，不是濫用的證據。') : '', tab: 'privacy', file: 'tracking-behaviors.md' });
   }
   const tech = rd(path.join(siteDir, 'techstack.json'));

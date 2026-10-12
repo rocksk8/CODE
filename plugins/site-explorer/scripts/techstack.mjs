@@ -5,6 +5,7 @@
 import { _t } from './i18n.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import { isMain } from './util.mjs';
 import { clean, BANNER } from './untrusted.mjs';
 
@@ -18,10 +19,10 @@ export function extractTechInPage() {
     __NEXT_DATA__: () => !!w.__NEXT_DATA__, __NUXT__: () => !!w.__NUXT__, __remixContext: () => !!w.__remixContext, ___gatsby: () => !!w.___gatsby, Shopify: () => !!w.Shopify,
     wp: () => !!(w.wp && (w.wp.hooks || w.wp.i18n)), Drupal: () => !!w.Drupal, Webflow: () => !!w.Webflow, Wix: () => !!w.wixBiSession || !!w.wixPerformanceMeasurements, Squarespace: () => !!w.Squarespace,
     gsap: () => w.gsap && (w.gsap.version || true), THREE: () => w.THREE && (w.THREE.REVISION || true), bootstrap: () => w.bootstrap && (w.bootstrap.Tooltip?.VERSION || true),
-    htmx: () => !!w.htmx, Alpine: () => !!w.Alpine, Livewire: () => !!w.Livewire, Turbo: () => !!w.Turbo, Stimulus: () => !!w.Stimulus, Ghost: () => !!w.ghost,
+    d3: () => w.d3 && (w.d3.version || true), L: () => w.L && w.L.version && (w.L.version || true), Chart: () => w.Chart && (w.Chart.version || true), moment: () => w.moment && (w.moment.version || true), _lodash: () => w._ && w._.VERSION && (w._.VERSION || true), mapboxgl: () => w.mapboxgl && (w.mapboxgl.version || true), Stripe: () => !!w.Stripe, grecaptcha: () => !!w.grecaptcha, hcaptcha: () => !!w.hcaptcha, Intercom: () => !!w.Intercom, htmx: () => !!w.htmx, Alpine: () => !!w.Alpine, Livewire: () => !!w.Livewire, Turbo: () => !!w.Turbo, Stimulus: () => !!w.Stimulus, Ghost: () => !!w.ghost,
   };
   for (const [k, f] of Object.entries(G)) { const v = val(f); if (v !== null) out.globals[k] = v; }
-  const MARK = { '#__next': 'next-root', '#__nuxt': 'nuxt-root', '#___gatsby': 'gatsby-root', '[data-reactroot]': 'react-root', '[data-v-app]': 'vue3-root', 'astro-island': 'astro-island', '[data-sveltekit-preload-data]': 'sveltekit', '[ng-version]': 'angular', '[data-wf-page]': 'webflow', '[data-framer-name]': 'framer', '.wp-block-group,[class*="wp-block-"]': 'wp-blocks', 'body.woocommerce': 'woocommerce', '[data-turbo]': 'turbo', '[x-data]': 'alpine', 'wire\\:id,[wire\\:id]': 'livewire', '[data-hx-get],[hx-get]': 'htmx' };
+  const MARK = { '[class*="svelte-"]': 'svelte', '[q\\:container]': 'qwik', '#__next': 'next-root', '#__nuxt': 'nuxt-root', '#___gatsby': 'gatsby-root', '[data-reactroot]': 'react-root', '[data-v-app]': 'vue3-root', 'astro-island': 'astro-island', '[data-sveltekit-preload-data]': 'sveltekit', '[ng-version]': 'angular', '[data-wf-page]': 'webflow', '[data-framer-name]': 'framer', '.wp-block-group,[class*="wp-block-"]': 'wp-blocks', 'body.woocommerce': 'woocommerce', '[data-turbo]': 'turbo', '[x-data]': 'alpine', 'wire\\:id,[wire\\:id]': 'livewire', '[data-hx-get],[hx-get]': 'htmx' };
   for (const [sel, name] of Object.entries(MARK)) { try { if (document.querySelector(sel)) out.markers.push(name); } catch {} }
   out.ngVersion = document.querySelector('[ng-version]')?.getAttribute('ng-version')?.slice(0, 20) || null;
   out.generator = document.querySelector('meta[name=generator]')?.content?.slice(0, 100) || null;
@@ -87,13 +88,96 @@ const RULES = [
   ['netlify', 'Netlify', 'hosting', { header: ['x-nf-request-id', /./], url: /\.netlify\.(app|com)/i }],
   ['github-pages', 'GitHub Pages', 'hosting', { header: ['x-github-request-id', /./] }],
   ['wpengine', 'WP Engine', 'hosting', { header: ['x-powered-by', /wp engine/i] }],
+  ['svelte', 'Svelte', 'framework', { marker: 'svelte', url: /\/svelte(-[a-z]+)?@|\/svelte\.js/i }],
+  ['solid', 'SolidJS', 'framework', { url: /\/solid-js(@|\/)/i }],
+  ['preact', 'Preact', 'framework', { url: /preact(\.min|\.module)?\.js|\/preact@/i }],
+  ['qwik', 'Qwik', 'framework', { url: /\/build\/q-[a-z0-9]+\.js/i, marker: 'qwik' }],
+  ['docusaurus', 'Docusaurus', 'framework', { generator: /docusaurus v?([\d.]+)?/i }],
+  ['vitepress', 'VitePress', 'framework', { generator: /vitepress v?([\d.]+)?/i }],
+  ['hugo', 'Hugo', 'framework', { generator: /hugo ([\d.]+)?/i }],
+  ['jekyll', 'Jekyll', 'framework', { generator: /jekyll v?([\d.]+)?/i }],
+  ['eleventy', 'Eleventy', 'framework', { generator: /eleventy v?([\d.]+)?/i }],
+  ['hexo', 'Hexo', 'framework', { generator: /hexo v?([\d.]+)?/i }],
+  ['django', 'Django', 'framework', { cookie: /^csrftoken$/ }],
+  ['spring', 'Spring / Java', 'framework', { cookie: /^JSESSIONID$/ }],
+  ['nestjs', 'NestJS', 'framework', { header: ['x-powered-by', /nestjs/i] }],
+  ['strapi', 'Strapi', 'cms', { header: ['x-powered-by', /strapi/i] }],
+  ['craft', 'Craft CMS', 'cms', { header: ['x-powered-by', /craft cms/i], cookie: /^CraftSessionId$/ }],
+  ['prestashop', 'PrestaShop', 'commerce', { generator: /prestashop/i, url: /\/themes\/[^/]+\/assets\/cache\//i, cookie: /^PrestaShop-/ }],
+  ['opencart', 'OpenCart', 'commerce', { url: /\/catalog\/view\/(theme|javascript)\//i, cookie: /^OCSESSID$/ }],
+  ['shopline', 'SHOPLINE', 'commerce', { url: /shoplineapp\.com|shopline\.(tw|app)|cdn\.shoplineapp/i }],
+  ['cyberbiz', 'Cyberbiz', 'commerce', { url: /cyberbiz\.(co|io)/i }],
+  ['91app', '91APP', 'commerce', { url: /91app\.(com|io)|nine-one\.com/i }],
+  ['d3', 'D3.js', 'library', { global: 'd3', url: /\/d3(\.v\d+)?(\.min)?\.js|\/d3@/i }],
+  ['chartjs', 'Chart.js', 'library', { global: 'Chart', url: /chart(\.umd)?(\.min)?\.js|\/chart\.js@/i }],
+  ['leaflet', 'Leaflet', 'library', { global: 'L', url: /leaflet(\.min)?\.(js|css)|\/leaflet@/i }],
+  ['mapbox', 'Mapbox GL', 'library', { global: 'mapboxgl', url: /api\.mapbox\.com|mapbox-gl/i }],
+  ['google-maps', 'Google Maps', 'service', { url: /maps\.(googleapis|google)\.com\/maps\/api|maps\.gstatic\.com/i }],
+  ['moment', 'Moment.js', 'library', { global: 'moment', url: /moment(\.min)?\.js|\/moment@/i }],
+  ['lodash', 'Lodash', 'library', { global: '_lodash', url: /lodash(\.min)?\.js|\/lodash@/i }],
+  ['axios', 'Axios', 'library', { url: /\/axios(\.min)?\.js|\/axios@/i }],
+  ['slick', 'Slick', 'library', { url: /slick(\.min)?\.(js|css)|\/slick-carousel/i }],
+  ['aos', 'AOS (Animate On Scroll)', 'animation', { url: /\/aos(\.min)?\.(js|css)|\/aos@/i }],
+  ['anime', 'anime.js', 'animation', { url: /anime(\.min)?\.js|\/animejs/i }],
+  ['framer-motion', 'Framer Motion', 'animation', { url: /framer-motion/i }],
+  ['scrolltrigger', 'ScrollTrigger / ScrollSmoother', 'animation', { url: /ScrollTrigger|ScrollSmoother/i }],
+  ['lenis', 'Lenis', 'animation', { url: /\/lenis(\.min)?\.js|\/lenis@|studio-freight\/lenis/i }],
+  ['bulma', 'Bulma', 'library', { url: /bulma(\.min)?\.css|\/bulma@/i }],
+  ['mui', 'Material UI', 'library', { url: /@mui\/|material-ui/i }],
+  ['materialize', 'Materialize', 'library', { url: /materialize(\.min)?\.(js|css)/i }],
+  ['semantic-ui', 'Semantic UI / Fomantic', 'library', { url: /semantic(\.min)?\.(js|css)|fomantic/i }],
+  ['recaptcha', 'reCAPTCHA', 'service', { global: 'grecaptcha', url: /google\.com\/recaptcha|gstatic\.com\/recaptcha/i }],
+  ['hcaptcha', 'hCaptcha', 'service', { global: 'hcaptcha', url: /hcaptcha\.com/i }],
+  ['turnstile', 'Cloudflare Turnstile', 'service', { url: /challenges\.cloudflare\.com\/turnstile/i }],
+  ['stripe', 'Stripe', 'service', { global: 'Stripe', url: /js\.stripe\.com/i }],
+  ['paypal', 'PayPal', 'service', { url: /paypal(objects)?\.com\/(sdk|js)/i }],
+  ['intercom', 'Intercom', 'service', { global: 'Intercom', url: /widget\.intercom\.io|js\.intercomcdn\.com/i }],
+  ['zendesk', 'Zendesk', 'service', { url: /static\.zdassets\.com|zendesk\.com\/embeddable/i }],
+  ['crisp', 'Crisp', 'service', { url: /client\.crisp\.chat/i }],
+  ['tawk', 'Tawk.to', 'service', { url: /embed\.tawk\.to/i }],
+  ['line-login', 'LINE (登入／官方帳號)', 'service', { url: /static\.line-scdn\.net|liff\.line\.me|line\.me\/(R|ti)\//i }],
+  ['youtube', 'YouTube 嵌入', 'service', { url: /youtube(-nocookie)?\.com\/(embed|iframe_api)|ytimg\.com\/vi\//i }],
+  ['vimeo', 'Vimeo 嵌入', 'service', { url: /player\.vimeo\.com/i }],
+  ['sentry', 'Sentry', 'service', { url: /browser\.sentry-cdn\.com|sentry\.io\/api/i }],
+  ['apache-tomcat', 'Apache Tomcat', 'server', { header: ['server', /apache-coyote|tomcat/i] }],
+  ['gws', 'Google Frontend', 'cdn', { header: ['server', /google frontend|gws|esf/i] }],
+  ['azure-fd', 'Azure Front Door', 'cdn', { header: ['x-azure-ref', /./] }],
+  ['s3', 'Amazon S3', 'hosting', { header: ['server', /amazons3/i] }],
+  ['heroku', 'Heroku', 'hosting', { header: ['via', /vegur/i] }],
+  ['flyio', 'Fly.io', 'hosting', { header: ['fly-request-id', /./] }],
+  ['render', 'Render', 'hosting', { header: ['x-render-origin-server', /./] }],
+  ['kinsta', 'Kinsta', 'hosting', { header: ['x-kinsta-cache', /./] }],
+  ['pantheon', 'Pantheon', 'hosting', { header: ['x-pantheon-styx-hostname', /./] }],
+  ['cloudflare-pages', 'Cloudflare Pages / Workers', 'hosting', { url: /\.pages\.dev|\.workers\.dev/i }],
+  ['varnish', 'Varnish', 'cdn', { header: ['via', /varnish/i] }],
+  ['sucuri', 'Sucuri', 'cdn', { header: ['x-sucuri-id', /./] }],
+  ['imperva', 'Imperva Incapsula', 'cdn', { header: ['x-iinfo', /./], cookie: /^incap_ses_/ }],
 ];
 
-const CATEGORY = () => ({ cms: _t('內容管理系統／建站平台'), commerce: _t('電商'), framework: _t('前端／後端框架'), library: _t('函式庫'), animation: _t('動畫／3D'), fonts: _t('字型服務'), server: _t('網頁伺服器'), language: _t('程式語言'), cdn: _t('CDN'), hosting: _t('主機／部署平台') });
-const ORDER = ['cms', 'commerce', 'framework', 'library', 'animation', 'fonts', 'language', 'server', 'cdn', 'hosting'];
+const CATEGORY = () => ({ cms: _t('內容管理系統／建站平台'), commerce: _t('電商'), framework: _t('前端／後端框架'), library: _t('函式庫'), animation: _t('動畫／3D'), fonts: _t('字型服務'), server: _t('網頁伺服器'), language: _t('程式語言'), cdn: _t('CDN'), hosting: _t('主機／部署平台'), service: _t('第三方服務（付款、客服、驗證碼、地圖…）') });
+const ORDER = ['cms', 'commerce', 'framework', 'library', 'animation', 'fonts', 'service', 'language', 'server', 'cdn', 'hosting'];
+
+/** User-supplied rules (--tech-rules rules.json): [{ "id": "acme-cms", "name": "Acme CMS", "category": "cms", "url": "acme-cdn\\.com", "header": ["x-acme", "."], "cookie": "^acme_", "generator": "Acme ([\\d.]+)" }].
+ *  Strict validation; the patterns run in a sandboxed context with a time limit, so a bad pattern cannot hang the run. */
+export function parseTechRules(text) {
+  let j; try { j = JSON.parse(text); } catch { throw new Error(_t('技術規則檔不是有效的 JSON。')); }
+  if (!Array.isArray(j) || !j.length || j.length > 100) throw new Error(_t('技術規則檔必須是 1 到 100 條規則的陣列。'));
+  return j.map((r, i) => {
+    if (!r || typeof r !== 'object') throw new Error(_t`第 ${i + 1} 條規則必須是物件。`);
+    if (!/^[a-z0-9-]{1,40}$/.test(String(r.id || ''))) throw new Error(_t`第 ${i + 1} 條規則的 id 只能用小寫英數字與連字號。`);
+    if (typeof r.name !== 'string' || !r.name.trim() || r.name.length > 60) throw new Error(_t`第 ${i + 1} 條規則的 name 必須是 60 字以內的文字。`);
+    if (!ORDER.includes(r.category)) throw new Error(_t`第 ${i + 1} 條規則的 category 必須是：${ORDER.join(', ')}。`);
+    const pat = (v, what) => { if (v == null) return null; if (typeof v !== 'string' || !v || v.length > 200) throw new Error(_t`第 ${i + 1} 條規則的 ${what} 必須是 200 字以內的正規表示式字串。`); try { new RegExp(v, 'i'); } catch { throw new Error(_t`第 ${i + 1} 條規則的 ${what} 無法解析。`); } return v; };
+    const header = r.header == null ? null : (Array.isArray(r.header) && r.header.length === 2 && typeof r.header[0] === 'string' && /^[a-z0-9-]{1,40}$/i.test(r.header[0]) ? [r.header[0].toLowerCase(), pat(r.header[1], 'header')] : (() => { throw new Error(_t`第 ${i + 1} 條規則的 header 必須是 ["標頭名稱", "正規表示式"]。`); })());
+    const rule = { id: r.id, name: r.name.trim(), category: r.category, url: pat(r.url, 'url'), cookie: pat(r.cookie, 'cookie'), generator: pat(r.generator, 'generator'), header };
+    if (!rule.url && !rule.cookie && !rule.generator && !rule.header) throw new Error(_t`第 ${i + 1} 條規則至少要有 url、header、cookie、generator 其中一個。`);
+    return rule;
+  });
+}
+const vmFirst = (pattern, inputs) => { try { return vm.runInNewContext('(() => { const re = new RegExp(p, "i"); for (const x of inputs) { const m = re.exec(x); if (m) return [x, m[1] || null]; } return null; })()', { p: pattern, inputs: inputs.slice(0, 400).map((x) => String(x).slice(0, 400)) }, { timeout: 300 }); } catch { return null; } };
 
 /** pages = page.json objects. `tech` = result of extractTechInPage per page may be stored as page.tech. Pure and offline. */
-export function detectTech(pages) {
+export function detectTech(pages, { extraRules = [] } = {}) {
   const live = (pages || []).filter((p) => p && (!p.status || p.status < 400));
   const found = new Map();
   const add = (rule, how, evidence, version) => {
@@ -112,6 +196,13 @@ export function detectTech(pages) {
       if (r.cookie) { const c = cookies.find((n) => r.cookie.test(n)); if (c) add(rule, 'cookie', `cookie: ${c.slice(0, 40)}`, null); }
       if (r.global && t.globals && t.globals[r.global] !== undefined) add(rule, 'global', `window.${r.global}`, typeof t.globals[r.global] === 'string' ? t.globals[r.global] : null);
       if (r.marker && (t.markers || []).includes(r.marker)) add(rule, 'marker', `DOM: ${r.marker}`, rule[0] === 'angular' ? t.ngVersion : null);
+    }
+    for (const r of extraRules) {
+      const rule = [r.id, r.name, r.category];
+      if (r.url) { const m = vmFirst(r.url, urls); if (m) add(rule, 'url', m[0].replace(/^https?:\/\//, '').slice(0, 90), m[1]); }
+      if (r.generator && generator) { const m = vmFirst(r.generator, [generator]); if (m) add(rule, 'generator', `generator: ${generator.slice(0, 60)}`, m[1]); }
+      if (r.header) { const v = headers[r.header[0]]; if (v !== undefined) { const m = vmFirst(r.header[1], [String(v)]); if (m) add(rule, 'header', `${r.header[0]}: ${String(v).slice(0, 60)}`, m[1]); } }
+      if (r.cookie) { const m = vmFirst(r.cookie, cookies); if (m) add(rule, 'cookie', `cookie: ${m[0].slice(0, 40)}`, null); }
     }
     // a library version in a file name: jquery-3.7.1.min.js, bootstrap@5.3.2
     for (const u of urls) { const m = u.match(/(jquery|bootstrap|vue|react|react-dom|three|gsap|swiper)[-@.](\d+\.\d+(?:\.\d+)?)/i); if (m) { const f = found.get(m[1].toLowerCase() === 'react-dom' ? 'react' : m[1].toLowerCase()); if (f) f.versions.add(m[2]); } }
@@ -139,7 +230,9 @@ if (isMain(import.meta.url)) {
   if (!dir || !fs.existsSync(path.join(dir, 'site.json'))) { console.error(_t('用法：techstack.mjs --site <含 site.json 的爬取資料夾>')); process.exit(1); }
   const site = JSON.parse(fs.readFileSync(path.join(dir, 'site.json'), 'utf8'));
   const pages = (site.pages || []).map((p) => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'pages', p.slug, 'page.json'), 'utf8')); } catch { return null; } }).filter(Boolean);
-  const r = detectTech(pages);
+  const ri = process.argv.indexOf('--rules'); let extraRules = [];
+  if (ri > 0) { try { extraRules = parseTechRules(fs.readFileSync(process.argv[ri + 1], 'utf8')); } catch (e) { console.error(String(e.code === 'ENOENT' ? _t('找不到技術規則檔') : e.message).split('\n')[0]); process.exit(1); } }
+  const r = detectTech(pages, { extraRules });
   fs.writeFileSync(path.join(dir, 'techstack.json'), JSON.stringify(r, null, 2));
   fs.writeFileSync(path.join(dir, 'techstack.md'), renderTechMd(r) + '\n');
   console.log(_t`技術堆疊：${r.items.map((x) => x.name + (x.version ? ' ' + x.version : '')).slice(0, 12).join(_t('、')) || _t('（沒有辨識出）')} → ${path.join(dir, 'techstack.md')}`);
