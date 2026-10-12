@@ -40,6 +40,7 @@ test('dashboard: logo, grouped sidebar with icons, page title and description pe
 });
 
 test('dashboard: history tab draws a health-score trend once the database holds two runs of the same site', async (t) => {
+  try { await import('node:sqlite'); } catch { return t.skip('node:sqlite needs Node >= 22.13'); }
   let have = true; try { const { launchBrowser } = await import('../scripts/launch.mjs'); await (await launchBrowser()).close(); } catch { have = false; }
   if (!have) return t.skip('no browser');
   const site = http.createServer((q, r) => { if (q.url === '/robots.txt') { r.statusCode = 404; return r.end(); } r.setHeader('content-type', 'text/html; charset=utf-8'); r.end('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Trend test</title></head><body><h1>Hello</h1><p>Words.</p></body></html>'); });
