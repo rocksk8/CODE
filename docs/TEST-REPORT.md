@@ -67,7 +67,7 @@ These could not be exercised in the build environment, so they are untested here
 - Heuristics (instruction-like text detection, tracker list of 39 services, destructive-link patterns) are best effort.
 - With `--header`, each request is fetched by the tool first (so a redirected request never carries the secret): live event streams and media skip that layer, and large downloads are held in memory.
 - `--har`, `--warc` and `--archive` are not recorded for logged-in explorations (cookie file, storage state).
-- On Windows, the 3D / animation capture works but is slow (about 75 seconds for one small page in the GitHub runner; the Linux runner takes a few seconds), so the tests that capture several pages get a longer time limit there.
+- On Windows, the 3D / animation capture works but is slow (about 75 seconds for one small page on the GitHub Windows runner, against about 30 seconds on a Linux machine here), so the tests that capture several pages get a longer time limit there.
 - The technology rules (about 120 plus your own) are far fewer than a fingerprint database such as Wappalyzer's; the performance numbers are Playwright lab data, not a Lighthouse score.
 
 ## 7. Pull requests behind this report
