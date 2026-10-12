@@ -66,7 +66,7 @@ test('safe-out: a lone runs.json does not make a foreign folder "ours"', async (
 
 test('explore --json: early failures still leave one parseable JSON document on stdout', () => {
   const bin = path.join(root, 'bin', 'site-explorer.mjs');
-  for (const extra of [['--max-pages', '0'], ['--fail-on', 'bogus'], ['--out', '/etc/hostname/y']]) {
+  for (const extra of [['--max-pages', '0'], ['--fail-on', 'bogus'], ...(process.platform === 'win32' ? [] : [['--out', '/etc/hostname/y']])]) { // (a POSIX-only path: on Windows it is just a folder on the current drive)
     const r = spawnSync(process.execPath, [bin, 'https://example.com', '--json', ...extra, '--lang', 'en'], { encoding: 'utf8', timeout: 30000 });
     assert.equal(r.status, 1, extra.join(' '));
     const j = JSON.parse(r.stdout); assert.equal(j.ok, false); assert.equal(j.exitCode, 1); assert.ok(j.error.length > 5);

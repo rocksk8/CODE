@@ -18,7 +18,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 let server, port, dead, deadPort, tmp, haveBrowser = true, site, H;
 const run = (script, args) => new Promise((resolve) => {
   const p = spawn(process.execPath, [path.join(root, 'scripts', script), ...args], { env: process.env });
-  let out = ''; const kill = setTimeout(() => p.kill(), 120000);
+  let out = ''; const kill = setTimeout(() => p.kill(), process.platform === "win32" ? 600000 : 120000);
   p.stdout.on('data', (d) => (out += d)); p.stderr.on('data', (d) => (out += d)); p.on('close', (status) => { clearTimeout(kill); resolve({ status, out }); });
 });
 const J = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));

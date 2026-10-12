@@ -1,0 +1,20 @@
+name: win-diag
+# Short diagnostic runs on a Windows runner (kept separate from the 30-minute suite). Reported separately; never blocks a merge.
+on:
+  push: { branches: ['claude/**'] }
+permissions: { contents: read }
+jobs:
+  motion:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults: { run: { shell: bash, working-directory: plugins/site-explorer } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: plugins/site-explorer/package-lock.json }
+      - run: npm ci
+      - run: npm install --no-save three@0.170.0
+      - run: npx playwright-core install chromium
+      - name: 3D / animation capture on Windows
+        working-directory: .
+        run: node .github/diag/motion.mjs
