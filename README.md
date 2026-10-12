@@ -265,6 +265,8 @@ AI 只能讀文字和圖片。所以：
 
 **畫面情境與審核**：`--scenarios 情境.json` 定義「先點、懸停、捲動、打字…再截圖」的畫面（例如選單展開、下拉選單），`--hide '.clock'` 隱藏一直在變的區塊；它們和整頁截圖一起存進基準、一起比對。比對有差異時產生 `visual-review.html`——逐張拖曳滑桿比較改版前後，並附上「核准這張」的指令；`--approve-visual home:mobile,scenario:menu-open`（或 `all`）只把指定的截圖更新為新基準。情境只在網站自己的來源上執行、所有非 GET 請求都會被擋下、不能按 Enter。
 
+**儀表板外觀**：頂部深色列放公司 LOGO 與健檢分數；左側是分組導覽（開始／看網站／檢查／比較／交付），每個分頁都有圖示、標題與一句話說明；配色取自 LOGO（黃、橘、青綠、藍），支援淺色與深色模式，手機上導覽會變成橫向捲動，列印時只輸出內容。要換成別的 LOGO，取代 `plugins/site-explorer/scripts/report/brand/` 裡的 `logo-on-dark.png`（白色字樣、透明背景）與 `mark.png`（只有圓環）即可。
+
 **最該先處理的 3 件事**：每次探索結束時，主控台、儀表板總覽最上方，和 `site/<網站>/top-fixes.md` 都會列出依「影響大小 × 影響頁數 ÷ 修起來的難度」排出的前 3 項問題（影響大又容易修的排在前面，每項標示很快／需要一點時間／較費工；`top-fixes.md` 列前 10 項）（來自健檢、安全設定、無障礙），每項附一段可以直接貼給 AI 或工程師的修正指令。完整清單仍在 `health.md`。
 
 **HAR 網路紀錄**：`--har` 每頁另存 `network.har`（HAR 1.2：每個請求的網址、狀態、大小與時間，可用瀏覽器開發者工具的 Network 面板或任何 HAR 檢視器開啟）。不含回應內容與 Cookie；Authorization、Cookie、API 金鑰、`--header` 給的標頭，以及網址裡名稱看起來像密鑰的參數值（token、key、session、sig、code 等；也包含 Referer 與 Location 標頭裡的網址）都會換成 `[redacted]`；登入狀態的探索不錄。

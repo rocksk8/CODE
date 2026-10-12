@@ -141,18 +141,21 @@ const read = (f) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.
 const clientSrc = read('report-client.js') + '\n' + read('report-checks.js');
 // English dashboards carry the part of the dictionary that the browser-side code uses (keys are the Chinese source strings)
 const enDict = Object.fromEntries(Object.entries(dictionary()).filter(([k]) => WHY_KEYS.includes(k) || (() => { const piece = k.split('{}').sort((a, b) => b.length - a.length)[0]; return piece && clientSrc.includes(piece); })()));
+const asset = (f) => 'data:image/png;base64,' + fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'report', 'brand', f)).toString('base64');
+const LOGO = asset('logo-on-dark.png'), MARK = asset('mark.png');
 const html = `<!doctype html>
 <html lang="${htmlLang()}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file: 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; media-src file: 'self' data:"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${_t('Site Explorer 報告')}</title>
+<title>${_t('Site Explorer 報告')}</title><link rel="icon" href="${MARK}">
 <style>
 ${read('report.css')}
 </style></head><body>
-<header><h1>🔍 ${_t('網站探索報告')}</h1><div class="sub" id="sub"></div></header>
-<nav><div class="in" id="tabs"></div></nav>
+<header><a class="brand" href="#overview" aria-label="${_t('回到總覽')}"><img class="logo" src="${LOGO}" alt=""></a><span class="vr"></span><div class="ttl"><h1>${_t('網站探索報告')}</h1><div class="sub" id="sub"></div></div><div class="tools" id="tools"></div></header>
+<nav aria-label="${_t('報告章節')}"><div class="in" id="tabs" role="tablist"></div></nav>
 <main>
+<div class="pagehead" id="pagehead"><div class="crumb" id="pcrumb"></div><h2 id="ptitle"></h2><p id="pdesc"></p></div>
 <section id="s-overview"></section><section id="s-design"></section><section id="s-layout"></section>
 <section id="s-content"></section><section id="s-motion"></section><section id="s-edit"></section><section id="s-health"></section><section id="s-security"></section><section id="s-perf"></section><section id="s-privacy"></section><section id="s-tech"></section><section id="s-visual"></section><section id="s-extract"></section><section id="s-history"></section><section id="s-export"></section><section id="s-data"></section><section id="s-about"></section>
-</main><div class="toast" id="toast"></div>
+</main><footer class="foot"><img src="${MARK}" alt=""><span>${_t('網站探索報告由 Site Explorer 產生；結果是依公開資訊與實測做的檢查，請由專人複核後再採用。')}</span><span class="sp"></span><span id="foot-date"></span></footer><div class="toast" id="toast"></div>
 <script id="data" type="application/json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>
 <script>window.__EN=${JSON.stringify(enDict).replace(/</g, '\\u003c')}</script>
 <script>
