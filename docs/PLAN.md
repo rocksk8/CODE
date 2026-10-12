@@ -34,6 +34,7 @@
 | 8 | 單項深度（開發者）：技術辨識、效能、TLS、HTML 驗證 | 逐項補強並各自有測試。已做：瀏覽器快取政策、圖片未指定寬高、畫面下方圖片提前載入、最大圖片延遲載入、HTTP/1.1 偵測、未使用的 JS／CSS（Chromium 覆蓋率）、HTML 驗證新增 6 種明確錯誤（id 含空白、lang 格式、input type、圖片寬高單位、巢狀表單、多個 title）（連同先前的 TLS 套件、約 175 條技術規則） | 每項有正反測試 | 已完成 |
 | 9 | 爬蟲看到的 vs 頁面實際內容 | 同一頁比對：原始 HTML 與渲染後文字、不同爬蟲身分（Googlebot、Bingbot、GPTBot、ClaudeBot）的回應、結構化資料值與畫面、canonical／hreflang | 測試站：只有腳本才有的文字、被擋的 AI 爬蟲、對 Googlebot 不同的內容、價格不一致、canonical／hreflang 壞掉都被找出，正常頁面不報 | 已完成 |
 | 10 | 超時與資源保護 | 每階段時間上限＋整體上限、超過 90 秒沒訊息的提醒、可用記憶體過低時停止該階段、CPU 長時間滿載提醒；3D 擷取有自己的時間預算與進度行，慢的頁面改用較省的取樣 | `guard` 單元測試；真的跑一次探索，階段超時被停止並在結尾列出通知 | 已完成 |
+| 11 | 變差時通知＋排程 | `--webhook`（Slack／Teams／Discord 格式的 JSON）搭配 `--notify-on drop|issues|always`；`schedule` 指令印出 Windows 工作排程器／cron／GitHub Actions 的設定（不自動改使用者電腦） | 單元測試＋本機 webhook 伺服器收到摘要；第一次執行不誤報 | 已完成（實際 Slack／Teams 收訊未驗證） |
 
 ## 不在範圍內
 - 託管雲端服務與帳號系統（需要伺服器與維運，不是這個工具的方向）。

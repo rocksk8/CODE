@@ -24,6 +24,8 @@ site-explorer check https://example.com   # fastest: know what to fix first with
 site-explorer https://example.com         # full: design, 3D / animation, health check, handoff package
 ```
 
+**Get told when a site gets worse**: `site-explorer check https://your-site --webhook <Slack / Teams / Discord webhook URL>` sends a summary (score, change, top 3 things) when the score fell by 5 points or more since the last run or high / critical problems increased (`--notify-on always` every time, `issues` whenever there are high / critical problems). To run it every day: `site-explorer schedule https://your-site --every day --at 08:30` prints the command for Windows Task Scheduler, cron and GitHub Actions (it never changes your computer itself).
+
 **When a run takes too long or eats resources**: every stage has a time limit (crawl 30 min, 3D 25 min, others 10–20 min; 120 min for the whole run). Past it you get a "⏱ Timeout notice", that stage is stopped and the rest continue. If available memory stays under 128 MB (or 2 %) for 30 s a "🧠 Low-memory notice" appears and the stage is stopped so the computer does not freeze (on macOS it only warns, because its "available memory" figure is unreliable). Sustained full CPU prints a "🔥" notice, and 90 s without output prints "⏳ Still running". Tune with `SITE_EXPLORER_STAGE_MINUTES` and `SITE_EXPLORER_MAX_MINUTES`. **If Chinese text is garbled in a Windows terminal**, run `chcp 65001` first or add `--lang en`.
 
 You get a folder: double-click `dashboard.html` for the overview; give the whole `handoff/` folder to an AI and paste the prompt from `PROMPT.md` — it can start building pages and motion without you writing any briefing.

@@ -53,6 +53,7 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
   --framework react    交接包之外，另產生 React／Vue／Astro 專案或 shadcn/ui 主題（react|vue|astro|shadcn|all）
   --motion-pages 30    3D／動畫擷取的頁數上限（含起始頁；預設是爬到的每一頁都擷取；1 = 只擷取起始頁）
   --tech-rules <規則.json> 加入你自己的技術辨識規則（辨識公司內部系統或較冷門的工具）
+  --webhook <網址>     跑完後若網站變差，就把摘要（分數、變化、前 3 件事）POST 給這個網址（Slack／Teams／Discord 的 webhook 都可以）；--notify-on drop|issues|always 決定何時送（預設 drop：分數掉了 --max-drop 分以上，或高／緊急問題變多）
   --brand-guide        另外產生可列印的品牌手冊（design-bundle/brand-guide.html 與 .pdf：顏色、字型、間距、對比）
   --tokens <檔案>      用你的設計規範（W3C Design Tokens 的 JSON）檢查網站的顏色、圓角、字級有沒有符合（輸出 token-check.md）
   --max-off-token <百分比> 不符合的比例超過這個值就以結束代碼 4 結束（要搭配 --tokens）
@@ -87,7 +88,7 @@ const USAGE = _t`用法：site-explorer explore <網址> [更多網址…] [選�
 `;
 if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
 { // a misspelled flag must fail loudly: "--fial-on high" silently turning a CI gate off is worse than an error
-  const KNOWN = new Set(['--a11y', '--archive', '--warc', '--har', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-crawler-view', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--tokens', '--max-off-token', '--brand-guide', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--fail-on-new', '--budget']); // (--lang=xx is normalised below)
+  const KNOWN = new Set(['--a11y', '--archive', '--warc', '--har', '--fail-on', '--framework', '--headed', '--help', '-h', '--json', '--max-pages', '--motion-pages', '--no-db', '--no-handoff', '--no-health', '--no-crawler-view', '--no-link-check', '--no-motion', '--no-visual', '--no-open', '--no-standalone', '--open', '--out', '--storage-state', '--verify', '--wait', '--yes', '--lang', '--approve', '--compare', '--baseline', '--max-drop', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--tokens', '--max-off-token', '--brand-guide', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--fail-on-new', '--budget', '--webhook', '--notify-on']); // (--lang=xx is normalised below)
   const unknown = args.filter((a) => a.startsWith('--') && !KNOWN.has(a) && !/^--lang=/.test(a));
   if (unknown.length) { const near = (u) => [...KNOWN].find((k) => k.length > 3 && (k.startsWith(u) || u.startsWith(k) || [...u].filter((c) => k.includes(c)).length >= k.length - 2 && Math.abs(k.length - u.length) <= 2)); console.error(_t`不認得的選項：${unknown.join(' ')}${near(unknown[0]) ? _t`（是不是 ${near(unknown[0])}？）` : ''}\n執行 site-explorer explore --help 看全部選項。`); process.exit(1); }
   if (args.some((a, i) => ['--out', '--storage-state', '--framework', '--fail-on', '--baseline', '--max-drop', '--fail-on-new', '--budget', '--visual-threshold', '--sarif', '--junit', '--extract', '--tech-rules', '--perf-runs', '--throttle', '--scenarios', '--hide', '--approve-visual', '--tokens', '--max-off-token', '--cookie-file', '--header', '--header-file', '--basic-auth-file', '--browser', '--browser'].includes(args[i - 1]) && a === '')) { console.error(_t('選項的值不能是空的。')); process.exit(1); }
@@ -123,6 +124,9 @@ const framework = opt('framework', null);
 if (framework && !['react', 'vue', 'astro', 'shadcn', 'all'].includes(framework)) { console.error(_t('--framework 需要 react／vue／astro／shadcn／all 其中之一')); process.exit(1); }
 if (framework && args.includes('--no-handoff')) { console.error(_t('--framework 需要交接包，不能和 --no-handoff 一起用。')); process.exit(1); }
 const BANNER_DRIFT = () => ''; // drift.md is built from whitelisted values only
+const webhookOpt = opt('webhook', null), notifyOn = opt('notify-on', 'drop');
+if (webhookOpt && !/^https?:\/\//i.test(webhookOpt)) { console.error(_t('--webhook 要是 http:// 或 https:// 開頭的網址。')); process.exit(1); }
+if (!['always', 'drop', 'issues'].includes(notifyOn)) { console.error(_t('--notify-on 只能是 always、drop 或 issues。')); process.exit(1); }
 const failOn = opt('fail-on', null);
 if (failOn && args.includes('--no-health')) { console.error(_t('--fail-on 需要健檢，不能和 --no-health 一起用。')); process.exit(1); }
 if (failOn && !['critical', 'high', 'medium', 'low'].includes(failOn)) { console.error(_t('--fail-on 需要 critical／high／medium／low 其中之一')); process.exit(1); }
@@ -386,4 +390,18 @@ if (crawlOk && !JSON_MODE) { try { const { computeVerdicts, renderVerdictsConsol
 if ((crawlOk || motionOk) && fs.existsSync(dash)) console.log(_t('\n👉 下一步：先雙擊 dashboard.html 看總覽；要交給 AI 或工程師，就把 handoff 資料夾整個給對方。'));
 if (fs.existsSync(path.join(siteDir, 'report.md')) && fs.readFileSync(path.join(siteDir, 'report.md'), 'utf8').includes(_t('被擋住'))) console.log(_t('\n⚠️ 部分頁面被擋住，結果可能不完整（見儀表板或 report.md）。'));
 if (JSON_MODE) { __jsonDone = true; const { buildSummary } = await import('./summary.mjs'); process.stdout.write(JSON.stringify({ ok: !!(crawlOk || motionOk) && failCode === 0, exitCode: crawlOk || motionOk ? failCode : 1, ...buildSummary({ out, host, steps, url, fresh: !!(crawlOk || motionOk) }), drift: drift ? { failed: drift.failed, reasons: drift.reasons, scoreDelta: drift.scoreDelta, tokenChanges: drift.tokenChanges, newIssues: drift.newIssues } : null, runId }, null, 2) + '\n'); }
+if (webhookOpt && crawlOk) { // tell someone when the site got worse (or always, with --notify-on always)
+  try {
+    const { shouldNotify, buildPayload, postWebhook } = await import('./notify.mjs');
+    const hj = path.join(siteDir, 'health.json'); const h = fs.existsSync(hj) ? JSON.parse(fs.readFileSync(hj, 'utf8')) : null;
+    const urgent = (h?.issues || []).filter((i) => ['critical', 'high'].includes(i.severity)).length;
+    let prevScore = null, prevUrgent = null;
+    if (!noDb) { try { const db2 = await openDb(); if (db2) { const prev = runsForHost(db2, new URL(url).host).filter((r) => (runId == null || r.id < runId) && Number.isFinite(r.health_score)).pop(); if (prev) { prevScore = prev.health_score; prevUrgent = (prev.issues_critical || 0) + (prev.issues_high || 0); } db2.close?.(); } } catch {} }
+    if (shouldNotify(notifyOn, { score: h?.score, prevScore, maxDrop: maxDropOpt, urgent, prevUrgent })) {
+      let fixes = []; try { fixes = JSON.parse(fs.readFileSync(path.join(siteDir, 'top-fixes.json'), 'utf8')); } catch {}
+      const r = await postWebhook(webhookOpt, buildPayload({ url, score: h?.score, grade: h?.grade, prevScore, urgent, fixes, dashboard: fs.existsSync(dash) ? dash : '', notices, lang: LANG }));
+      console.log(r.ok ? _t`📣 已送出通知（${new URL(webhookOpt).host}）` : _t`⚠️ 通知沒有送出：${r.error || r.status}`);
+    } else console.log(_t('📣 沒有需要通知的變化，未送出。'));
+  } catch (e) { console.log(_t`⚠️ 通知沒有送出：${String(e.message).split('\n')[0]}`); }
+}
 process.exit(crawlOk || motionOk ? failCode : 1);

@@ -24,6 +24,8 @@ site-explorer check https://example.com   # 最快：幾分鐘內知道最該先
 site-explorer https://example.com         # 完整：設計、3D／動畫、健檢、交接包
 ```
 
+**網站變差時通知你**：`site-explorer check https://你的網站 --webhook <Slack／Teams／Discord 的 webhook 網址>`，跑完若分數比上次掉 5 分以上、或高／緊急問題變多，就把摘要（分數、變化、前 3 件事）送出去（`--notify-on always` 每次都送、`issues` 有高／緊急問題就送）。要每天自動跑：`site-explorer schedule https://你的網站 --every day --at 08:30` 會印出 Windows 工作排程器、cron、GitHub Actions 三種做法的指令（它不會自己改你的電腦）。
+
 **跑太久、吃太多資源時**：每個階段有時間上限（爬取 30 分鐘、3D 25 分鐘、其他 10～20 分鐘；整個探索 120 分鐘），超過會印出「⏱ 超時通知」並停止該階段、繼續其他階段；可用記憶體剩不到 128 MB（或 2%）並持續 30 秒時印出「🧠 記憶體不足通知」並停止該階段，避免整台電腦卡死（macOS 只提醒、不停止，因為它的「可用記憶體」讀數不可靠）；CPU 長時間滿載會印出「🔥」提醒；超過 90 秒沒有新訊息會印出「⏳ 仍在執行」。可用環境變數 `SITE_EXPLORER_STAGE_MINUTES`、`SITE_EXPLORER_MAX_MINUTES` 調整。**Windows 的終端機若中文變亂碼**，先執行 `chcp 65001`，或加 `--lang en`。
 
 跑完會得到一個資料夾：雙擊 `dashboard.html` 看總覽；把 `handoff/` 整包丟給 AI，再貼上 `PROMPT.md` 裡的提示，它就能開始做頁面與動態——不用你寫一行說明。
