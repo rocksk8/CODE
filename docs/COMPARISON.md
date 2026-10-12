@@ -65,7 +65,7 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 - Firecrawl、Crawl4AI：託管服務與多語言 SDK。
 - BackstopJS：Docker 渲染與按鈕式核准介面（我們有情境腳本與審核頁，但核准是複製指令）；Wappalyzer：大型指紋資料庫（我們約 120 條規則）；Blacklight：更多偵測項目；html.to.design：直接由網址轉換（我們需要外掛匯入，且沒有在真實 Figma 驗證過）。
 - Firefox 與 WebKit：我們有實驗性的 `--browser`，只做過 CI 的冒煙測試，節流、`--header` 登入層只在 Chromium 驗證。
-- 作業系統：Windows、macOS 有 CI 跑完整測試；但沒有真人在這兩種桌面上實際操作過。
+- 作業系統：macOS 的完整測試全數通過；Windows 的完整測試 291 個中有 2 個（含 3D 擷取的完整流程）在 GitHub 的 Windows 主機上跑不完，原因還沒查清楚，單頁 3D 擷取本身可以運作但很慢。兩種系統都沒有真人在桌面上實際操作過。
 - 刻意不做：判斷網站是否由 AI 生成（準確度證據不足，容易誤判）、弱點掃描（需要授權）。
 
 ## 我們自己標明的限制

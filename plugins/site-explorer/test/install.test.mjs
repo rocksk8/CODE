@@ -118,7 +118,7 @@ test('npm package: ships only what the CLI needs, is small, and the unpacked tar
   const packed = spawnSync('npm', ['pack', '--json', '--ignore-scripts'], { cwd: repo, encoding: 'utf8', shell: process.platform === 'win32' }); // packs into the repo folder; moved right away (the --pack-destination option is not understood the same way by every npm)
   assert.equal(packed.status, 0, packed.stderr);
   const info = JSON.parse(packed.stdout)[0];
-  fs.renameSync(path.join(repo, info.filename), path.join(dest, info.filename));
+  fs.copyFileSync(path.join(repo, info.filename), path.join(dest, info.filename)); fs.rmSync(path.join(repo, info.filename), { force: true }); // (copy, not rename: the temp folder can be on another drive)
   const paths = info.files.map((f) => f.path);
   for (const must of ['package.json', 'README.md', 'LICENSE', 'plugins/site-explorer/bin/site-explorer.mjs', 'plugins/site-explorer/package.json', 'plugins/site-explorer/scripts/verify.mjs', 'plugins/site-explorer/scripts/report/report-client.js']) assert.ok(paths.includes(must), 'missing from package: ' + must);
   assert.ok(!paths.some((p) => /(^|\/)(test|docs|node_modules|tools)\//.test(p) || /\.env|\.pem|\.db$/.test(p)), 'tests, docs, tools or secrets leaked into the package');
