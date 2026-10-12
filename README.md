@@ -239,7 +239,7 @@ AI 只能讀文字和圖片。所以：
 
 **本機偏移基準**：`site-explorer explore <網址> --approve` 把這次的設計 token（色彩、字型、間距…）和健檢結果存成基準（預設 `<輸出資料夾>/baseline.json`，可用 `--baseline <檔案>` 指定，方便放進版本控制）；之後 `site-explorer explore <網址> --compare` 會和基準比較，設計 token 有任何變動、健檢分數掉超過 `--max-drop`（預設 5 分），或出現 `--fail-on-new`（預設 high）以上的新問題，就以結束代碼 4 結束，並寫出 `drift.md`。設計 token 是逐項精確比對；想接受新的樣子，確認後再跑一次 `--approve`。
 
-**技術堆疊**：每次探索會寫出 `techstack.md/json`——依據腳本網址、回應標頭、Cookie、generator 標籤與全域變數辨識約 55 種技術（CMS、框架、函式庫、主機／CDN、分析），附證據與信心；不靠外觀猜測。
+**技術堆疊**：每次探索會寫出 `techstack.md/json`——依據腳本網址、回應標頭、Cookie、generator 標籤與全域變數辨識約 120 種技術（可用 `--tech-rules` 加上自己的規則）（CMS、框架、函式庫、主機／CDN、分析），附證據與信心；不靠外觀猜測。
 
 **效能預算與歷次紀錄**：`--budget <檔案.json>`（例：`{"lcpMs": 2500, "totalKB": {"max": 1500, "level": "warn"}}`）。指標有 ttfbMs、fcpMs、lcpMs、loadMs、cls、totalKB、requests、thirdPartyRequests、renderBlockingScripts、domNodes。超標的 `fail` 項目以結束代碼 4 結束；每次結果存進 `<輸出資料夾>/perf-history.json`（最近 60 筆），報告為各站資料夾的 `performance.md/json`。
 
