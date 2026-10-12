@@ -505,8 +505,9 @@ while (pages.length < maxPages) {
         const light = await sample();
         await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(300);
         const dark = await sample();
-        await page.emulateMedia({ colorScheme: 'light' });
         data.darkMode = { supported: dark.background !== light.background || dark.color !== light.color, light, dark };
+        if (data.darkMode.supported) { try { const dd = await page.evaluate(extractInPage); data.darkMode.design = { textColors: dd.design.textColors, backgrounds: dd.design.backgrounds, borderColors: dd.design.borderColors }; } catch {} }
+        await page.emulateMedia({ colorScheme: 'light' }); // the colours the page really uses in dark mode (still emulated here)
         const btn = page.locator('button, a[class*=btn], a[class*=button]').first();
         if (await btn.count()) {
           const read = () => btn.evaluate((el) => { const cv = document.createElement('canvas'); cv.width = 1; cv.height = 1; const cx = cv.getContext('2d', { willReadFrequently: true }); const rgb = (v) => { if (/^rgba?\(/.test(v)) return v; cx.clearRect(0, 0, 1, 1); cx.fillStyle = '#000'; cx.fillStyle = v; cx.fillRect(0, 0, 1, 1); const [r, g, b, a] = cx.getImageData(0, 0, 1, 1).data; return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${+(a / 255).toFixed(3)})`; }; const s = getComputedStyle(el); return { backgroundColor: rgb(s.backgroundColor), color: rgb(s.color), boxShadow: s.boxShadow, transform: s.transform }; });

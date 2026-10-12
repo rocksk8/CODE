@@ -10,13 +10,14 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 
 | 能力 | site-explorer | dembrandt | extract-design-system | tokenscout |
 |---|---|---|---|---|
-| 抽出色彩、字型、間距、圓角、陰影、斷點 | 有 | 有（另有 icons、logo） | 有（斷點未提及） | 有（色彩以 CIELAB deltaE2000 分群） |
+| 抽出色彩、字型、間距、圓角、陰影、斷點 | 有（肉眼看不出差異的近似色用 CIEDE2000 ≤ 2 合併） | 有（另有 icons、logo） | 有（斷點未提及） | 有（色彩以 CIELAB deltaE2000 分群） |
 | token 輸出格式 | CSS、JSON、W3C DTCG、Tokens Studio、Tailwind v3 設定與 v4 `@theme`（OKLCH）、`DESIGN.md`、色票 SVG | DTCG、`DESIGN.md`、Tailwind、shadcn、HTML 報告、brand guide | W3C 相容 `tokens.json`、`tokens.css` | DTCG；CSS 變數與 Tailwind 靠另一個 transform 套件 |
 | 多頁爬取 | 有（遵守 robots.txt，會讀 sitemap） | 有（`--crawl`、`--sitemap`，合併多頁） | 否（一次一個網址） | 未提及 |
 | 3D／動畫 | 擷取畫格、偵測 three.js 等函式庫、CSS 動畫、互動狀態 | 有 motion 抽取；README 自述 canvas／WebGL 網站無法分析 | 未提及 | 只輸出 CSS 動畫時長；JS 動畫擷取為實驗性 |
 | SEO／索引健檢並給分數與修法 | 有（8 類，含 robots、sitemap、連結、安全標頭、憑證、結構化資料、AI 爬蟲友善度） | 未提及 | 未提及 | 未提及 |
 | 追蹤碼與 Cookie 清單 | 有（39 種服務；不存 Cookie 值） | 未提及 | 未提及 | 未提及 |
 | 無障礙 | `--a11y` 用 axe-core 做 WCAG 2.2 AA（選用） | 真實 DOM 配色的 WCAG 2.1 對比檢查 | 未提及 | 對比為近似值 |
+| 檢查網站是否符合你的設計規範（token 檔） | 有（`--tokens`，顏色用 CIEDE2000 比對，`--max-off-token` 可當 CI 門檻） | 有（`--tokens`、`--max-off-token`、Markdown 報告） | 未提及 | 未提及 |
 | 前後對照與歷史 | `changes.md`、歷史資料庫、Action 的 `max-drop`／`fail-on-new` | 本機 `--compare`／`--approve` 偏移檢查（失敗時結束碼 1）、GitHub Action | 未提及 | 未提及 |
 | GitHub Action | 有（PR 留言、`fail-on`、`min-health`、`max-drop`、`fail-on-new`） | 有（Marketplace，標註 PR） | 未提及 | 未提及 |
 | MCP | 4 個工具（探索、健檢、驗證、讀交接包） | 多個工具（token、偏移、DTCG、DESIGN.md 等） | 有（3 個工具） | 沒有（README 說明不維護 MCP） |
@@ -59,7 +60,7 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 
 ## 對手有、我們沒有（或我們比較弱）
 
-- dembrandt：stealth 模式、brand guide 輸出、互動式偏移基準管理與選用 app、互動式登入（我們的互動式登入只有 `login` 存狀態檔）。
+- dembrandt：stealth 模式、brand guide 輸出、互動式偏移基準管理與選用 app、深色模式的獨立 token 組（我們只偵測有沒有深色模式與其主要顏色）。
 - Crawl4AI：代理與輪替、通用的 LLM 抽取。
 - Lighthouse 系列：完整的 Lighthouse 稽核分數與伺服器儀表板（我們只有 Playwright 實測的指標、預算與歷次紀錄）。
 - Firecrawl、Crawl4AI：託管服務與多語言 SDK。
