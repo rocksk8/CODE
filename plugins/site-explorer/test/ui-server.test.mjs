@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import net from 'node:net';
-import { buildArgs, startUi, progressOf, runSummary } from '../scripts/ui-server.mjs';
+import { buildArgs, startUi, progressOf, runSummary, previousSummary } from '../scripts/ui-server.mjs';
 
 test('buildArgs: only known, checked options reach the command line', () => {
   const ok = buildArgs({ url: 'example.com', mode: 'check' }, '/o'); assert.deepEqual(ok.args, ['check', 'https://example.com/', '--no-open', '--max-pages', '8', '--out', '/o']);
@@ -25,6 +25,15 @@ test('progress and summary are read from what the explorer wrote', () => {
     const s = runSummary(d); assert.equal(s.score, 77); assert.equal(s.grade, 'C'); assert.equal(s.fixes.length, 3); assert.equal(s.fixes[0].prompt, 'Please fix 1'); assert.equal(s.dashboard, false);
     assert.equal(runSummary(path.join(d, 'nope')), null);
   } finally { fs.rmSync(d, { recursive: true, force: true }); }
+});
+
+test('previousSummary: the latest earlier finished run of the same address', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'se-prev-')); try {
+    const mk = (id, url, exit, score) => { const d = path.join(base, id); const sd = path.join(d, 'out', 'site', 'x'); fs.mkdirSync(sd, { recursive: true }); fs.writeFileSync(path.join(d, 'ui-run.json'), JSON.stringify({ url, exit, at: '2026-01-01T00:00:00Z' })); fs.writeFileSync(path.join(sd, 'site.json'), '{}'); fs.writeFileSync(path.join(sd, 'health.json'), JSON.stringify({ score })); };
+    mk('r20260101-000001-aaaa', 'https://a.com/', 0, 60); mk('r20260101-000002-bbbb', 'https://b.com/', 0, 99); mk('r20260101-000003-cccc', 'https://a.com/', 1, 10); mk('r20260101-000004-dddd', 'https://a.com/', 0, 70); mk('r20260101-000005-eeee', 'https://a.com/', 0, 75);
+    assert.equal(previousSummary(base, 'r20260101-000005-eeee', 'https://a.com/').score, 70, 'skips other sites and failed runs');
+    assert.equal(previousSummary(base, 'r20260101-000001-aaaa', 'https://a.com/'), null);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 
 const get = (port, p, { headers = {}, method = 'GET', body } = {}) => new Promise((resolve, reject) => { const r = http.request({ host: '127.0.0.1', port, path: p, method, headers }, (res) => { let b = ''; res.on('data', (d) => (b += d)); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: b })); }); r.on('error', reject); if (body) r.write(body); r.end(); });
