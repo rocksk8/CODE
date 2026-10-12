@@ -6,12 +6,12 @@ Generated 2026-10-12 for version 0.4.0 (main after pull requests #32–#35, whic
 
 | Item | Result |
 |---|---|
-| Test files | 46 files (`plugins/site-explorer/test/*.test.mjs`, run with `npm test`) |
+| Test files | 62 files (`plugins/site-explorer/test/*.test.mjs`, run with `npm test`) |
 | Tests (Node 22, local, with a real Chromium) | 297 tests: 294 pass, 0 fail, 3 skipped (the framework build test, which runs only on CI, and the Firefox/WebKit tests, which need those browsers) |
 | Tests on CI, Node 20 | the same suite on the CI Node 20 job (no `node:sqlite`, so the history-database tests are skipped there by design) |
 | Tests on CI (GitHub Actions) | Node 20 and Node 22 matrix plus a Docker image build on every pull request; since pull request #34 also the full suite on **Windows** and **macOS** (workflow `platforms`), and Firefox/WebKit smoke tests (workflow `engines`) |
-| Windows (GitHub runner, Node 22, last full run) | 291 tests: 287 pass, 4 fail, 6 skipped. Two of the four were test-only problems (moving a file across drives, quoting rules on Windows) and are fixed in the test code; the other two are the full pipeline test (`explore` with 3D capture, killed after 15 minutes without finishing) and the history-database test that depends on it. Why the full pipeline does not finish on Windows is **not understood**; a 3D capture of one small page does work there (about 75 seconds) |
-| macOS (GitHub runner, Node 22) | the full suite passes |
+| Windows (GitHub runner, Node 22, latest full run, after pull request #42) | 335 tests: 327 pass, 2 fail, the rest skipped. The remaining failures are the tests that capture 3D / animation for many pages (and the full pipeline test): on the runner each extra page takes about 100–125 seconds when captured one at a time (it was killed at 4 minutes when two were captured at once), so a 7-page run takes longer than the test's 10–15 minute limit. Why a page takes about ten times longer than the first page (11 seconds) is **not understood**; the capture now prints timing marks per stage for any page that takes over a minute, so the next Windows run shows where the time goes. A real run against a real site on a Windows desktop (the owner's) showed the 3D stage printing no progress for a long time; time limits, progress lines and a per-page time budget were added in pull request #42 because of it |
+| macOS (GitHub runner, Node 22) | the full suite passes (latest: pull request #45). Along the way CI exposed a real defect in the new low-memory guard: macOS reports "available" memory so low that healthy runs were stopped; the guard now never stops anything on macOS (it only warns) and elsewhere only below 128 MB / 2 % for 30 s |
 | Node 20 specifics | no `node:sqlite`: history database and `changes.md` are skipped there by design; everything else runs |
 | Browser | Chromium via Playwright 1.64.0 (pinned); axe-core 4.14.0 (pinned). Firefox and WebKit (`--browser`) are experimental and only smoke-tested on CI |
 
@@ -45,6 +45,8 @@ Rounds 3, 4, 5, 6 and 8 each found real problems *in the previous round's fixes*
 
 ## 4. Known flaky points
 
+The total-blocking-time test failed on CI for three runs in a row: the busy page started blocking before the first paint on the slower runner, so the lab measurement correctly excluded it. The test page now starts blocking only after the first paint, and the measurement flushes pending long-task records before reading.
+
 Two timing-sensitive browser tests each failed once on a shared CI runner and passed on the single permitted re-run of the same commit. One of them had a limit of 25 s and took 25.06 s; its limit was widened to 40 s (the assertion is "does not stall", it used to hang forever).
 
 ## 5. Not verified
@@ -58,6 +60,7 @@ These could not be exercised in the build environment, so they are untested here
 - Firefox and WebKit: smoke tests only; the credential layer was only exercised on Chromium.
 - The Figma plugin inside real Figma (it is tested against a mocked Figma API); the WARC files in ReplayWeb.page (they are read back with the independent `warcio` library); the HAR in a real browser dev-tools panel (it validates with the `har-validator` package).
 - Logging in with a cookie file, header or basic auth against a real site (only local fixture servers).
+- The graphical interface (`site-explorer ui`) and the double-click launchers on a real Windows or macOS desktop; webhook delivery to a real Slack / Teams / Discord endpoint; a real scheduler entry created from `site-explorer schedule`.
 - Real-world sites on the open internet (the sandbox has no outbound access; all browser tests use local fixture servers).
 
 ## 6. Known limitations (not fixed, by design or by cost)
@@ -74,4 +77,4 @@ These could not be exercised in the build environment, so they are untested here
 
 ## 7. Pull requests behind this report
 
-#21 framework outputs · #22 English output · #23 review rounds 1–2 · #24 security fixes · #25 `--json` early failures and help · #26 round-3 fixes · #27 Chinese console lines · #28 round-4 fixes · #29 remaining audit items · #30 Tailwind v4 `@theme` · #31 DESIGN.md weight fix · #32 drift baseline, Markdown export, technology stack, performance budgets, tracking behaviour, verify masks, whole-page visual regression, page archive, security/TLS grading, SARIF/JUnit, Figma export, HTML validity, custom extraction rules and the round-6 fixes, `DESIGN.md`, OKLCH, Action regression gates, this report and the comparison document · #31 `DESIGN.md` weights · #32 round-5 fixes · #33 round-6 fixes and comparison · #34 dashboard pages for the new checks, depth fixes, scenarios/review/WARC/Figma plugin, cookie/header/basic-auth login, Windows/macOS/Firefox/WebKit CI · #35 round-7 and round-8 fixes and `--har`.
+#21 framework outputs · #22 English output · #23 review rounds 1–2 · #24 security fixes · #25 `--json` early failures and help · #26 round-3 fixes · #27 Chinese console lines · #28 round-4 fixes · #29 remaining audit items · #30 Tailwind v4 `@theme` · #31 DESIGN.md weight fix · #32 drift baseline, Markdown export, technology stack, performance budgets, tracking behaviour, verify masks, whole-page visual regression, page archive, security/TLS grading, SARIF/JUnit, Figma export, HTML validity, custom extraction rules and the round-6 fixes, `DESIGN.md`, OKLCH, Action regression gates, this report and the comparison document · #31 `DESIGN.md` weights · #32 round-5 fixes · #33 round-6 fixes and comparison · #34 dashboard pages for the new checks, depth fixes, scenarios/review/WARC/Figma plugin, cookie/header/basic-auth login, Windows/macOS/Firefox/WebKit CI · #35 round-7 and round-8 fixes and `--har`. · #38–#40 dashboard shell, top fixes, enterprise logo · #41 motion capture for every page, design extraction (ΔE merge, `--tokens`, brand guide, dark tokens), TLS ciphers, `check`, history trend · #42 crawler view, performance depth, unused JS/CSS, crawler tab, graphical interface, time limits and resource guards · #43 HTML validity and Windows console hint · #44 webhook notifications and `schedule` · #45 double-click launchers · #46 reports and comparison updated
