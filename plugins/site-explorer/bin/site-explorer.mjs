@@ -13,11 +13,13 @@ const HELP = _t`site-explorer ${version} — 探索網站：設計、內容、�
 
 用法
   site-explorer <網址> [選項]            一鍵探索（可省略 https://），產生儀表板與交接包
+  site-explorer ui                       不想打指令：開啟圖形介面（在瀏覽器裡輸入網址、看進度、開報告）
   site-explorer check <網址>             最簡單：快速檢查（最多 8 頁、不擷取 3D），印出最該先處理的 3 件事
   site-explorer <子指令> [參數]
 
 常用
   check    <網址>   快速檢查：最少的等待，結果在儀表板與 top-fixes.md
+  ui                圖形介面：本機網頁（只有這台電腦連得到），輸入網址、選模式、看進度、開啟過去的報告（--port、--out、--no-open）
   explore  <網址>   一鍵：爬取 → 設計包 → 健檢 → 3D → 資料庫 → 儀表板 → 交接包
   health   <網址>   網站健檢（SEO、爬蟲索引、連結、效能、行動版、安全、AI 爬蟲）
   handoff  <網址>   同 explore，重點是交接包（handoff/）
@@ -65,7 +67,7 @@ const ROUTES = {
   health: (a) => (a.some(looksLikeUrl) ? [script('explore.mjs'), [...a, '--no-motion']] : [script('health-check.mjs'), a]),
   motion: (a) => [script('capture-3d.mjs'), a], crawl: (a) => [script('crawl.mjs'), a], design: (a) => [script('export-design.mjs'), a],
   report: (a) => [script('build-report.mjs'), a], compare: (a) => [script('compare-report.mjs'), a], history: (a) => [script('db.mjs'), a], db: (a) => [script('db.mjs'), a],
-  verify: (a) => [script('verify.mjs'), a], mcp: (a) => [script('mcp-server.mjs'), a], login: (a) => [script('login.mjs'), a], framework: (a) => [script('frameworks.mjs'), a], diagnose: (a) => [script('diagnose.mjs'), a], doctor: (a) => [script('doctor.mjs'), a], setup: (a) => [script('setup.mjs'), a],
+  verify: (a) => [script('verify.mjs'), a], ui: (a) => [script('ui-server.mjs'), a], mcp: (a) => [script('mcp-server.mjs'), a], login: (a) => [script('login.mjs'), a], framework: (a) => [script('frameworks.mjs'), a], diagnose: (a) => [script('diagnose.mjs'), a], doctor: (a) => [script('doctor.mjs'), a], setup: (a) => [script('setup.mjs'), a],
 };
 
 if (!cmd || ['-h', '--help', 'help'].includes(cmd)) { console.log(HELP); process.exit(0); }
