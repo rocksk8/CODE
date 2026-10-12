@@ -15,7 +15,7 @@ let hard, soft, noindexAll, tmp, haveBrowser = true, H, siteDir;
 const listen = (s) => new Promise((r) => s.listen(0, '127.0.0.1', () => r(s.address().port)));
 const run = (script, args) => new Promise((resolve) => {
   const p = spawn(process.execPath, [path.join(root, 'scripts', script), ...args], { env: process.env });
-  let out = ''; const kill = setTimeout(() => p.kill(), 120000);
+  let out = ''; const kill = setTimeout(() => p.kill(), process.platform === "win32" ? 300000 : 120000);
   p.stdout.on('data', (d) => (out += d)); p.stderr.on('data', (d) => (out += d)); p.on('close', (status) => { clearTimeout(kill); resolve({ status, out }); });
 });
 const dirOf = (name, port) => path.join(tmp, name, `127.0.0.1_${port}`);
