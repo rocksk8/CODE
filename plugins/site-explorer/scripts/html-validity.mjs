@@ -7,6 +7,7 @@ const OPTIONAL_END = new Set(['p', 'li', 'dt', 'dd', 'tr', 'td', 'th', 'thead', 
 const RAW = new Set(['script', 'style', 'textarea', 'title', 'iframe', 'xmp', 'noembed']);
 const CLOSES_P = new Set(['address', 'article', 'aside', 'blockquote', 'details', 'div', 'dl', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hgroup', 'hr', 'main', 'menu', 'nav', 'ol', 'p', 'pre', 'section', 'table', 'ul']);
 const DEPRECATED = new Set(['font', 'center', 'marquee', 'blink', 'big', 'strike', 'tt', 'frame', 'frameset', 'acronym', 'applet', 'basefont', 'dir', 'isindex', 'noframes']);
+const INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'date', 'datetime-local', 'email', 'file', 'hidden', 'image', 'month', 'number', 'password', 'radio', 'range', 'reset', 'search', 'submit', 'tel', 'text', 'time', 'url', 'week']);
 const INLINE_ONLY_PARENT = { li: new Set(['ul', 'ol', 'menu']), tr: new Set(['table', 'thead', 'tbody', 'tfoot']), td: new Set(['tr']), th: new Set(['tr']) };
 
 /** Index of the ">" that ends the tag starting before position `from`, ignoring ">" inside quoted attribute values; -1 when there is none. Linear, capped at 8000 chars. */
@@ -28,7 +29,7 @@ export function checkHtml(html, { maxTags = 80000 } = {}) {
   const hasDoctype = (() => { let k = 0; for (let n = 0; n < 50; n++) { while (k < src.length && /\s/.test(src[k])) k++; if (src.startsWith('<!--', k)) { const e = src.indexOf('-->', k + 4); if (e < 0) return false; k = e + 3; continue; } break; } return /^<!doctype\s+html/i.test(src.slice(k, k + 30)); })();
   if (!hasDoctype) report('no-doctype', 'low', 'missing <!doctype html> (browsers fall back to quirks mode)');
   const stack = []; const ids = new Map(), names = new Set(); let i = 0, tags = 0, charsetAt = -1, headEnd = -1;
-  const refs = []; let pendingP = false; const cnt = new Map(); const open = (n) => (cnt.get(n) || 0) > 0;
+  let titles = 0; const refs = []; let pendingP = false; const cnt = new Map(); const open = (n) => (cnt.get(n) || 0) > 0;
   const push = (n) => { stack.push({ name: n }); cnt.set(n, (cnt.get(n) || 0) + 1); };
   const pop = () => { const s = stack.pop(); if (s) cnt.set(s.name, cnt.get(s.name) - 1); return s; };
   while (i < src.length && tags < maxTags) {
@@ -57,7 +58,11 @@ export function checkHtml(html, { maxTags = 80000 } = {}) {
         else if ((an === 'aria-labelledby' || an === 'aria-describedby' || an === 'aria-controls') && v) for (const x of v.trim().split(/\s+/).slice(0, 8)) refs.push([an, x]);
         else if (an === 'href' && name === 'a' && v.startsWith('#') && v.length > 1 && !/^#(top|!|\/|\?)/i.test(v) && v.replace(/:~:.*$/s, '').length > 1) refs.push(['link #', v.slice(1).replace(/:~:.*$/s, '')]);
         else if (an === 'name' && name === 'a' && v) names.add(v); } // <a name="x"> is still a valid #x target in browsers
-      if (an === 'id') { const v = a[2] ?? a[3] ?? a[4] ?? ''; if (v) ids.set(v, (ids.get(v) || 0) + 1); }
+      if (an === 'id') { const v = a[2] ?? a[3] ?? a[4] ?? ''; if (v) ids.set(v, (ids.get(v) || 0) + 1); if (/\s/.test(v.trim())) report('id-whitespace', 'medium', 'an id contains a space (ids must be one word)', `#${v.trim().slice(0, 40)}`); }
+      { const v = (a[2] ?? a[3] ?? a[4] ?? '').trim();
+        if (name === 'html' && an === 'lang' && v && !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(v)) report('bad-lang', 'medium', 'the lang attribute is not a valid language tag (use e.g. "en" or "zh-TW", with a hyphen)', `lang="${v.slice(0, 20)}"`);
+        if (name === 'input' && an === 'type' && v && !INPUT_TYPES.has(v.toLowerCase())) report('bad-input-type', 'low', 'an input has a type that does not exist (browsers treat it as text)', `type="${v.slice(0, 20)}"`);
+        if (name === 'img' && (an === 'width' || an === 'height') && v && /\D/.test(v)) report('img-size-unit', 'low', 'an image width or height has a unit or percent sign (the attribute takes plain pixels)', `${an}="${v.slice(0, 12)}"`); }
       if (name === 'meta' && (an === 'charset' || (an === 'http-equiv' && /content-type/i.test(a[2] ?? a[3] ?? a[4] ?? '')))) charsetAt = lt;
     }
     if (name === 'meta' && /\bcharset\b/i.test(attrs)) charsetAt = lt;
@@ -67,6 +72,8 @@ export function checkHtml(html, { maxTags = 80000 } = {}) {
     if (['li', 'dt', 'dd', 'td', 'th', 'tr', 'option', 'optgroup'].includes(name) && stack.length && stack[stack.length - 1].name === 'p') pop();
     if (name === 'tr' && stack.length && stack[stack.length - 1].name === 'colgroup') pop();
     top = stack[stack.length - 1];
+    if (name === 'form' && open('form')) report('nested-form', 'medium', 'a form inside another form (the browser drops the inner one)', '<form> in <form>');
+    if (name === 'title' && !open('svg')) titles++;
     if (name === 'a' && open('a')) report('nested-interactive', 'medium', 'links or buttons nested inside another link or button', '<a> in <a>');
     if (name === 'button' && (open('button') || open('a'))) report('nested-interactive', 'medium', 'links or buttons nested inside another link or button', open('a') ? '<button> in <a>' : '<button> in <button>');
     if (name === 'a' && open('button')) report('nested-interactive', 'medium', 'links or buttons nested inside another link or button', '<a> in <button>');
@@ -82,6 +89,7 @@ export function checkHtml(html, { maxTags = 80000 } = {}) {
   for (const s of stack) if (!OPTIONAL_END.has(s.name)) report('unclosed', 'medium', 'elements that are opened but never closed (or closed in the wrong order)', `<${s.name}>`);
   for (const [id, n] of ids) if (n > 1) report('duplicate-id', 'medium', 'ids used more than once (anchors, labels and scripts then hit the wrong element)', `#${id.slice(0, 40)} ×${n}`);
   { const seenRef = new Set(); for (const [kind, id] of refs.slice(0, 5000)) { let dec = id; try { dec = decodeURIComponent(id); } catch {} if (ids.has(id) || ids.has(dec) || (kind === 'link #' && (names.has(id) || names.has(dec))) || seenRef.has(kind + id)) continue; seenRef.add(kind + id); report(kind === 'link #' ? 'broken-fragment' : 'missing-id-ref', 'low', kind === 'link #' ? 'links to a #fragment that no element has as an id (the link scrolls nowhere)' : 'attributes that point to an id that does not exist (label for, aria-labelledby, aria-describedby, aria-controls)', `${kind} ${id.slice(0, 30)}`); } }
+  if (titles > 1) report('multiple-title', 'medium', 'more than one <title> element', `×${titles}`);
   if (charsetAt > 1024) report('late-charset', 'low', 'the character set declaration is after the first 1024 bytes (browsers may guess wrongly)');
   return [...found.values()].map((f) => ({ ...f, examples: f.examples.map((e) => e.slice(0, 60)) })).sort((a, b) => b.count - a.count);
 }
