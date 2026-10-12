@@ -22,6 +22,8 @@ site-explorer 是「把一個網站完整看一遍，再交給 AI 或工程師�
 | 新手入口 | `site-explorer check 網址`：預設值最少，只印前 3 件事與儀表板位置 | 未提及 | 未提及 | 未提及 |
 | 爬蟲看到的 vs 訪客看到的 | 有（`crawler-view`：原始 HTML 與渲染後文字、5 種身分的回應與相似度、JSON-LD 值對畫面、canonical／hreflang 實際狀態） | 未提及 | 未提及 | 未提及 |
 | 圖形介面 | `site-explorer ui`：本機網頁（只有這台電腦連得到），輸入網址、選模式、看進度、開報告；沒有桌面安裝程式 | 未提及 | 未提及 | 未提及 |
+| 變差時通知與排程 | 有（`--webhook`：分數掉或高／緊急問題變多時送摘要到 Slack／Teams／Discord；`schedule` 印出工作排程器／cron／GitHub Actions 設定）；未驗證真實收訊 | 未提及 | 未提及 | 未提及 |
+| 不用命令列也能開始 | 有（圖形介面 `ui`、雙擊啟動檔；Windows／macOS 桌面上的實際雙擊未驗證） | 未提及 | 未提及 | 未提及 |
 | 前後對照與歷史 | `changes.md`、歷史資料庫（儀表板「歷史」分頁有健檢分數趨勢圖）、Action 的 `max-drop`／`fail-on-new` | 本機 `--compare`／`--approve` 偏移檢查（失敗時結束碼 1）、GitHub Action | 未提及 | 未提及 |
 | GitHub Action | 有（PR 留言、`fail-on`、`min-health`、`max-drop`、`fail-on-new`） | 有（Marketplace，標註 PR） | 未提及 | 未提及 |
 | MCP | 4 個工具（探索、健檢、驗證、讀交接包） | 多個工具（token、偏移、DTCG、DESIGN.md 等） | 有（3 個工具） | 沒有（README 說明不維護 MCP） |
