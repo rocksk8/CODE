@@ -593,7 +593,12 @@ while (pages.length < maxPages) {
         } catch {}
       }
     }
-  } catch (e) { console.log('failed:', url, e.message.split('\n')[0]); }
+  } catch (e) {
+    // some browsers turn a PDF / file response into a "download" and abort the navigation: ask the server what it is, and report it as a skipped non-HTML file like any other
+    let handled = false;
+    if (/Download is starting|ERR_ABORTED/i.test(e.message)) { try { if (mayFetch(url, startUrl)) { const r = await gfetch(url, { method: 'GET', headers: { 'user-agent': UA }, signal: AbortSignal.timeout(15000) }); const ct = (r.headers.get('content-type') || '').toLowerCase(); await r.body?.cancel().catch(() => {}); if (ct && !/html/.test(ct)) { nonHtmlLog.push({ url, contentType: ct.split(';')[0] }); console.log(`   (skipped, not an HTML page: ${ct.split(';')[0]})`); handled = true; } } } catch {} }
+    if (!handled) console.log('failed:', url, e.message.split('\n')[0]);
+  }
   clearTimeout(watchdog);
   await page.close().catch(() => {});
 }
