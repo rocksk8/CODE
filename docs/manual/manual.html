@@ -43,7 +43,8 @@ table{width:100%;border-collapse:collapse;font-size:15px}td,th{border:1px solid 
 <pre>site-explorer schedule https://你的網站 --every day --at 08:30 --webhook 你的webhook網址</pre>
 <p>這個指令會產生 Windows 工作排程器、cron 或 GitHub Actions 的設定內容，照著貼上即可。</p></section><section><h2>8. 遇到問題怎麼辦</h2><table>
 <tr><th>狀況</th><th>怎麼做</th></tr>
-<tr><td>雙擊後一閃而過／出現錯誤</td><td>確認已安裝 Node.js（下載：https://nodejs.org/zh-tw/download）；在資料夾開啟終端機執行 <code>site-explorer doctor</code>，它會列出每一項問題與修復指令。</td></tr>
+<tr><td>雙擊 <code>Start-site-explorer.cmd</code> 後黑色視窗一閃就不見</td><td>新版啟動檔已修正這個問題：視窗會顯示 [1/3]～[3/3] 的進度，出錯時會停住並顯示錯誤代碼，只有你按了網頁的「結束程式」才會倒數 8 秒後自動關閉。如果還是一閃而過，請先關掉舊檔、重新下載最新版 ZIP，或在資料夾空白處按右鍵「在終端機中開啟」，輸入 <code>Start-site-explorer.cmd</code> 後把畫面截圖給開發者。</td></tr>
+<tr><td>出現錯誤</td><td>確認已安裝 Node.js（下載：https://nodejs.org/zh-tw/download）；在資料夾開啟終端機執行 <code>site-explorer doctor</code>，它會列出每一項問題與修復指令。</td></tr>
 <tr><td>畫面最上方說找不到瀏覽器</td><td>按「下載瀏覽器」，或自行安裝 Chrome（https://www.google.com/chrome/）或 Edge（https://www.microsoft.com/edge）。</td></tr>
 <tr><td>執行很久沒動靜</td><td>程式會在卡住 90 秒左右提醒，每階段也有時間上限（最長整體 120 分鐘），超過會自動中止並說明原因。你也可以隨時按「停止」。</td></tr>
 <tr><td>Windows 終端機出現亂碼</td><td>先執行 <code>chcp 65001</code> 再跑指令；用操作畫面就不會遇到。</td></tr>

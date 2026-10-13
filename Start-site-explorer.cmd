@@ -1,29 +1,49 @@
 @echo off
 rem Double-click to open the site-explorer graphical interface (Windows).
+rem Plain ASCII on purpose: Windows cmd can mis-parse non-ASCII text and parentheses in batch files, which makes the window vanish.
+setlocal
 chcp 65001 >nul
+title site-explorer
 cd /d "%~dp0"
-where node >nul 2>nul
-if errorlevel 1 (
-  echo.
-  echo  Node.js is not installed. Please install Node.js 22 LTS from https://nodejs.org and double-click this file again.
-  echo  Node.js 尚未安裝。請先到 https://nodejs.org 安裝 22 LTS 版，再雙擊這個檔案。
-  echo.
-  pause
-  exit /b 1
-)
-if not exist "node_modules\playwright-core" (
-  echo  First start: installing what site-explorer needs (one time, about a minute)...
-  echo  第一次啟動：安裝需要的元件（只要一次，約一分鐘）...
-  call npm ci --omit=dev --no-audit --no-fund
-  if errorlevel 1 ( echo. & echo  Install failed. Check your internet connection. & pause & exit /b 1 )
-)
 echo.
-echo  Opening the page in your browser... (use the "Quit" button at the top right of the page to close this window)
-echo  正在開啟網頁...（要關閉這個視窗，請按網頁右上角的「結束程式」）
+echo  site-explorer - starting. Please keep this window open while you use it.
+echo  To finish, click the Quit button at the top right of the web page.
+echo.
+echo  [1/3] Checking Node.js ...
+where node >nul 2>nul
+if errorlevel 1 goto nonode
+for /f "delims=" %%v in ('node -v') do echo        found Node.js %%v
+if exist "node_modules\playwright-core" goto ready
+echo.
+echo  [2/3] First start only: installing what site-explorer needs. About one minute, needs internet.
+call npm ci --omit=dev --no-audit --no-fund
+if errorlevel 1 goto installfail
+:ready
+echo.
+echo  [3/3] Starting. Your browser opens by itself. If it does not, copy the long address printed below into your browser.
+echo.
 node "plugins\site-explorer\bin\site-explorer.mjs" ui
-if errorlevel 1 (
-  echo.
-  echo  site-explorer stopped with an error. Press any key to close / 發生錯誤，按任意鍵關閉
-  pause >nul
-)
+set RC=%errorlevel%
+echo.
+if "%RC%"=="10" goto quitok
+echo  site-explorer stopped unexpectedly. Exit code %RC%.
+echo  Take a screenshot of this window and send it to the developer.
+echo.
+pause
+exit /b %RC%
+:quitok
+echo  Program closed. This window closes in 8 seconds. Press any key to close it now.
+timeout /t 8 >nul
 exit /b 0
+:nonode
+echo.
+echo  Node.js is not installed. Download it from https://nodejs.org/en/download then double-click this file again.
+echo.
+pause
+exit /b 1
+:installfail
+echo.
+echo  Install failed. Check your internet connection, then double-click this file again.
+echo.
+pause
+exit /b 1

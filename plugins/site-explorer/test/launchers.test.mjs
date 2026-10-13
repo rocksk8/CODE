@@ -14,5 +14,9 @@ test('launchers: the .command file is executable bash with valid syntax; both st
   for (const t of [c, s]) { assert.match(t, /nodejs\.org/); assert.match(t, /npm ci/); assert.ok(fs.existsSync(path.join(root, 'plugins', 'site-explorer', 'bin', 'site-explorer.mjs'))); }
   if (process.platform !== 'win32') { assert.ok(fs.statSync(sh).mode & 0o100, 'executable bit'); assert.equal(spawnSync('bash', ['-n', sh]).status, 0); }
   assert.ok(!/\r\n/.test(s), 'LF line endings in the shell script');
-  assert.match(c, /exit \/b 0/, 'the window closes by itself after a normal quit (pause only on errors)'); assert.ok(!/site-explorer\.mjs" ui\r\npause/.test(c), 'no unconditional pause'); for (const t of [c, s]) assert.match(t, /Quit/, 'tells people about the Quit button');
+  assert.match(c, /"%RC%"=="10"/, 'closes by itself after the Quit button (exit code 10) and stays open with the code on any other exit'); assert.match(c, /pause/); for (const t of [c, s]) assert.match(t, /Quit/, 'tells people about the Quit button');
+  // Windows cmd: the window vanished when non-ASCII text or an unescaped parenthesis sat inside a block; keep the script plain and block-free
+  assert.ok(!/[^\x00-\x7f]/.test(c), 'ASCII only'); assert.ok(/\r\n/.test(c) && !/[^\r]\n/.test(c), 'CRLF line endings');
+  assert.ok(!/^\s*\(|\(\s*$/m.test(c.replace(/\('node -v'\)/g, '')), 'no parenthesised blocks (a stray ) inside one aborts the whole script)');
+  for (const l of c.split(/\r?\n/)) if (/^\s*echo\b/i.test(l)) assert.ok(!/[()&|<>^%]/.test(l.replace('%RC%', '')), 'echo line is safe for cmd: ' + l);
 });

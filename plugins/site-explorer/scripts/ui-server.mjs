@@ -194,7 +194,8 @@ if (isMain(import.meta.url)) {
   const arg = (n) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : null; };
   const asked = arg('--port') != null, port = asked ? Number(arg('--port')) : 47600; // a fixed, easy-to-find port unless it is taken
   if (!Number.isInteger(port) || port < 0 || port > 65535) { console.error(_t('--port 必須是 0 到 65535 的整數。')); process.exit(1); }
-  const opts = { baseDir: arg('--out') ? path.resolve(arg('--out')) : undefined, onQuit: () => { console.log(_t('已從網頁結束。')); process.exit(0); } };
+  // exit code 10 = closed on purpose with the Quit button; the launchers close their window on it and keep it open for anything else
+  const opts = { baseDir: arg('--out') ? path.resolve(arg('--out')) : undefined, onQuit: () => { console.log(_t('已從網頁結束。')); process.exit(10); } };
   let ui; try { ui = await startUi({ port, ...opts }); } catch (e) {
     if (e.code === 'EADDRINUSE' && !asked) { try { ui = await startUi({ port: 0, ...opts }); console.log(_t('（常用的連接埠被佔用了，改用另一個。如果之前已經開了一個 site-explorer，請先在它的網頁按「結束程式」。）')); } catch (e2) { console.error(String(e2.message)); process.exit(1); } }
     else { console.error(String(e.code === 'EADDRINUSE' ? _t('這個連接埠已被使用，請改用 --port。') : e.message)); process.exit(1); }
