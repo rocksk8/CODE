@@ -14,4 +14,5 @@ test('launchers: the .command file is executable bash with valid syntax; both st
   for (const t of [c, s]) { assert.match(t, /nodejs\.org/); assert.match(t, /npm ci/); assert.ok(fs.existsSync(path.join(root, 'plugins', 'site-explorer', 'bin', 'site-explorer.mjs'))); }
   if (process.platform !== 'win32') { assert.ok(fs.statSync(sh).mode & 0o100, 'executable bit'); assert.equal(spawnSync('bash', ['-n', sh]).status, 0); }
   assert.ok(!/\r\n/.test(s), 'LF line endings in the shell script');
+  assert.match(c, /exit \/b 0/, 'the window closes by itself after a normal quit (pause only on errors)'); assert.ok(!/site-explorer\.mjs" ui\r\npause/.test(c), 'no unconditional pause'); for (const t of [c, s]) assert.match(t, /Quit/, 'tells people about the Quit button');
 });

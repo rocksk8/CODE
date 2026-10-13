@@ -14,4 +14,6 @@ if [ ! -d node_modules/playwright-core ]; then
   echo " 第一次啟動：安裝需要的元件（只要一次，約一分鐘）..."
   npm ci --omit=dev --no-audit --no-fund || { echo " Install failed. Check your internet connection."; read -r -p "Press Enter / 按 Enter" _; exit 1; }
 fi
-node plugins/site-explorer/bin/site-explorer.mjs ui
+echo " Opening the page in your browser... Use the \"Quit\" button at the top right of the page to close this window."
+echo " 正在開啟網頁...要關閉請按網頁右上角的「結束程式」"
+node plugins/site-explorer/bin/site-explorer.mjs ui || { echo " site-explorer stopped with an error."; read -r -p "Press Enter / 按 Enter" _; exit 1; }

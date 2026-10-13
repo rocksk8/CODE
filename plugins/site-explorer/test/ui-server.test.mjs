@@ -80,3 +80,17 @@ test('ui server: a real quick check runs from the form, one at a time, and the r
     await pg.setViewportSize({ width: 390, height: 800 }); assert.ok(await pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no sideways scrolling on a phone');
   } finally { await br.close(); ui.stop(); site.close(); fs.rmSync(base, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
+
+test('ui server: the Quit button closes the program (needs the secret and JSON, calls onQuit)', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'se-quit-')); let quit = 0;
+  const ui = await startUi({ baseDir: base, onQuit: () => { quit++; } });
+  try {
+    const page = await get(ui.port, '/?k=' + ui.token); assert.match(page.body, /id="quit"/, 'the page has a Quit button');
+    assert.equal((await get(ui.port, '/api/quit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 403, 'no secret, no quit');
+    assert.equal((await get(ui.port, '/api/quit?k=' + ui.token, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' })).status, 415, 'cross-site form posts cannot quit it');
+    assert.equal(quit, 0);
+    assert.equal((await get(ui.port, '/api/quit?k=' + ui.token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 200);
+    for (let i = 0; i < 40 && !quit; i++) await new Promise((r) => setTimeout(r, 50));
+    assert.equal(quit, 1, 'onQuit was called');
+  } finally { ui.stop(); fs.rmSync(base, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
+});

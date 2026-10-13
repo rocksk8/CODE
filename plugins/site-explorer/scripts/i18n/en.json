@@ -2561,7 +2561,7 @@
 "--port 必須是 0 到 65535 的整數。": "--port must be an integer from 0 to 65535.",
 "中文": "Chinese",
 "停止": "Stop",
-"圖形介面已啟動（只有這台電腦連得到）：\\n  {}\\n探索結果存在：{}\\n按 Ctrl+C 結束。": "Graphical interface started (reachable only from this computer):\\n  {}\\nResults are saved in: {}\\nPress Ctrl+C to quit.",
+"圖形介面已啟動（只有這台電腦連得到）：\\n  {}\\n探索結果存在：{}\\n網頁右上角有「結束程式」按鈕，按 Ctrl+C 也可以結束。": "Graphical interface started (reachable only from this computer):\\n  {}\\nResults are saved in: {}\\nUse the \"Quit\" button at the top right of the page, or press Ctrl+C.",
 "執行中…": "Running…",
 "報告語言": "Report language",
 "失敗（結束代碼 ": "Failed (exit code ",
@@ -2687,5 +2687,10 @@
 "<div class=\"card\" style=\"border-color:var(--bad-t);margin-bottom:14px\"><h3 style=\"color:var(--bad-t)\">⚠️ 這次擷取不完整（": "<div class=\"card\" style=\"border-color:var(--bad-t);margin-bottom:14px\"><h3 style=\"color:var(--bad-t)\">⚠️ This capture is incomplete (",
 "；<b style=\"color:var(--bad-t)\">錯誤回應 ": "; <b style=\"color:var(--bad-t)\">error responses ",
 "<b style=\"color:var(--bad-t)\">沒有偵測到</b>": "<b style=\"color:var(--bad-t)\">not detected</b>",
-"<b style=\"color:var(--bad-t)\">是 +": "<b style=\"color:var(--bad-t)\">yes +"
+"<b style=\"color:var(--bad-t)\">是 +": "<b style=\"color:var(--bad-t)\">yes +",
+"結束程式": "Quit",
+"要結束程式嗎？執行中的探索會被中止，黑色視窗也會一起關閉。": "Quit the program? A running exploration will be stopped and the black window will close too.",
+"目前有探索正在執行，結束會中止它。確定要結束程式嗎？": "An exploration is running; quitting will stop it. Quit the program anyway?",
+"程式已結束，黑色視窗會自動關閉。現在可以關掉這個分頁。": "The program has quit and the black window will close by itself. You can close this tab now.",
+"已從網頁結束。": "Quit from the web page."
 }
