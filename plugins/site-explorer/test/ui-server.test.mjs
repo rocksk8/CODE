@@ -80,3 +80,37 @@ test('ui server: a real quick check runs from the form, one at a time, and the r
     await pg.setViewportSize({ width: 390, height: 800 }); assert.ok(await pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no sideways scrolling on a phone');
   } finally { await br.close(); ui.stop(); site.close(); fs.rmSync(base, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
+
+test('ui server: the Quit button closes the program (needs the secret and JSON, calls onQuit)', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'se-quit-')); let quit = 0;
+  const ui = await startUi({ baseDir: base, onQuit: () => { quit++; } });
+  try {
+    const page = await get(ui.port, '/?k=' + ui.token); assert.match(page.body, /id="quit"/, 'the page has a Quit button');
+    assert.equal((await get(ui.port, '/api/quit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 403, 'no secret, no quit');
+    assert.equal((await get(ui.port, '/api/quit?k=' + ui.token, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' })).status, 415, 'cross-site form posts cannot quit it');
+    assert.equal(quit, 0);
+    assert.equal((await get(ui.port, '/api/quit?k=' + ui.token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 200);
+    for (let i = 0; i < 40 && !quit; i++) await new Promise((r) => setTimeout(r, 50));
+    assert.equal(quit, 1, 'onQuit was called');
+  } finally { ui.stop(); fs.rmSync(base, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
+});
+
+test('ui server: the secret address survives a restart (bookmarks keep working) and the token file is not world-readable', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'se-tok-')); try {
+    const a = await startUi({ baseDir: base }); const t1 = a.token; a.stop();
+    const b = await startUi({ baseDir: base }); try { assert.equal(b.token, t1, 'same secret after a restart'); assert.match(b.url, /^http:\/\/127\.0\.0\.1:\d+\/\?k=/); } finally { b.stop(); }
+    if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(base, '.ui-token')).mode & 0o077, 0, 'only the owner can read it');
+  } finally { fs.rmSync(base, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
+});
+
+test('site-explorer ui (the real command): prints one copy-able address on a fixed port, and exits with code 10 when the Quit button is used', async () => {
+  const { spawn } = await import('node:child_process'); const cli = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', 'bin', 'site-explorer.mjs');
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'se-cli-')); const child = spawn(process.execPath, [cli, 'ui', '--no-open', '--out', base], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = ''; child.stdout.on('data', (d) => (out += d)); child.stderr.on('data', (d) => (out += d)); const exited = new Promise((r) => child.on('exit', (c) => r(c)));
+  try {
+    let m; for (let i = 0; i < 100 && !(m = /http:\/\/127\.0\.0\.1:(\d+)\/\?k=(\S+)/.exec(out)); i++) await new Promise((r) => setTimeout(r, 100));
+    assert.ok(m, 'an address is printed: ' + out);
+    const r = await get(Number(m[1]), '/api/quit?k=' + m[2], { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); assert.equal(r.status, 200);
+    const code = await Promise.race([exited, new Promise((res) => setTimeout(() => res('still running'), 8000))]); assert.equal(code, 10, 'exit code 10 means "closed on purpose"');
+  } finally { try { child.kill(); } catch {} fs.rmSync(base, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
+});
