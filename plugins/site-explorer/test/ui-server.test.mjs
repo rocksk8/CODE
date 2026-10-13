@@ -94,3 +94,11 @@ test('ui server: the Quit button closes the program (needs the secret and JSON, 
     assert.equal(quit, 1, 'onQuit was called');
   } finally { ui.stop(); fs.rmSync(base, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
 });
+
+test('ui server: the secret address survives a restart (bookmarks keep working) and the token file is not world-readable', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'se-tok-')); try {
+    const a = await startUi({ baseDir: base }); const t1 = a.token; a.stop();
+    const b = await startUi({ baseDir: base }); try { assert.equal(b.token, t1, 'same secret after a restart'); assert.match(b.url, /^http:\/\/127\.0\.0\.1:\d+\/\?k=/); } finally { b.stop(); }
+    if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(base, '.ui-token')).mode & 0o077, 0, 'only the owner can read it');
+  } finally { fs.rmSync(base, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
+});

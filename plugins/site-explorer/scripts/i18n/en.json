@@ -2561,7 +2561,6 @@
 "--port 必須是 0 到 65535 的整數。": "--port must be an integer from 0 to 65535.",
 "中文": "Chinese",
 "停止": "Stop",
-"圖形介面已啟動（只有這台電腦連得到）：\\n  {}\\n探索結果存在：{}\\n網頁右上角有「結束程式」按鈕，按 Ctrl+C 也可以結束。": "Graphical interface started (reachable only from this computer):\\n  {}\\nResults are saved in: {}\\nUse the \"Quit\" button at the top right of the page, or press Ctrl+C.",
 "執行中…": "Running…",
 "報告語言": "Report language",
 "失敗（結束代碼 ": "Failed (exit code ",
@@ -2692,5 +2691,7 @@
 "要結束程式嗎？執行中的探索會被中止，黑色視窗也會一起關閉。": "Quit the program? A running exploration will be stopped and the black window will close too.",
 "目前有探索正在執行，結束會中止它。確定要結束程式嗎？": "An exploration is running; quitting will stop it. Quit the program anyway?",
 "程式已結束，黑色視窗會自動關閉。現在可以關掉這個分頁。": "The program has quit and the black window will close by itself. You can close this tab now.",
-"已從網頁結束。": "Quit from the web page."
+"已從網頁結束。": "Quit from the web page.",
+"圖形介面已啟動（只有這台電腦連得到）。\n如果瀏覽器沒有自動開啟，請把下面這一整行網址複製起來，貼到瀏覽器的網址列：\n\n  {}\n\n探索結果存在：{}\n網頁右上角有「結束程式」按鈕，按 Ctrl+C 也可以結束。": "Graphical interface started (reachable only from this computer).\nIf your browser did not open by itself, copy the whole line below and paste it into the browser's address bar:\n\n  {}\n\nResults are saved in: {}\nUse the \"Quit\" button at the top right of the page, or press Ctrl+C.",
+"（常用的連接埠被佔用了，改用另一個。如果之前已經開了一個 site-explorer，請先在它的網頁按「結束程式」。）": "(The usual port is taken, using another one. If a site-explorer is already open, press \"Quit\" in its page first.)"
 }

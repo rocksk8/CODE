@@ -61,8 +61,10 @@ export function previousSummary(baseDir, id, url) {
 export function progressOf(log) { let m, last = null; const re = /^\[(\d+)\/(\d+)\]\s*(.*)$/gm; while ((m = re.exec(log))) last = { step: Number(m[1]), total: Number(m[2]), label: m[3].slice(0, 120) }; return last; }
 
 export function startUi({ port = 0, baseDir = path.resolve(process.env.SITE_EXPLORER_UI_OUT || './site-explorer-runs'), host = '127.0.0.1', onQuit = null } = {}) {
-  const token = crypto.randomBytes(18).toString('base64url');
   fs.mkdirSync(baseDir, { recursive: true });
+  // the secret stays the same between starts, so a bookmarked address keeps working; it is only readable by this user
+  const tokenFile = path.join(baseDir, '.ui-token'); let token = ''; try { token = fs.readFileSync(tokenFile, 'utf8').trim(); } catch {}
+  if (!/^[A-Za-z0-9_-]{20,}$/.test(token)) { token = crypto.randomBytes(18).toString('base64url'); try { fs.writeFileSync(tokenFile, token, { mode: 0o600 }); } catch {} }
   let current = null; // { id, url, mode, child, log, exit }
   let env = null; const getEnv = async (fresh) => { if (!env || fresh) env = await checkEnv(); return env; };
   const stamp = () => { const d = new Date(), p = (n, l = 2) => String(n).padStart(l, '0'); return `r${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${crypto.randomBytes(2).toString('hex')}`; };
@@ -190,10 +192,14 @@ env();poll();</script></body></html>`;
 
 if (isMain(import.meta.url)) {
   const arg = (n) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : null; };
-  const port = arg('--port') == null ? 0 : Number(arg('--port'));
+  const asked = arg('--port') != null, port = asked ? Number(arg('--port')) : 47600; // a fixed, easy-to-find port unless it is taken
   if (!Number.isInteger(port) || port < 0 || port > 65535) { console.error(_t('--port 必須是 0 到 65535 的整數。')); process.exit(1); }
-  const ui = await startUi({ port, baseDir: arg('--out') ? path.resolve(arg('--out')) : undefined, onQuit: () => { console.log(_t('已從網頁結束。')); process.exit(0); } }).catch((e) => { console.error(String(e.code === 'EADDRINUSE' ? _t('這個連接埠已被使用，請改用 --port。') : e.message)); process.exit(1); });
-  console.log(_t`圖形介面已啟動（只有這台電腦連得到）：\n  ${ui.url}\n探索結果存在：${ui.baseDir}\n網頁右上角有「結束程式」按鈕，按 Ctrl+C 也可以結束。`);
+  const opts = { baseDir: arg('--out') ? path.resolve(arg('--out')) : undefined, onQuit: () => { console.log(_t('已從網頁結束。')); process.exit(0); } };
+  let ui; try { ui = await startUi({ port, ...opts }); } catch (e) {
+    if (e.code === 'EADDRINUSE' && !asked) { try { ui = await startUi({ port: 0, ...opts }); console.log(_t('（常用的連接埠被佔用了，改用另一個。如果之前已經開了一個 site-explorer，請先在它的網頁按「結束程式」。）')); } catch (e2) { console.error(String(e2.message)); process.exit(1); } }
+    else { console.error(String(e.code === 'EADDRINUSE' ? _t('這個連接埠已被使用，請改用 --port。') : e.message)); process.exit(1); }
+  }
+  console.log(_t`圖形介面已啟動（只有這台電腦連得到）。\n如果瀏覽器沒有自動開啟，請把下面這一整行網址複製起來，貼到瀏覽器的網址列：\n\n  ${ui.url}\n\n探索結果存在：${ui.baseDir}\n網頁右上角有「結束程式」按鈕，按 Ctrl+C 也可以結束。`);
   if (!process.argv.includes('--no-open')) { const [cmd, a] = process.platform === 'darwin' ? ['open', [ui.url]] : process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', ui.url]] : ['xdg-open', [ui.url]]; try { spawn(cmd, a, { stdio: 'ignore', detached: true }).on('error', () => {}).unref(); } catch {} }
   process.on('SIGINT', () => { ui.stop(); process.exit(0); });
 }
